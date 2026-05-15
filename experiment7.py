@@ -269,21 +269,16 @@ def main():
     print(f"  Model: {config.MODEL_NAME}")
     print(f"{'═'*60}\n")
 
-    # ── Load validated data ──
-    attacks_path = os.path.join(config.RESULTS_DIR, "validated_attack_prompts.json")
-    benign_path = os.path.join(config.RESULTS_DIR, "validated_benign_prompts.json")
-    assert os.path.exists(attacks_path), f"Run validate_attacks.py first! Missing: {attacks_path}"
-    assert os.path.exists(benign_path), f"Run validate_benign.py first! Missing: {benign_path}"
+    # ── Load data from dataset.py (benign from HuggingFace, attacks from JSON) ──
+    from dataset import BENIGN, ADVERSARIAL
 
-    with open(attacks_path) as f:
-        attack_prompts = json.load(f)
-    with open(benign_path) as f:
-        benign_prompts = json.load(f)
+    attack_prompts = ADVERSARIAL
+    benign_prompts = BENIGN
 
-    n = min(len(attack_prompts), len(benign_prompts), 100)
-    attack_prompts = attack_prompts[:n]
-    benign_prompts = benign_prompts[:n]
-    print(f"[exp7] Data: {n} attacks + {n} benign")
+    n_atk = len(attack_prompts)
+    n_ben = min(len(benign_prompts), n_atk * 4)  # cap benign at 4x attacks
+    benign_prompts = benign_prompts[:n_ben]
+    print(f"[exp7] Data: {n_atk} attacks + {n_ben} benign")
 
     # ── Load model ──
     model, tokenizer = load_model(config.MODEL_NAME, config.DEVICE, config.DTYPE)
@@ -328,7 +323,7 @@ def main():
     # ══════════════════════════════════════════════════════════════════════════
 
     all_prompts = benign_prompts + attack_prompts
-    labels = np.array([0] * n + [1] * n)
+    labels = np.array([0] * len(benign_prompts) + [1] * len(attack_prompts))
 
     ablation_results = {}
 
