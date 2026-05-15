@@ -1,41 +1,63 @@
 # Hyperbolic Physiological Sentinel (HPS): Detecting Jailbreaks via Internal Trajectory Geometry
 
+## One-Sentence Summary
+
+HPS intercepts jailbreaks by detecting the layer-wise geodesic pivot that occurs when a model transitions from processing a benign wrapper to resolving a harmful payload — a structural signature invisible to input-side classifiers and output-side filters.
+
+---
+
 ## 1. The Idea
 
 Large language models can be tricked into producing harmful content through "jailbreak" attacks — carefully crafted prompts that bypass safety alignment. Current defenses either inspect the input text (easily fooled by obfuscation) or check the output (too late for agentic systems that act immediately).
 
-We propose a different approach: **monitor the model's internal reasoning trajectory during inference**. When a model processes a jailbreak, its hidden states undergo a characteristic geometric deformation — a "pivot" from the benign wrapper to the harmful payload. We detect this pivot by projecting the model's layer-by-layer activations into hyperbolic space and measuring trajectory anomalies.
+We propose monitoring the model's internal reasoning trajectory during inference. When a model processes a jailbreak, its hidden states undergo a characteristic geometric deformation — a "pivot" from the benign wrapper to the harmful payload. We detect this pivot by projecting the model's layer-by-layer activations into hyperbolic space and measuring trajectory anomalies.
 
-**Core insight:** In hyperbolic space, general/abstract concepts naturally sit near the origin while specific/actionable directives sit near the boundary. A jailbreak forces the model to traverse from a benign abstract region to a harmful specific region — producing a measurable geometric signature that surface-level analysis cannot see.
+**Mechanistic grounding (DSH, Wu et al. 2026):** Wu et al. ("Knowing without Acting: The Disentangled Geometry of Safety Mechanisms in Large Language Models", arXiv:2603.05773) empirically demonstrate via linear probes that safety in LLMs operates on two geometrically distinct axes — a Recognition axis (v_H, encoding harmful semantics) and an Execution axis (v_R, driving refusal). They measure cosine similarity between these axes across layers and observe a universal "Reflex-to-Dissociation" trajectory: strong antagonistic coupling in early layers (sim ≈ -0.9) decaying to statistical independence in deep layers.
 
-**One-sentence summary:** We treat inference as a trajectory through a learned hyperbolic manifold and detect jailbreaks as structural anomalies in that trajectory.
+**The bridge from DSH to curvature (hypothesis):** When the axes are coupled (early layers), the activation trajectory moves smoothly — refusal is automatically co-activated with recognition. When they decouple (deep layers), a jailbreak must redirect the trajectory from the Recognition subspace toward compliant generation without triggering the now-independent Execution axis. While this decoupling is gradual across layers, we hypothesize that the jailbreak's semantic commitment — the point at which the model resolves the obfuscated instruction into a concrete harmful directive — is discrete. If correct, this discrete resolution would manifest as a concentrated curvature spike at the specific layer where the decision crystallizes. This is a testable prediction: if curvature is instead distributed uniformly, the method may still work via radial and displacement features, but the "pivot detection" narrative would need revision.
+
+**Why hyperbolic space:** Hyperbolic geometry's exponential volume growth naturally separates hierarchical levels that Euclidean space compresses. A jailbreak forces traversal from abstract to specific, producing measurable radial displacement and curvature. Whether this separation is amplified by metric stretching (which requires projected points to land near the boundary) is an empirical question we verify by measuring the norm distribution of projected activations.
 
 ---
 
 ## 2. Related Work
 
 ### Jailbreak Attacks
-- **GCG** (Zou et al., 2023): Gradient-based suffix optimization that finds gibberish tokens triggering compliance
-- **PAIR** (Chao et al., 2023): Iterative semantic rewriting that produces fluent jailbreaks
-- **AutoDAN, TAP, multi-turn attacks**: Various automated methods that produce diverse attack surfaces
+- **GCG** (Zou et al., 2023): Gradient-based suffix optimization producing gibberish tokens that trigger compliance
+- **PAIR** (Chao et al., 2023): Iterative semantic rewriting producing fluent jailbreaks
+- **TAP** (Mehrotra et al., 2024): Tree-of-attacks pruning for efficient jailbreak search
+- **AutoDAN, multi-turn, role-play**: Various automated methods producing diverse attack surfaces
 
 ### Input-Side Defenses
-- **HyPE** (Maljkovic et al., April 2026): Hyperbolic anomaly detection on prompt embeddings. Achieves 0.98 F1 but only sees the input — cannot detect obfuscated intent resolved internally.
+- **HyPE** (Maljkovic et al., arXiv:2604.06285, 2026): Hyperbolic SVDD anomaly detection on VLM prompt embeddings. Achieves 0.98 F1 but only sees the input — cannot detect obfuscated intent resolved internally.
 - **LatentGuard, GuardT2I**: Embedding-based classifiers that flag harmful prompts before processing.
+- **Limitation**: All input-side methods fail against attacks where surface text appears benign but internal semantic resolution produces harmful compliance.
 
 ### Activation-Based Safety Monitoring
-- **Representation Engineering (RepE)** (Zou et al., 2024): Shows safety concepts are linearly separable at specific layers.
-- **Disentangled Safety Hypothesis (DSH)** (Wu et al., ICML 2026): Proves safety operates on two geometrically distinct axes — Recognition ("Knowing") and Execution ("Acting") — that decouple in deep layers.
-- **Google AMS** (2026): Validates activation patterns can detect safety-modified models.
+- **Representation Engineering (RepE)** (Zou et al., 2024): Safety concepts are linearly separable at specific "collapse point" layers.
+- **Disentangled Safety Hypothesis (DSH)** (Wu et al., arXiv:2603.05773, 2026): Empirically proves via Double-Difference Extraction that safety operates on two geometrically distinct axes (Recognition v_H and Execution v_R) that decouple in deep layers. Their Refusal Erasure Attack achieves SOTA jailbreak success by surgically removing v_R.
+- **LatentBiopsy** (arXiv:2603.27412, 2026): Training-free jailbreak detection via angular deviation in residual streams. Detects harmful intent as a geometric feature without any learned parameters. A direct competitor — we differentiate by using trajectory dynamics across layers (curvature, displacement) rather than angular deviation at individual layers, and by learning a hyperbolic projection that amplifies the signal.
+- **Latent Representation Framework** (arXiv:2602.11495, 2026): Tensor-based analysis of hidden activations for jailbreak detection. Identifies layer-wise patterns and achieves 78% jailbreak blocking on abliterated models. Operates in Euclidean space without geometric projection.
+- **AdaSteer** (Zhou et al., EMNLP 2025): Dynamically adjusts steering intensity based on activation thresholds.
+- **Google AMS** (2026): Validates activation-based scanning for open-weight LLM safety verification.
 
 ### Hyperbolic Geometry for Language
-- **HELM** (He et al., NeurIPS 2025): First fully hyperbolic LLM at billion scale. Shows token embeddings have intrinsic negative curvature.
-- **HypLoRA** (Yang et al., NeurIPS 2025): Demonstrates LLM token embeddings exhibit measurable δ-hyperbolicity and power-law radial structure.
-- **HyperRealm** (CVPR 2026): Poincaré ball VLM with entropy-driven entailment loss for hierarchy-aware embeddings.
-- **HyCon** (ICML 2026): Hyperbolic concept steering via parallel transport — shows hyperbolic steering is more stable than Euclidean.
+- **HELM** (He et al., NeurIPS 2025): First fully hyperbolic LLM at billion scale. Token embeddings exhibit wide-ranging negative Ricci curvature.
+- **HypLoRA** (Yang et al., NeurIPS 2025): LLM token embeddings exhibit measurable δ-hyperbolicity and power-law radial structure.
+- **HyperRealm** (CVPR 2026): Poincaré ball VLM with entropy-driven entailment loss — trained hyperbolic projections produce meaningful hierarchy.
+- **HyCon** (arXiv:2603.14093, 2026): Hyperbolic concept steering for T2I models via parallel transport. Demonstrates that hyperbolic steering is more stable than Euclidean under strong intervention — relevant as evidence that hyperbolic geometry provides structural advantages for safety-related manipulation.
 
 ### Our Position
-HyPE guards the input. We guard the internal reasoning. RepE probes a single layer statically. We monitor the trajectory across layers dynamically. Nobody has combined hyperbolic geometry with multi-layer trajectory analysis for jailbreak detection.
+
+| Defense Type | Example | What It Sees | Blind Spot |
+|---|---|---|---|
+| Input filter | HyPE, LatentGuard | Prompt text/embedding | Obfuscated intent decoded internally |
+| Output filter | Llama Guard | Generated text | Too late for agentic systems |
+| Single-layer probe | RepE, ITI | One layer snapshot | Misses dynamics across layers |
+| Angular deviation | LatentBiopsy | Per-layer angle from mean | No learned projection, no trajectory structure |
+| **Ours (HPS)** | — | Multi-layer hyperbolic trajectory | Requires white-box access |
+
+HyPE guards the door. We guard the mind.
 
 ---
 
@@ -43,163 +65,213 @@ HyPE guards the input. We guard the internal reasoning. RepE probes a single lay
 
 ### Overview
 
-The Hyperbolic Physiological Sentinel (HPS) operates in four stages during the model's forward pass:
-
 ```
 Input Prompt → [Activation Extraction] → [Hyperbolic Projection] → [Trajectory Features] → [Classification]
                                                                                               ↓
                                                                                     SAFE / BLOCKED
 ```
 
-### Stage 1: Targeted Activation Extraction
+### 3.1 Targeted Activation Extraction
 
-During the forward pass, we extract the hidden state at the last token position from K=8 selected layers spread across the model's depth (e.g., layers 2, 6, 10, 14, 18, 22, 26, 30 for a 32-layer model). This produces a sequence:
+During the forward pass, we extract hidden states from N_L selected layers (we use N_L = 8).
+
+**Layer selection:** Performed via Fisher-ratio separation scoring on a held-out calibration split (disjoint from both training and test data). We measure the ratio of between-class distance to within-class spread at each layer and select the N_L layers with maximum separation. This identifies model-specific "decision layers" where safety-relevant computation concentrates.
+
+**Calibration split:** The calibration set (used only for layer selection) is drawn separately from the training set (used for projection head training) and the test set (used for evaluation). We allocate 15% of data to calibration (~15 adversarial + 30 benign). This is thin but sufficient for Fisher-ratio estimation (which only requires class means and variances, not complex decision boundaries). Alternative: layer selection via unsupervised activation variance across layers (no labels needed), which would eliminate the calibration split entirely. We compare both approaches.
+
+**Token pooling:** We ablate three strategies and select empirically:
+- Last token (has attended to full context)
+- Mean of all tokens (captures distributed signal)
+- Mean of last 5 tokens (compromise)
+
+The choice is a hyperparameter determined by ablation, not a design assumption.
+
+This produces a trajectory: h₁, h₂, ..., h_{N_L} ∈ ℝᵈ
+
+### 3.2 Hyperbolic Projection
+
+Each hidden state is projected onto the Lorentz hyperboloid through a learned projection head:
 
 ```
-h₁, h₂, ..., h₈ ∈ ℝ⁴⁰⁹⁶
+x_proj = W · h · λ                         (linear projection, W ∈ ℝ^(d×d_p), learnable scale λ)
+x₀ = sqrt(1/κ + ||x_proj||²)               (time coordinate, κ = curvature constant)
+point = [x₀, x_proj] ∈ L^{d_p}_κ           (on the hyperboloid)
 ```
 
-representing how the model's understanding evolves from shallow syntax to deep semantics.
+**Notation:** κ denotes the curvature constant of the hyperboloid (κ = 1.0). N_L denotes the number of selected layers. These are distinct quantities.
 
-### Stage 2: Hyperbolic Projection
+**Projection dimension d_p:** We use d_p = 256 (16x compression from d = 4096). Sensitivity analysis over d_p ∈ {64, 128, 256, 512} is included in ablations.
 
-Each hidden state is projected onto the Lorentz hyperboloid through a **learned projection head** — a small linear layer (4096 → 256) followed by the Lorentz lifting:
+**Shared projection head:** A single W is applied across all selected layers. Our hypothesis is that Fisher-ratio selection picks layers with sufficiently compatible statistics that a shared projection is not a bottleneck — and that sharing acts as regularization, forcing the head to find a universal safety-relevant projection rather than overfitting to layer-specific artifacts. We test this against per-layer heads (N_L separate W matrices) in ablation; if per-layer heads significantly outperform, the shared design should be abandoned.
+
+**Training objective:** Supervised contrastive loss computed in Lorentz geodesic distance, applied independently at each layer and summed:
 
 ```
-x_proj = W · h · λ
-x₀ = sqrt(1/K + ||x_proj||²)     ← time coordinate (radial depth)
-point = [x₀, x_proj]              ← on the hyperboloid
+L = (1/N_L) Σ_{l=1}^{N_L} L_layer(l)
+
+L_layer(l) = (1/|P|) Σ_{(i,j) ∈ P} [ 𝟙[y_i = y_j] · d_L(x_i^l, x_j^l)²
+                                      + 𝟙[y_i ≠ y_j] · max(0, M - d_L(x_i^l, x_j^l))² ]
 ```
 
-The projection head is trained with a **contrastive loss** that pushes benign and adversarial trajectories apart in geodesic distance. This training produces meaningful radial structure: benign prompts cluster near the origin (abstract/general), adversarial prompts are pushed toward the boundary (specific/actionable).
+where x_i^l is the Lorentz projection of sample i at layer l, P is the set of all pairs in the batch, and M is the margin hyperparameter.
 
-### Stage 3: Trajectory Feature Extraction
+**Per-layer loss (Option C):** By applying the contrastive loss at each layer independently and summing, the projection head is trained to produce discriminative geometry at every layer — not just a single representative layer.
 
-From the 8 projected points on the hyperboloid, we compute:
+**Pair sampling:** With imbalanced classes (e.g., 100 adversarial + 200 benign), same-class benign pairs dominate the loss. We use balanced pair sampling: equal numbers of same-class and cross-class pairs per batch, with same-class pairs drawn equally from both classes.
 
-- **Radial features**: Mean/max/std of time coordinates (abstraction depth)
-- **Curvature features**: Max/mean/std of discrete geodesic curvature (trajectory bending)
-- **Displacement features**: Total geodesic distance, path length, progress ratio (directness)
-- **Spike location**: Which layer shows maximum curvature (where the "pivot" happens)
+**On "trajectory" framing:** The per-layer loss does not model inter-layer relationships (no temporal smoothness or transition terms). Sequential structure is captured only at the feature extraction stage via curvature and displacement statistics computed on the projected points. This is deliberate: an end-to-end sequential model (RNN/transformer over N_L points) would be more expressive but prone to overfitting on ~100 adversarial samples, and would sacrifice interpretability. More precisely, HPS is a "multi-layer contrastive projection with geometric summary statistics" — the trajectory metaphor describes the feature extraction, not the training objective.
 
-### Stage 4: Classification
+**Margin M:** Sensitivity analysis over M ∈ {0.5, 1.0, 2.0, 4.0} is included. The appropriate value depends on the typical scale of Lorentz distances between projected vectors.
 
-A logistic regression classifier on the 12-dimensional feature vector outputs an anomaly score. If the score exceeds a calibrated threshold, generation is halted before the first output token.
+**Regularization:** Weight decay (1e-5) on the projection head, early stopping on validation loss (patience=10 epochs), and cosine learning rate decay from 1e-3 to 1e-5. Train/val loss curves are reported to verify convergence without overfitting.
 
-### Two Configurations
+**Geometry-aware gradient flow:** The projection head W is Euclidean, but gradients flow through the differentiable Lorentz lifting (x₀ = sqrt(1/κ + ||x_proj||²)). This means W is optimized to produce vectors whose norms and directions yield good Lorentz distances after lifting — the geometry influences the linear layer during training, not just at inference. This cross-boundary gradient flow is the mechanism by which hyperbolic structure shapes the learned representation, and is what we hypothesize distinguishes HPS-Full from a purely Euclidean trained baseline.
 
-| Configuration | Projection | Training | Use Case |
+**Training data:** Only validated prompts — confirmed jailbreaks (model actually complied) vs confirmed benign (model responded normally). Most prior work trains on nominal labels, contaminating the positive class with failed attacks that are geometrically indistinguishable from benign prompts. Our validation step is a methodological contribution.
+
+**Generalization protocol:** Train/test split by attack type (e.g., train on PAIR+WildGuard, evaluate on GCG+TAP).
+
+### 3.3 Trajectory Feature Extraction
+
+From the N_L projected points on the hyperboloid, we compute 12 features:
+
+| # | Feature | Category | What It Measures |
 |---|---|---|---|
-| **HPS-Lite** | Naive exponential map (no training) | Probe only | Quick baseline, no GPU training needed |
-| **HPS-Full** | Learned projection head (contrastive loss) | Head + probe | Full system, best performance |
+| 1 | Mean radius | Radial | Projected norm magnitude (empirically correlates with class) |
+| 2 | Max radius | Radial | Peak projected norm across layers |
+| 3 | Min radius | Radial | Minimum projected norm |
+| 4 | Std radius | Radial | Radial variation across layers |
+| 5 | Radius range | Radial | Total radial traversal |
+| 6 | Max curvature | Curvature | Sharpest trajectory bend (the "pivot") |
+| 7 | Mean curvature | Curvature | Overall trajectory smoothness |
+| 8 | Std curvature | Curvature | Curvature consistency |
+| 9 | Spike location | Curvature | Which layer the pivot occurs (normalized 0–1) |
+| 10 | Total displacement | Displacement | Geodesic distance first→last layer |
+| 11 | Path length | Displacement | Total distance traveled along trajectory |
+| 12 | Progress ratio | Displacement | Directness (displacement / path_length) |
 
----
+**Note on radial interpretation:** The contrastive loss does not explicitly enforce hierarchy (unlike entailment losses in HyperRealm/HELM). After training, radial features capture depth-related variation in the learned projection that empirically separates classes — but the "abstraction depth" interpretation is a hypothesis, not a guaranteed property. Adding an entailment regularizer to enforce explicit hierarchy is a Phase 2 extension.
 
-## 4. Validation
+**Curvature computation:** Discrete curvature at interior point i is computed via the triangle inequality deviation in Lorentz geodesic distance:
 
-### Datasets
+```
+κ_i = |d_L(p_{i-1}, p_i) + d_L(p_i, p_{i+1}) - d_L(p_{i-1}, p_{i+1})| / (d_L(p_{i-1}, p_i) + d_L(p_i, p_{i+1}))
+```
 
-| Dataset | Source | Role | Size Used |
-|---|---|---|---|
-| **Alpaca-Cleaned** | yahma/alpaca-cleaned (HuggingFace) | Benign prompts — normal user instructions | 50 prompts |
-| **WildGuard (benign)** | allenai/wildguardmix | Benign prompts — real-world safe queries | 50 prompts |
-| **JailbreakBench** | JailbreakBench/JBB-Behaviors | Adversarial — curated jailbreak goals | 50 prompts |
-| **AdvBench** | walledai/AdvBench | Adversarial — harmful behavior requests with GCG-style patterns | 50 prompts |
-| **WildGuard (harmful)** | allenai/wildguardmix | Adversarial — real-world attack prompts collected in the wild | 50 prompts |
-| **Dual-Use (built-in)** | Hand-curated | Hard negatives — legitimate questions on sensitive topics (cybersecurity, chemistry, pharmacology) | 25 prompts |
+This measures how much the path deviates from a geodesic at each point. κ_i ∈ [0, 1], with 0 meaning the three points are collinear on a geodesic. Note: the absolute value discards the direction of curvature (left vs. right turns are identical), which is acceptable for detection but limits mechanistic interpretation. On the Lorentz hyperboloid, geodesic triangles are "thinner" than Euclidean triangles (negative curvature), so high κ_i indicates the trajectory deviates from the manifold's natural hierarchical structure at that layer — consistent with the jailbreak pivot hypothesis, but not uniquely so.
 
-**Benign class (100 total):** Mix of general knowledge questions (Alpaca) and real user queries labeled safe by human annotators (WildGuard). Covers diverse topics: science, coding, cooking, history, etc.
+**Inter-layer spacing:** Fisher-selected layers may have non-uniform gaps (e.g., layers 3, 7, 14, 22 have gaps of 4, 7, 8). Curvature between closely-spaced layers and widely-spaced layers has different meaning. We normalize curvature by inter-layer distance: κ_i^norm = κ_i / (layer_idx[i+1] - layer_idx[i-1]). This ensures curvature features are not confounded by the arbitrary spacing of selected layers.
 
-**Adversarial class (100 total):** Mix of three attack types:
-- Curated jailbreak goals from JailbreakBench (role-play, instruction override, persona injection)
-- Harmful behavior prompts from AdvBench (direct harmful requests, GCG-optimized suffixes)
-- Real-world attacks from WildGuard (collected from actual user interactions, human-labeled as harmful)
+**Progress ratio and dual-use:** Feature 12 (progress ratio) may be vulnerable to dual-use confusion — benign prompts about sensitive topics might also show low progress ratio due to internal deliberation. The 12-feature probe learns appropriate weighting, but we report per-feature importance to identify which features are most susceptible to dual-use false positives.
 
-**Dual-use evaluation set (25):** Sensitive but legitimate prompts — "Explain how SQL injection works for my security class," "What makes chemical combinations explosive from a chemistry perspective?" Used only for FPR evaluation, never for training.
+**12 features vs direct classification:** The 12-feature probe is an interpretable summary of the 8×257 = 2056-dimensional trajectory. We ablate against a direct classifier (logistic regression on the flattened trajectory) to verify the hand-crafted features are not a bottleneck. If the 12-feature probe matches the direct classifier, this is a strong result: the geometric summary statistics capture all discriminative information in an interpretable form.
 
-### Setup
+### 3.4 Classification
 
-- **Model**: Meta-Llama-3-8B-Instruct (32 layers, safety-aligned)
-- **Data**: 100 benign prompts (Alpaca, WildGuard) + 100 adversarial prompts (JailbreakBench, AdvBench, WildGuard attacks)
-- **Evaluation**: 5-fold stratified cross-validation, AUROC, FPR@95%TPR
-- **Dual-use test set**: 25 sensitive-but-legitimate prompts (cybersecurity education, toxicology courses, etc.)
+Logistic regression on the 12-dimensional feature vector. Threshold τ calibrated for target FPR on validation set.
 
-### Results
+### 3.5 Verifying Each Component Contributes
 
-#### Test 3 — Raw Trajectory Signal
+To isolate what drives detection and rule out the possibility that simpler methods suffice, we include a comprehensive ablation:
 
-Does curvature alone separate benign from adversarial?
+**Core question: Does hyperbolic geometry add value, or is the signal already trivially available?**
 
-| Space | AUROC |
-|---|---|
-| Euclidean | 0.733 |
-| Hyperbolic | 0.760 |
-
-[PLOT: test3_traced_euclidean.png — TRACED scatter showing benign vs adversarial clusters]
-
-[PLOT: test3_traced_hyperbolic.png — Same in hyperbolic space]
-
-**Finding**: The signal exists. Adversarial prompts produce higher curvature trajectories even with naive projection.
-
-#### Test 4 — Multi-Feature Probe (HPS-Lite)
-
-| Probe | AUROC | FPR@95%TPR | F1 |
-|---|---|---|---|
-| Euclidean features | 0.958 | 0.160 | 0.958 |
-| Hyperbolic features | 0.986 | 0.080 | 0.894 |
-| Combined | 0.986 | 0.000 | 0.958 |
-
-[PLOT: test4_roc_comparison.png — ROC curves for all three probes]
-
-[PLOT: test4_feature_importance.png — Which features matter most]
-
-**Finding**: Hyperbolic features reduce false positives by 50% (0.16 → 0.08) at the same detection rate.
-
-#### Test 5 — Trained Projection Head (HPS-Full)
-
-| Method | AUROC | FPR@95%TPR | Dual-Use FPR |
-|---|---|---|---|
-| HPS-Lite (naive projection) | 0.958 | 0.120 | 0.333 |
-| **HPS-Full (learned projection)** | **1.000** | **0.000** | **0.000** |
-
-[PLOT: test5_roc_comparison.png — ROC curves: HPS-Lite vs HPS-Full]
-
-[PLOT: test5_learned_radii.png — Histogram showing radial separation between benign and adversarial]
-
-**Finding**: The trained projection achieves perfect separation. Critically, it produces **zero false positives on dual-use prompts** — it learns to distinguish adversarial structure from sensitive topics.
-
-#### Radial Structure (Learned Projection)
-
-| Category | Mean Lorentz Radius | Std |
+| Config | Description | What It Tests |
 |---|---|---|
-| Benign | 1.951 | 0.084 |
-| Adversarial | 2.524 | 0.110 |
-| **Separation** | **0.573** | — |
+| **Fisher-8 Raw** | Concatenate activations from 8 selected layers → logistic regression (no projection, no geometry) | Is the signal already linearly separable from layer selection alone? |
+| **Euclidean-Trained** | Same d→d_p linear head, contrastive loss in L2 distance | Does training a projection help beyond raw concatenation? |
+| **Nonlinear-Euclidean** | Same linear head + LayerNorm + tanh, contrastive in L2 | Does any nonlinearity work, or is Lorentz specifically needed? |
+| **Hyperbolic-Naive** | Raw exponential map, no training (HPS-Lite) | Does geometry alone help without training? |
+| **Hyperbolic-Trained** | d→d_p + Lorentz lift + contrastive in d_L (HPS-Full) | Full system |
 
-[PLOT: test5_learned_radii.png — Clear bimodal distribution]
+**Possible outcomes and their implications:**
 
-**Finding**: The learned projection creates interpretable geometry — adversarial prompts are measurably "deeper" (further from origin) on the hyperboloid, confirming the theoretical prediction that harmful actionable content occupies the boundary region.
+| Outcome | Implication | Paper Framing |
+|---|---|---|
+| Fisher-8 Raw ≈ all others | Signal is trivially separable; HPS adds engineering value only | Pivot to "trajectory monitoring is the contribution, geometry is optional" |
+| Euclidean-Trained > Fisher-8 Raw, ≈ Hyperbolic-Trained | Contrastive projection helps, but geometry doesn't | Paper about trajectory detection with learned projection (drop hyperbolic framing) |
+| Nonlinear-Euclidean ≈ Hyperbolic-Trained | Any nonlinearity works; Lorentz is not special | Weaken geometry claims, present Lorentz as one valid choice |
+| Hyperbolic-Trained > Nonlinear-Euclidean > Euclidean-Trained | Lorentz geometry specifically helps beyond generic nonlinearity | Full hyperbolic narrative justified |
+
+**Architectural ablations:**
+
+| Ablation | Variants | What It Tests |
+|---|---|---|
+| Shared vs per-layer W | 1 shared head vs N_L separate heads | Is shared W a bottleneck? |
+| 12 features vs direct classifier | 12-dim probe vs 2056-dim flattened logistic regression | Is the feature bottleneck losing signal? |
+| Projection dimension | d_p ∈ {32, 64, 128, 256} | Overfitting risk at small sample sizes |
+| Margin M | M ∈ {0.5, 1.0, 2.0, 4.0} | Sensitivity to contrastive margin |
+| Token pooling | last vs mean vs last-5 | Best extraction strategy |
+
+**Feature importance:** We report permutation importance on the 12 features to determine which geometric properties actually drive detection. If curvature features (6–9) contribute <20% of total importance, the "curvature spike" narrative is not supported by the data — the method works via other geometric properties (radial, displacement), and the framing should be revised accordingly.
+
+(Section 5, Claim 2 is tested by the core ablation above.)
+
+### 3.6 Configurations
+
+| Configuration | Projection | Training | Purpose |
+|---|---|---|---|
+| **HPS-Lite** | Naive exponential map | Probe only | Baseline: does signal exist? |
+| **HPS-Full** | Learned head (per-layer contrastive) | Head + probe | Full system |
 
 ---
 
-## 5. Key Takeaways
+## 4. Datasets
 
-1. **The internal trajectory signal is real.** Jailbreaks produce geometrically distinct activation trajectories that can be detected before any output is generated.
+### Training Data (Validated)
 
-2. **Hyperbolic geometry adds meaningful value.** The non-Euclidean projection amplifies discriminative features that are compressed in flat space, reducing false positives by 50-100%.
+All prompts validated against the target model before use:
+- **Benign (class 0):** Only prompts where the model produces a normal, helpful response
+- **Adversarial (class 1):** Only prompts where the model actually complies with the harmful request
 
-3. **Training the projection solves the dual-use problem.** A naive projection conflates dangerous topics with dangerous intent. A learned projection separates them — achieving zero FPR on legitimate security/medical/chemistry questions.
+**Target training set size:** 100 confirmed adversarial + 200 confirmed benign (balanced via oversampling during training). The projection head has ~1M parameters (4096×256); 100 adversarial examples is sufficient for the contrastive loss given the low-rank structure, but we acknowledge this is a limitation and report learning curves showing performance vs training set size.
 
-4. **The method is lightweight.** The projection head is ~2M parameters. Feature extraction and classification add <20ms to inference. No model weights are modified.
+| Source | Role | Notes |
+|---|---|---|
+| Alpaca-Cleaned | Benign | General instructions |
+| GSM8K | Benign | Math word problems |
+| WritingPrompts | Benign | Creative/stories |
+| WildGuard (unharmful) | Benign | Real-world safe queries |
+| Built-in emotional/code | Benign | Emotional support, technical |
+| JailbreakBench artifacts (GCG) | Adversarial | Gradient-optimized suffixes |
+| JailbreakBench artifacts (PAIR) | Adversarial | Semantically rewritten attacks |
+| JailbreakBench artifacts (TAP) | Adversarial | Tree-of-attacks pruning |
+| WildGuard (harmful) | Adversarial | Real-world attacks |
+| AdvBench | Adversarial | Harmful requests (caveat: many are refused by well-aligned models even without safety training; our validation step filters these out, so AdvBench may contribute fewer confirmed breaks than expected) |
 
-5. **Complementary to existing defenses.** HPS monitors the "mind" while HyPE monitors the "door." They can be deployed together for defense-in-depth.
+### Cross-Attack Generalization Protocol
+
+| Split | Train | Test |
+|---|---|---|
+| A | PAIR + WildGuard | GCG + TAP |
+| B | GCG + AdvBench | PAIR + TAP |
+| C | TAP + WildGuard | GCG + PAIR |
+
+Report mean ± std across splits.
+
+### Dual-Use Evaluation Set
+
+100+ sensitive-but-legitimate prompts drawn from WildGuard's "unharmful" subset filtered for security/medical/chemistry topics, supplemented with hand-curated examples. Used only for FPR evaluation, never training. We report both point estimate and 95% Clopper-Pearson confidence interval.
 
 ---
 
-## 6. Limitations and Next Steps
+## 5. Key Claims (Falsifiable)
 
-- **Scale**: Validated on 100+100 prompts. Phase 2 needs 1000+ with diverse attack types.
-- **Adaptive attacks**: Not yet tested against an attacker who knows the sentinel exists and optimizes against it.
-- **Models**: Only tested on Llama-3-8B. Need Qwen, Mistral, Gemma for generalization claims.
-- **Latency**: Measured theoretically (<20ms). Need wall-clock benchmarks under load.
-- **Overfitting risk**: 1.000 AUROC on small data with CV could be optimistic. Held-out evaluation needed.
+1. Jailbreaks produce geometrically distinct activation trajectories detectable before output generation.
+2. Hyperbolic projection adds statistically significant discriminative power beyond (a) raw concatenated activations from selected layers, (b) a Euclidean-trained projection, and (c) a generic nonlinear projection. If any of these baselines match HPS-Full, the hyperbolic framing is not justified and the paper pivots to "trajectory-based detection with contrastive projection."
+3. Trained projection separates adversarial intent from sensitive topics (target: <5% dual-use FPR).
+4. Detection generalizes across attack types not seen during training.
+5. Empirical layer selection via Fisher-ratio outperforms uniform spacing.
+6. The curvature spike is a primary detection signal (testable via feature importance — if curvature features contribute <20%, this claim is falsified and the narrative shifts to radial/displacement features).
+
+---
+
+## 6. Limitations
+
+- **White-box requirement**: Needs access to internal activations. Cannot protect closed-weight APIs.
+- **Validated data dependency**: Requires finding prompts that actually break the target model. Well-aligned models resist most attacks.
+- **Adaptive attacks**: Not yet tested against attackers who know the sentinel exists and optimize against it.
+- **Multi-model generalization**: Pending validation on Qwen, Mistral.
+- **Scale**: Current validation on ~100 prompts per class. Larger-scale evaluation needed.
+- **Latency**: Theoretical <20ms. Wall-clock benchmarks pending.
+- **Deployment base rates**: Like all safety classifiers, HPS's operational precision depends on the base rate of adversarial queries. At low base rates (<1%), even a low FPR produces many false positives in absolute terms (e.g., 95% TPR + 5% FPR at 0.1% base rate → ~1.9% positive predictive value). Deployment should combine HPS with other signals (input filters, output checks) or reserve it for high-risk contexts where the base rate is elevated (red-team monitoring, agentic tool-use pipelines).

@@ -187,15 +187,19 @@ def main():
     y_t = torch.tensor(labels, dtype=torch.long, device=device)
 
     proj.train()
-    mid = n_layers // 2
     for epoch in range(100):
-        h = proj(X_t[:, mid, :])
-        loss = contrastive_loss(h, y_t, k=config.HYPERBOLIC_K)
+        # Per-layer contrastive loss (Option C): train projection to separate at every layer
+        total_loss = torch.tensor(0.0, device=device)
+        for l in range(n_layers):
+            h = proj(X_t[:, l, :])
+            total_loss = total_loss + contrastive_loss(h, y_t, k=config.HYPERBOLIC_K)
+        total_loss = total_loss / n_layers
+
         optimizer.zero_grad()
-        loss.backward()
+        total_loss.backward()
         optimizer.step()
         if (epoch + 1) % 25 == 0:
-            print(f"  Epoch {epoch+1}/100 — loss: {loss.item():.4f}")
+            print(f"  Epoch {epoch+1}/100 — loss: {total_loss.item():.4f}")
 
     # ── Extract features ──
     print(f"\n[exp6] Extracting trajectory features...")

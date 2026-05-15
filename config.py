@@ -1,6 +1,6 @@
 """
 HPS Sentinel - Phase 1 Configuration
-Target: Llama-3-8B-Instruct (32 layers, safety-aligned)
+Target: Vicuna-13B-v1.5 (40 layers)
 """
 
 import os
@@ -10,18 +10,19 @@ import torch
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 # ── Model ─────────────────────────────────────────────────────────────────────
-MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
+MODEL_NAME = "lmsys/vicuna-13b-v1.5"
 
-# 32 layers → sample 8 points spread across depth
-TARGET_LAYERS = [2, 6, 10, 14, 18, 22, 26, 30]
+# Fallback layers (evenly spaced for 40-layer model). Overridden by experiment7 discovery.
+TARGET_LAYERS = [3, 8, 13, 18, 23, 28, 33, 38]
 
 # ── Hardware ──────────────────────────────────────────────────────────────────
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE  = torch.float16 if torch.cuda.is_available() else torch.float32
 
 # ── Hyperbolic geometry ───────────────────────────────────────────────────────
-HYPERBOLIC_K = 1.0   # curvature constant (positive)
-MAX_NORM     = 0.95  # Poincaré ball clamp
+HYPERBOLIC_K = 1.0        # initial curvature (learnable during training)
+PROJECTION_DIM = 64       # d_p: 5120 → 64 (80x compression, ~330K params)
+MAX_NORM = 0.95           # Poincaré ball clamp
 
 # ── Output directories ────────────────────────────────────────────────────────
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")

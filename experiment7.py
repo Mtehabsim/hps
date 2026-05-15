@@ -141,12 +141,17 @@ def discover_layers(model, tokenizer, benign_prompts, attack_prompts, device,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LorentzProjection(nn.Module):
-    def __init__(self, d_in, d_proj=256, k=1.0):
+    def __init__(self, d_in, d_proj=None, k=1.0):
         super().__init__()
+        d_proj = d_proj or config.PROJECTION_DIM
         self.proj = nn.Linear(d_in, d_proj, bias=False)
         self.scale = nn.Parameter(torch.tensor(1.0 / np.sqrt(d_proj)))
-        self.k = k
+        self.log_k = nn.Parameter(torch.tensor(np.log(k)))  # learnable curvature
         nn.init.xavier_uniform_(self.proj.weight)
+
+    @property
+    def k(self):
+        return torch.exp(self.log_k).clamp(min=0.1, max=10.0)
 
     def forward(self, x):
         x_proj = self.proj(x) * self.scale
@@ -156,9 +161,14 @@ class LorentzProjection(nn.Module):
 
 
 def lorentz_distance_torch(x, y, k=1.0):
+    """k can be a scalar or a tensor (for learnable curvature)."""
     inner = -x[:, 0] * y[:, 0] + (x[:, 1:] * y[:, 1:]).sum(dim=-1)
-    inner = torch.clamp(inner, max=-1.0 / k - 1e-6)
-    return (1.0 / np.sqrt(k)) * torch.acosh(-k * inner)
+    if isinstance(k, torch.Tensor):
+        inner = torch.clamp(inner, max=(-1.0 / k - 1e-6).item())
+        return (1.0 / torch.sqrt(k)) * torch.acosh(-k * inner)
+    else:
+        inner = torch.clamp(inner, max=-1.0 / k - 1e-6)
+        return (1.0 / np.sqrt(k)) * torch.acosh(-k * inner)
 
 
 def contrastive_loss(anchors, labels, k=1.0, margin=2.0):
@@ -176,7 +186,9 @@ def contrastive_loss(anchors, labels, k=1.0, margin=2.0):
     return loss / max(count, 1)
 
 
-def extract_trajectory_features(proj, X_all, k=1.0):
+def extract_trajectory_features(proj, X_all, k=None):
+    if k is None:
+        k = proj.k.item()
     device = next(proj.parameters()).device
     n_samples, n_layers, d_hidden = X_all.shape
     features = []
@@ -208,19 +220,26 @@ def train_and_evaluate(X_all, labels, k, tag=""):
     device = config.DEVICE
     n_samples, n_layers, d_hidden = X_all.shape
 
-    proj = LorentzProjection(d_hidden, 256, k).to(device)
+    proj = LorentzProjection(d_hidden, config.PROJECTION_DIM, k).to(device)
     optimizer = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
     X_t = torch.tensor(X_all, dtype=torch.float32, device=device)
     y_t = torch.tensor(labels, dtype=torch.long, device=device)
 
     proj.train()
-    mid = n_layers // 2
     for epoch in range(100):
-        h = proj(X_t[:, mid, :])
-        loss = contrastive_loss(h, y_t, k=k)
+        # Option C: per-layer contrastive loss, summed across all layers
+        total_loss = torch.tensor(0.0, device=device)
+        for l in range(n_layers):
+            h = proj(X_t[:, l, :])  # project layer l for all samples
+            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k.item())
+        total_loss = total_loss / n_layers
+
         optimizer.zero_grad()
-        loss.backward()
+        total_loss.backward()
         optimizer.step()
+
+        if (epoch + 1) % 25 == 0:
+            print(f"    [{tag}] Epoch {epoch+1}/100 — loss: {total_loss.item():.4f}, κ: {proj.k.item():.3f}")
 
     X_feat = extract_trajectory_features(proj, X_all, k=k)
     scaler = StandardScaler()
@@ -356,26 +375,144 @@ def main():
         print(f"  {mode:<8} | {res['auroc']:>7.3f} | {res['fpr_at_95']:>7.3f} | {res['f1']:>6.3f}{marker}")
 
     # ══════════════════════════════════════════════════════════════════════════
+    #  PHASE 2b: Critical Baselines (using best pooling mode)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # Re-extract with best pooling for all baselines
+    print(f"\n[exp7] Re-extracting with best pool={best_pool} for baseline comparison...")
+    acts_list = []
+    for i, p in enumerate(all_prompts):
+        if (i + 1) % 50 == 0:
+            print(f"  {i+1}/{len(all_prompts)}")
+        acts_list.append(extract_all_layers(model, tokenizer, p, config.DEVICE, best_pool))
+
+    d_hidden = acts_list[0][top_layers[0]].shape[0]
+    n_layers_sel = len(top_layers)
+    best_X = np.zeros((len(all_prompts), n_layers_sel, d_hidden))
+    for i, act_dict in enumerate(acts_list):
+        for j, l in enumerate(top_layers):
+            if l in act_dict:
+                best_X[i, j] = act_dict[l]
+
+    baseline_results = {}
+
+    # ── Baseline 1: Fisher-8 Raw (no projection, just concatenate and classify) ──
+    print(f"\n[exp7] Baseline: Fisher-8 Raw (concatenated activations → logistic regression)...")
+    X_concat = best_X.reshape(len(all_prompts), -1)  # (n_samples, n_layers * d_hidden)
+    scaler_raw = StandardScaler()
+    X_concat_s = scaler_raw.fit_transform(X_concat)
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    clf_raw = LogisticRegression(C=0.01, max_iter=2000, random_state=42)  # low C to prevent overfit on high-dim
+    y_scores_raw = cross_val_predict(clf_raw, X_concat_s, labels, cv=cv, method="predict_proba")[:, 1]
+    auroc_raw = roc_auc_score(labels, y_scores_raw)
+    fpr_raw, tpr_raw, _ = roc_curve(labels, y_scores_raw)
+    idx_95 = np.searchsorted(tpr_raw, 0.95)
+    fpr95_raw = float(fpr_raw[min(idx_95, len(fpr_raw) - 1)])
+    f1_raw = f1_score(labels, (y_scores_raw > 0.5).astype(int))
+    baseline_results["fisher8_raw"] = {"auroc": auroc_raw, "fpr_at_95": fpr95_raw, "f1": f1_raw}
+    print(f"  [Fisher-8 Raw] AUROC={auroc_raw:.3f}  FPR@95={fpr95_raw:.3f}  F1={f1_raw:.3f}")
+
+    # ── Baseline 2: Euclidean-Trained (linear head + contrastive in L2) ──
+    print(f"\n[exp7] Baseline: Euclidean-Trained (linear head + L2 contrastive)...")
+    device = config.DEVICE
+    d_proj = config.PROJECTION_DIM
+    proj_euc = nn.Linear(d_hidden, d_proj, bias=False).to(device)
+    nn.init.xavier_uniform_(proj_euc.weight)
+    scale_euc = nn.Parameter(torch.tensor(1.0 / np.sqrt(d_proj)).to(device))
+    opt_euc = optim.Adam(list(proj_euc.parameters()) + [scale_euc], lr=1e-3, weight_decay=1e-5)
+    X_t = torch.tensor(best_X, dtype=torch.float32, device=device)
+    y_t = torch.tensor(labels, dtype=torch.long, device=device)
+
+    for epoch in range(100):
+        total_loss = torch.tensor(0.0, device=device)
+        for l in range(n_layers_sel):
+            h = proj_euc(X_t[:, l, :]) * scale_euc  # (n, 256) in flat space
+            # L2 contrastive loss
+            n_s = h.shape[0]
+            loss_l = torch.tensor(0.0, device=device)
+            count = 0
+            for i in range(n_s):
+                for j in range(i + 1, n_s):
+                    d = torch.norm(h[i] - h[j])
+                    if y_t[i] == y_t[j]:
+                        loss_l = loss_l + d ** 2
+                    else:
+                        loss_l = loss_l + torch.clamp(2.0 - d, min=0) ** 2
+                    count += 1
+            total_loss = total_loss + loss_l / max(count, 1)
+        total_loss = total_loss / n_layers_sel
+        opt_euc.zero_grad()
+        total_loss.backward()
+        opt_euc.step()
+
+    # Extract Euclidean features (same 12 features but using L2 distances)
+    proj_euc.eval()
+    X_euc_feat = []
+    with torch.no_grad():
+        for i in range(len(all_prompts)):
+            x = X_t[i]  # (n_layers, d_hidden)
+            h = (proj_euc(x) * scale_euc).cpu().numpy()  # (n_layers, d_proj)
+            norms = np.linalg.norm(h, axis=1)
+            diffs = [np.linalg.norm(h[j+1] - h[j]) for j in range(n_layers_sel - 1)]
+            # Curvature analog in Euclidean
+            curv_e = []
+            for j in range(1, n_layers_sel - 1):
+                v = h[j] - h[j-1]
+                a = h[j+1] - 2*h[j] + h[j-1]
+                vn = np.linalg.norm(v)
+                if vn < 1e-8:
+                    curv_e.append(0.0)
+                else:
+                    cross_sq = np.dot(v,v)*np.dot(a,a) - np.dot(v,a)**2
+                    curv_e.append(np.sqrt(max(cross_sq, 0)) / vn**3)
+            curv_e = np.array(curv_e) if curv_e else np.array([0.0])
+            d_total = np.linalg.norm(h[-1] - h[0])
+            path_len = sum(diffs)
+            feat = np.array([
+                np.mean(norms), np.max(norms), np.min(norms), np.std(norms),
+                float(np.max(norms) - np.min(norms)),
+                float(curv_e.max()), float(curv_e.mean()), float(curv_e.std()),
+                float(np.argmax(curv_e) / max(len(curv_e), 1)),
+                d_total, path_len, d_total / (path_len + 1e-8),
+            ])
+            X_euc_feat.append(feat)
+    X_euc_feat = np.array(X_euc_feat)
+
+    scaler_euc = StandardScaler()
+    X_euc_s = scaler_euc.fit_transform(X_euc_feat)
+    clf_euc = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
+    y_scores_euc = cross_val_predict(clf_euc, X_euc_s, labels, cv=cv, method="predict_proba")[:, 1]
+    auroc_euc = roc_auc_score(labels, y_scores_euc)
+    fpr_euc, tpr_euc, _ = roc_curve(labels, y_scores_euc)
+    idx_95 = np.searchsorted(tpr_euc, 0.95)
+    fpr95_euc = float(fpr_euc[min(idx_95, len(fpr_euc) - 1)])
+    f1_euc = f1_score(labels, (y_scores_euc > 0.5).astype(int))
+    baseline_results["euclidean_trained"] = {"auroc": auroc_euc, "fpr_at_95": fpr95_euc, "f1": f1_euc}
+    print(f"  [Euclidean-Trained] AUROC={auroc_euc:.3f}  FPR@95={fpr95_euc:.3f}  F1={f1_euc:.3f}")
+
+    # ── Baseline 3: HPS-Full (Hyperbolic-Trained) ──
+    print(f"\n[exp7] HPS-Full (Hyperbolic-Trained)...")
+    hps_result = train_and_evaluate(best_X, labels, config.HYPERBOLIC_K, tag="HPS-Full")
+    baseline_results["hyperbolic_trained"] = {
+        "auroc": hps_result["auroc"], "fpr_at_95": hps_result["fpr_at_95"], "f1": hps_result["f1"]
+    }
+
+    # ── Summary table ──
+    print(f"\n[exp7] ═══ Critical Baseline Comparison ═══")
+    print(f"  {'Method':<22} | {'AUROC':>7} | {'FPR@95':>7} | {'F1':>6}")
+    print(f"  {'─'*22}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*6}")
+    for name, res in baseline_results.items():
+        print(f"  {name:<22} | {res['auroc']:>7.3f} | {res['fpr_at_95']:>7.3f} | {res['f1']:>6.3f}")
+
+    ablation_results["baselines"] = baseline_results
+
+    # ══════════════════════════════════════════════════════════════════════════
     #  PHASE 3: Retrain best config and save for chat.py
     # ══════════════════════════════════════════════════════════════════════════
 
     print(f"\n[exp7] Retraining best config (pool={best_pool}, layers={top_layers})...")
 
-    # Re-extract with best pooling if needed
-    if best_pool != "last":
-        print(f"  Re-extracting with pool={best_pool}...")
-        acts_list = []
-        for i, p in enumerate(all_prompts):
-            if (i + 1) % 50 == 0:
-                print(f"  {i+1}/{len(all_prompts)}")
-            acts_list.append(extract_all_layers(model, tokenizer, p, config.DEVICE, best_pool))
-        d_hidden = acts_list[0][top_layers[0]].shape[0]
-        best_X = np.zeros((len(all_prompts), len(top_layers), d_hidden))
-        for i, act_dict in enumerate(acts_list):
-            for j, l in enumerate(top_layers):
-                if l in act_dict:
-                    best_X[i, j] = act_dict[l]
-
+    # best_X already computed in baseline comparison phase
     final = train_and_evaluate(best_X, labels, config.HYPERBOLIC_K, tag="FINAL")
 
     # ── Dual-use evaluation ──
@@ -413,8 +550,8 @@ def main():
     torch.save({
         "state_dict": final["proj"].state_dict(),
         "d_in": d_hidden,
-        "d_proj": 256,
-        "k": config.HYPERBOLIC_K,
+        "d_proj": config.PROJECTION_DIM,
+        "k": final["proj"].k.item(),  # learned curvature
         "layers": top_layers,
         "pool_mode": best_pool,
     }, proj_path)
