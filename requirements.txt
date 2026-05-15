@@ -1,0 +1,19 @@
+# HPS Sentinel — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core ML
+torch>=2.1.0
+transformers>=4.40.0
+accelerate>=0.27.0         # for device_map="auto"
+
+# Numerics & ML utilities
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Visualisation
+matplotlib>=3.7.0
+
+# Optional but recommended:
+# geoopt>=0.5.0             # Riemannian manifold optimisers (for Phase 2 extensions)
+# baukit>=0.0.1             # Cleaner activation hooks (alternative to manual hooks)
+# datasets>=2.18.0          # For loading JailbreakBench / HarmBench datasets
