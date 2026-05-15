@@ -18,6 +18,7 @@ TARGET_LAYERS = [3, 8, 13, 18, 23, 28, 33, 38]
 # ── Hardware ──────────────────────────────────────────────────────────────────
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE  = torch.float16 if torch.cuda.is_available() else torch.float32
+USE_4BIT = True  # Set False if you have 40GB+ VRAM
 
 # ── Hyperbolic geometry ───────────────────────────────────────────────────────
 HYPERBOLIC_K = 1.0        # initial curvature (learnable during training)

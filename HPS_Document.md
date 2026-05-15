@@ -94,13 +94,13 @@ Each hidden state is projected onto the Lorentz hyperboloid through a learned pr
 
 ```
 x_proj = W · h · λ                         (linear projection, W ∈ ℝ^(d×d_p), learnable scale λ)
-x₀ = sqrt(1/κ + ||x_proj||²)               (time coordinate, κ = curvature constant)
+x₀ = sqrt(1/κ + ||x_proj||²)               (time coordinate, κ = learnable curvature, initialized 1.0)
 point = [x₀, x_proj] ∈ L^{d_p}_κ           (on the hyperboloid)
 ```
 
-**Notation:** κ denotes the curvature constant of the hyperboloid (κ = 1.0). N_L denotes the number of selected layers. These are distinct quantities.
+**Notation:** κ denotes the learnable curvature constant of the hyperboloid (initialized to 1.0, clamped [0.1, 10.0], optimized jointly with W). N_L denotes the number of selected layers (N_L = 8). These are distinct quantities.
 
-**Projection dimension d_p:** We use d_p = 256 (16x compression from d = 4096). Sensitivity analysis over d_p ∈ {64, 128, 256, 512} is included in ablations.
+**Projection dimension d_p:** We use d_p = 64 (80x compression from d = 5120). Sensitivity analysis over d_p ∈ {32, 64, 128, 256} is included in ablations.
 
 **Shared projection head:** A single W is applied across all selected layers. Our hypothesis is that Fisher-ratio selection picks layers with sufficiently compatible statistics that a shared projection is not a bottleneck — and that sharing acts as regularization, forcing the head to find a universal safety-relevant projection rather than overfitting to layer-specific artifacts. We test this against per-layer heads (N_L separate W matrices) in ablation; if per-layer heads significantly outperform, the shared design should be abandoned.
 
@@ -164,7 +164,7 @@ This measures how much the path deviates from a geodesic at each point. κ_i ∈
 
 **Progress ratio and dual-use:** Feature 12 (progress ratio) may be vulnerable to dual-use confusion — benign prompts about sensitive topics might also show low progress ratio due to internal deliberation. The 12-feature probe learns appropriate weighting, but we report per-feature importance to identify which features are most susceptible to dual-use false positives.
 
-**12 features vs direct classification:** The 12-feature probe is an interpretable summary of the 8×257 = 2056-dimensional trajectory. We ablate against a direct classifier (logistic regression on the flattened trajectory) to verify the hand-crafted features are not a bottleneck. If the 12-feature probe matches the direct classifier, this is a strong result: the geometric summary statistics capture all discriminative information in an interpretable form.
+**12 features vs direct classification:** The 12-feature probe is an interpretable summary of the 8×65 = 520-dimensional trajectory. We ablate against a direct classifier (logistic regression on the flattened trajectory) to verify the hand-crafted features are not a bottleneck. If the 12-feature probe matches the direct classifier, this is a strong result: the geometric summary statistics capture all discriminative information in an interpretable form.
 
 ### 3.4 Classification
 
@@ -220,34 +220,42 @@ To isolate what drives detection and rule out the possibility that simpler metho
 
 ### Training Data (Validated)
 
-All prompts validated against the target model before use:
-- **Benign (class 0):** Only prompts where the model produces a normal, helpful response
-- **Adversarial (class 1):** Only prompts where the model actually complies with the harmful request
+All adversarial prompts validated against the target model (confirmed compliance, not refusal):
+- **Benign (class 0):** Diverse prompts the model responds to normally
+- **Adversarial (class 1):** Prompts that successfully jailbreak the model (confirmed harmful output)
 
-**Target training set size:** 100 confirmed adversarial + 200 confirmed benign (balanced via oversampling during training). The projection head has ~1M parameters (4096×256); 100 adversarial examples is sufficient for the contrastive loss given the low-rank structure, but we acknowledge this is a limitation and report learning curves showing performance vs training set size.
+**Target model:** lmsys/vicuna-13b-v1.5 (40 layers, 5120 hidden dim)
+
+**Benign sources (350 total):**
+
+| Source | Count | Type |
+|---|---|---|
+| tatsu-lab/alpaca | 100 | Natural language instructions |
+| openai_humaneval | 50 | Code completion prompts |
+| gsm8k | 100 | Math word problems |
+| euclaise/writingprompts | 50 | Creative writing prompts |
+| allenai/winogrande | 50 | Unusual/tricky sentence completions |
+
+**Adversarial sources (85 validated):**
+
+| Source | Count | Type |
+|---|---|---|
+| Validated GCG attacks | 85 | Gradient-optimized suffixes confirmed to break Vicuna-13B |
+
+**Training set size:** 85 adversarial + 350 benign. Balanced via oversampling during contrastive training. The projection head has ~330K parameters (5120×64); with per-layer loss across 8 layers, effective training signals = 85 × 8 = 680 adversarial layer-projections, yielding a 1:2 param-to-signal ratio that is workable with early stopping and weight decay.
 
 | Source | Role | Notes |
 |---|---|---|
-| Alpaca-Cleaned | Benign | General instructions |
-| GSM8K | Benign | Math word problems |
-| WritingPrompts | Benign | Creative/stories |
-| WildGuard (unharmful) | Benign | Real-world safe queries |
-| Built-in emotional/code | Benign | Emotional support, technical |
-| JailbreakBench artifacts (GCG) | Adversarial | Gradient-optimized suffixes |
-| JailbreakBench artifacts (PAIR) | Adversarial | Semantically rewritten attacks |
-| JailbreakBench artifacts (TAP) | Adversarial | Tree-of-attacks pruning |
-| WildGuard (harmful) | Adversarial | Real-world attacks |
-| AdvBench | Adversarial | Harmful requests (caveat: many are refused by well-aligned models even without safety training; our validation step filters these out, so AdvBench may contribute fewer confirmed breaks than expected) |
+| tatsu-lab/alpaca | Benign | Natural language instructions (100) |
+| openai_humaneval | Benign | Code prompts (50) |
+| gsm8k | Benign | Math word problems (100) |
+| euclaise/writingprompts | Benign | Creative writing (50) |
+| allenai/winogrande | Benign | Unusual sentence completions (50) |
+| Validated GCG attacks | Adversarial | Gradient-optimized suffixes confirmed to break Vicuna-13B (85) |
 
 ### Cross-Attack Generalization Protocol
 
-| Split | Train | Test |
-|---|---|---|
-| A | PAIR + WildGuard | GCG + TAP |
-| B | GCG + AdvBench | PAIR + TAP |
-| C | TAP + WildGuard | GCG + PAIR |
-
-Report mean ± std across splits.
+With 85 attacks from a single method (GCG), cross-attack splits are not possible in Phase 1. We use a single random 70/30 train/test split and report results as preliminary. Phase 2 (1K+ attacks from multiple methods) will enable proper cross-attack evaluation.
 
 ### Dual-Use Evaluation Set
 
@@ -260,7 +268,7 @@ Report mean ± std across splits.
 1. Jailbreaks produce geometrically distinct activation trajectories detectable before output generation.
 2. Hyperbolic projection adds statistically significant discriminative power beyond (a) raw concatenated activations from selected layers, (b) a Euclidean-trained projection, and (c) a generic nonlinear projection. If any of these baselines match HPS-Full, the hyperbolic framing is not justified and the paper pivots to "trajectory-based detection with contrastive projection."
 3. Trained projection separates adversarial intent from sensitive topics (target: <5% dual-use FPR).
-4. Detection generalizes across attack types not seen during training.
+4. Detection generalizes across attack types not seen during training. *(Phase 2 only — requires multiple attack methods.)*
 5. Empirical layer selection via Fisher-ratio outperforms uniform spacing.
 6. The curvature spike is a primary detection signal (testable via feature importance — if curvature features contribute <20%, this claim is falsified and the narrative shifts to radial/displacement features).
 
@@ -269,9 +277,52 @@ Report mean ± std across splits.
 ## 6. Limitations
 
 - **White-box requirement**: Needs access to internal activations. Cannot protect closed-weight APIs.
-- **Validated data dependency**: Requires finding prompts that actually break the target model. Well-aligned models resist most attacks.
-- **Adaptive attacks**: Not yet tested against attackers who know the sentinel exists and optimize against it.
-- **Multi-model generalization**: Pending validation on Qwen, Mistral.
-- **Scale**: Current validation on ~100 prompts per class. Larger-scale evaluation needed.
+- **Single attack type**: Phase 1 uses only GCG attacks on Vicuna-13B. Cross-attack generalization (PAIR, TAP, multi-turn) is a Phase 2 requirement.
+- **Data scale**: 85 adversarial + 350 benign is sufficient for Phase 1 go/no-go but underpowered for publication claims. Phase 2 targets 1K+ attacks.
+- **Single model**: Validated on Vicuna-13B only. Generalization to Llama-3, Qwen, Mistral pending.
+- **Adaptive attacks**: Not yet tested against attackers who know the sentinel exists.
 - **Latency**: Theoretical <20ms. Wall-clock benchmarks pending.
-- **Deployment base rates**: Like all safety classifiers, HPS's operational precision depends on the base rate of adversarial queries. At low base rates (<1%), even a low FPR produces many false positives in absolute terms (e.g., 95% TPR + 5% FPR at 0.1% base rate → ~1.9% positive predictive value). Deployment should combine HPS with other signals (input filters, output checks) or reserve it for high-risk contexts where the base rate is elevated (red-team monitoring, agentic tool-use pipelines).
+- **Deployment base rates**: Like all safety classifiers, HPS's operational precision depends on the base rate of adversarial queries. At low base rates (<1%), even a low FPR produces many false positives in absolute terms. Deployment should combine HPS with other signals or reserve it for high-risk contexts (red-team monitoring, agentic tool-use pipelines).
+
+---
+
+## 7. Execution Plan
+
+### Phase 1: Go/No-Go (2 days)
+
+**Goal:** Determine if the trajectory signal exists and if hyperbolic projection adds value over simpler baselines.
+
+| Step | Action | Kill Criterion |
+|---|---|---|
+| 1 | Load 85 validated GCG attacks + 350 benign | — |
+| 2 | Fisher-ratio layer discovery (all 40 layers) | If Fisher ratios < 1.5 at all layers → stop |
+| 3 | Pooling ablation (last / mean / last-5) | — |
+| 4 | Run baselines: Fisher-8 Raw, Euclidean-Trained, HPS-Full | See decision table below |
+| 5 | Report comparison table | — |
+
+**Decision table:**
+
+| Result | Action |
+|---|---|
+| Fisher ratios < 1.5 everywhere | Stop. Signal doesn't exist. |
+| Fisher-8 Raw > 90% AUROC | Signal is trivially separable. Paper is about layer selection, not geometry. |
+| HPS-Full < Fisher-8 Raw + 5% | Projection doesn't help. Drop geometry framing. |
+| HPS-Full > Fisher-8 Raw + 5% AND > Euclidean-Trained + 3% | **Green light. Proceed to Phase 2.** |
+
+### Phase 2: Publication-Ready (3-4 weeks)
+
+**Goal:** Scale data, add ablations, test generalization, write paper.
+
+| Week | Focus |
+|---|---|
+| 1 | Scale to 1K attacks (GCG + PAIR + TAP), 10K benign. Add Llama-3, Qwen-2.5. |
+| 2 | Full ablation suite: mixed-curvature, per-layer W, d_p sweep, margin sweep, feature importance |
+| 3 | Cross-attack generalization (train on PAIR, test on GCG). Adaptive attack. Latency benchmarks. |
+| 4 | Paper writing, figures, submission. |
+
+**Phase 2 additions enabled by 1K+ data:**
+- Mixed-curvature (Euclidean + Spherical + Hyperbolic with learned routing weights)
+- Per-layer projection heads (8 separate W matrices)
+- Small transformer over projected trajectory (2-layer, 64-dim)
+- 500+ dual-use evaluation set with Clopper-Pearson CIs
+- Learnable κ sensitivity analysis

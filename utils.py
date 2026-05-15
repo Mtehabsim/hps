@@ -21,13 +21,30 @@ def load_model(model_name: str, device: str, dtype):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=dtype,
-        device_map=None,       # never auto — that spreads layers across GPUs
-        trust_remote_code=True,
-    )
-    model = model.to(device)  # move entire model to the single target device
+    # Check if 4-bit quantization is requested
+    use_4bit = getattr(__import__('config'), 'USE_4BIT', False)
+
+    if use_4bit:
+        from transformers import BitsAndBytesConfig
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=dtype,
+            bnb_4bit_quant_type="nf4",
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            quantization_config=quant_config,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=dtype,
+            device_map=None,
+            trust_remote_code=True,
+        )
+        model = model.to(device)
 
     model.eval()
     print(f"[utils] Model loaded. Parameters: {sum(p.numel() for p in model.parameters()):,}")
