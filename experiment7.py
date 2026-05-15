@@ -245,7 +245,7 @@ def train_and_evaluate(X_all, labels, k, tag=""):
     scaler = StandardScaler()
     X_s = scaler.fit_transform(X_feat)
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=min(5, min(np.sum(labels == 0), np.sum(labels == 1))), shuffle=True, random_state=42)
     clf = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
     y_scores = cross_val_predict(clf, X_s, labels, cv=cv, method="predict_proba")[:, 1]
 
@@ -401,7 +401,7 @@ def main():
     X_concat = best_X.reshape(len(all_prompts), -1)  # (n_samples, n_layers * d_hidden)
     scaler_raw = StandardScaler()
     X_concat_s = scaler_raw.fit_transform(X_concat)
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=min(5, min(np.sum(labels == 0), np.sum(labels == 1))), shuffle=True, random_state=42)
     clf_raw = LogisticRegression(C=0.01, max_iter=2000, random_state=42)  # low C to prevent overfit on high-dim
     y_scores_raw = cross_val_predict(clf_raw, X_concat_s, labels, cv=cv, method="predict_proba")[:, 1]
     auroc_raw = roc_auc_score(labels, y_scores_raw)
