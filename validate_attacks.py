@@ -167,8 +167,10 @@ def main():
         "model": config.MODEL_NAME,
         "total_candidates": len(candidates),
         "total_validated": len(validated),
+        "total_refused": len(refused),
         "method_stats": method_stats,
         "validated_attacks": validated,
+        "refused_attacks": refused,
     }
 
     out_path = os.path.join(config.RESULTS_DIR, "validated_attacks.json")
