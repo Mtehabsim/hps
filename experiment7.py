@@ -141,20 +141,28 @@ def discover_layers(model, tokenizer, benign_prompts, attack_prompts, device,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LorentzProjection(nn.Module):
-    def __init__(self, d_in, d_proj=None, k=1.0):
+    def __init__(self, d_in, d_proj=None, k=1.0, n_layers=8):
         super().__init__()
         d_proj = d_proj or config.PROJECTION_DIM
         self.proj = nn.Linear(d_in, d_proj, bias=False)
         self.scale = nn.Parameter(torch.tensor(1.0 / np.sqrt(d_proj)))
         self.log_k = nn.Parameter(torch.tensor(np.log(k)))  # learnable curvature
+        # Learnable temperature per layer (calibrates distance scale)
+        self.log_tau = nn.Parameter(torch.zeros(n_layers))  # τ_l, initialized to 1.0 (log(1)=0)
         nn.init.xavier_uniform_(self.proj.weight)
 
     @property
     def k(self):
         return torch.exp(self.log_k).clamp(min=0.1, max=10.0)
 
+    def tau(self, layer_idx):
+        """Per-layer temperature, clamped for stability."""
+        return torch.exp(self.log_tau[layer_idx]).clamp(min=0.01, max=10.0)
+
     def forward(self, x):
-        x_proj = self.proj(x) * self.scale
+        # FP32 for geometric operations (numerical stability)
+        x_fp32 = x.float()
+        x_proj = self.proj(x_fp32) * self.scale
         norm_sq = (x_proj ** 2).sum(dim=-1, keepdim=True)
         x0 = torch.sqrt(1.0 / self.k + norm_sq)
         return torch.cat([x0, x_proj], dim=-1)
@@ -171,19 +179,27 @@ def lorentz_distance_torch(x, y, k=1.0):
         return (1.0 / np.sqrt(k)) * torch.acosh(-k * inner)
 
 
-def contrastive_loss(anchors, labels, k=1.0, margin=2.0):
+def contrastive_loss(anchors, labels, k=1.0, margin=2.0, tau=1.0):
+    """Vectorized contrastive loss with temperature scaling. FP32 for stability."""
     n = anchors.shape[0]
-    loss = torch.tensor(0.0, device=anchors.device)
-    count = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            d = lorentz_distance_torch(anchors[i:i+1], anchors[j:j+1], k=k).squeeze()
-            if labels[i] == labels[j]:
-                loss = loss + d ** 2
-            else:
-                loss = loss + torch.clamp(margin - d, min=0) ** 2
-            count += 1
-    return loss / max(count, 1)
+    # All pairwise Lorentz distances (vectorized, FP32)
+    anchors = anchors.float()
+    inner = -anchors[:, 0:1] @ anchors[:, 0:1].T + anchors[:, 1:] @ anchors[:, 1:].T
+    inner = torch.clamp(inner, max=-1.0 / k - 1e-6)
+    dists = (1.0 / np.sqrt(k)) * torch.acosh(-k * inner)
+
+    # Temperature scaling
+    dists = dists / tau
+
+    # Masks
+    same_mask = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+    diff_mask = 1.0 - same_mask
+    triu = torch.triu(torch.ones(n, n, device=anchors.device), diagonal=1)
+
+    same_loss = (dists ** 2 * same_mask * triu).sum()
+    diff_loss = (torch.clamp(margin - dists, min=0) ** 2 * diff_mask * triu).sum()
+    count = triu.sum().clamp(min=1)
+    return (same_loss + diff_loss) / count
 
 
 def extract_trajectory_features(proj, X_all, k=None):
@@ -220,32 +236,47 @@ def train_and_evaluate(X_all, labels, k, tag=""):
     device = config.DEVICE
     n_samples, n_layers, d_hidden = X_all.shape
 
-    proj = LorentzProjection(d_hidden, config.PROJECTION_DIM, k).to(device)
+    proj = LorentzProjection(d_hidden, config.PROJECTION_DIM, k, n_layers=n_layers).to(device)
     optimizer = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
     X_t = torch.tensor(X_all, dtype=torch.float32, device=device)
     y_t = torch.tensor(labels, dtype=torch.long, device=device)
 
     proj.train()
-    for epoch in range(100):
+    best_loss = float('inf')
+    patience_counter = 0
+    for epoch in range(200):
         # Option C: per-layer contrastive loss, summed across all layers
         total_loss = torch.tensor(0.0, device=device)
         for l in range(n_layers):
             h = proj(X_t[:, l, :])  # project layer l for all samples
-            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k.item())
+            tau_l = proj.tau(l)     # per-layer temperature
+            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k.item(), tau=tau_l)
         total_loss = total_loss / n_layers
 
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
+        # Early stopping
+        if total_loss.item() < best_loss - 1e-4:
+            best_loss = total_loss.item()
+            patience_counter = 0
+        else:
+            patience_counter += 1
+        if patience_counter >= 20:
+            print(f"    [{tag}] Early stopping at epoch {epoch+1}, loss: {best_loss:.4f}, κ: {proj.k.item():.3f}")
+            break
+
         if (epoch + 1) % 25 == 0:
-            print(f"    [{tag}] Epoch {epoch+1}/100 — loss: {total_loss.item():.4f}, κ: {proj.k.item():.3f}")
+            print(f"    [{tag}] Epoch {epoch+1}/200 — loss: {total_loss.item():.4f}, κ: {proj.k.item():.3f}")
 
     X_feat = extract_trajectory_features(proj, X_all, k=k)
     scaler = StandardScaler()
     X_s = scaler.fit_transform(X_feat)
 
-    cv = StratifiedKFold(n_splits=min(5, min(np.sum(labels == 0), np.sum(labels == 1))), shuffle=True, random_state=42)
+    n_splits = min(5, min(np.sum(labels == 0), np.sum(labels == 1)))
+    assert n_splits >= 2, f"Not enough samples for CV: {np.sum(labels==0)} benign, {np.sum(labels==1)} adversarial. Need ≥2 per class."
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     clf = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
     y_scores = cross_val_predict(clf, X_s, labels, cv=cv, method="predict_proba")[:, 1]
 
@@ -280,16 +311,26 @@ def main():
     benign_prompts = benign_prompts[:n_ben]
     print(f"[exp7] Data: {n_atk} attacks + {n_ben} benign")
 
+    # ── Split: calibration (for layer discovery) vs training (for projection) ──
+    n_calib_atk = min(30, n_atk // 3)
+    n_calib_ben = min(30, len(benign_prompts) // 3)
+    calib_attack = attack_prompts[:n_calib_atk]
+    calib_benign = benign_prompts[:n_calib_ben]
+    train_attack = attack_prompts[n_calib_atk:]
+    train_benign = benign_prompts[n_calib_ben:]
+    print(f"[exp7] Calibration: {n_calib_atk} attacks + {n_calib_ben} benign")
+    print(f"[exp7] Training:    {len(train_attack)} attacks + {len(train_benign)} benign")
+
     # ── Load model ──
     model, tokenizer = load_model(config.MODEL_NAME, config.DEVICE, config.DTYPE)
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  PHASE 1: Layer Discovery (using last-token, 30 samples per class)
+    #  PHASE 1: Layer Discovery (on calibration split ONLY)
     # ══════════════════════════════════════════════════════════════════════════
 
     separations = discover_layers(
-        model, tokenizer, benign_prompts, attack_prompts,
-        config.DEVICE, pool_mode="last", n_samples=30
+        model, tokenizer, calib_benign, calib_attack,
+        config.DEVICE, pool_mode="last", n_samples=min(n_calib_atk, n_calib_ben)
     )
 
     # Print all layers ranked
@@ -322,8 +363,8 @@ def main():
     #  PHASE 2: Pooling Ablation (last vs mean vs last5) on top layers
     # ══════════════════════════════════════════════════════════════════════════
 
-    all_prompts = benign_prompts + attack_prompts
-    labels = np.array([0] * len(benign_prompts) + [1] * len(attack_prompts))
+    all_prompts = train_benign + train_attack
+    labels = np.array([0] * len(train_benign) + [1] * len(train_attack))
 
     ablation_results = {}
 
@@ -530,15 +571,23 @@ def main():
     X_train_s = final["scaler"].transform(X_train_feat)
     clf_final.fit(X_train_s, labels)
 
-    du_scores = clf_final.predict_proba(X_du_s)[:, 1]
-    du_fpr = float((du_scores > 0.5).sum()) / len(du_scores)
-    print(f"  Dual-use FPR: {du_fpr:.3f}")
-
-    # ── Compute threshold ──
-    train_scores = clf_final.predict_proba(X_train_s)[:, 1]
-    benign_scores = train_scores[labels == 0]
-    adv_scores = train_scores[labels == 1]
+    # ── Compute threshold from cross-val scores (not in-sample) ──
+    # Use the CV predictions from train_and_evaluate which are out-of-fold
+    cv_scores = cross_val_predict(
+        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
+        X_train_s, labels,
+        cv=StratifiedKFold(n_splits=min(5, min(np.sum(labels==0), np.sum(labels==1))), shuffle=True, random_state=42),
+        method="predict_proba"
+    )[:, 1]
+    benign_scores = cv_scores[labels == 0]
+    adv_scores = cv_scores[labels == 1]
     threshold = max(float(np.percentile(adv_scores, 5)), float(np.percentile(benign_scores, 95)))
+    print(f"\n[exp7] Threshold (from CV scores): {threshold:.4f}")
+
+    # ── Dual-use FPR at the actual threshold ──
+    du_scores = clf_final.predict_proba(X_du_s)[:, 1]
+    du_fpr = float((du_scores > threshold).sum()) / len(du_scores)
+    print(f"  Dual-use FPR (at threshold={threshold:.3f}): {du_fpr:.3f}")
 
     # ── Save for chat.py ──
     proj_path = os.path.join(config.RESULTS_DIR, "hps_projection_head.pt")
@@ -577,8 +626,11 @@ def main():
         "final_f1": final["f1"],
         "dual_use_fpr": du_fpr,
         "threshold": threshold,
-        "n_benign": n,
-        "n_adversarial": n,
+        "n_benign_total": len(benign_prompts),
+        "n_adversarial_total": len(attack_prompts),
+        "n_benign_train": len(train_benign),
+        "n_adversarial_train": len(train_attack),
+        "n_calibration": n_calib_atk + n_calib_ben,
     }
     save_json(results, "experiment7_results.json", config.RESULTS_DIR)
 
