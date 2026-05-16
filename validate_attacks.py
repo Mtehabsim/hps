@@ -66,32 +66,32 @@ def load_jailbreakbench_artifacts():
     print("[validate] Loading from JailbreakBench raw URLs...")
     import urllib.request
 
-        urls = {
-            "JBC": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/JBC/manual/vicuna-13b-v1.5.json",
-            "prompt_with_random_search": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/prompt_with_random_search/black_box/vicuna-13b-v1.5.json",
-            "GCG": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/GCG/white_box/vicuna-13b-v1.5.json",
-            "PAIR": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/PAIR/black_box/vicuna-13b-v1.5.json",
-        }
+    urls = {
+        "JBC": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/JBC/manual/vicuna-13b-v1.5.json",
+        "prompt_with_random_search": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/prompt_with_random_search/black_box/vicuna-13b-v1.5.json",
+        "GCG": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/GCG/white_box/vicuna-13b-v1.5.json",
+        "PAIR": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/PAIR/black_box/vicuna-13b-v1.5.json",
+    }
 
-        for method, url in urls.items():
-            try:
-                with urllib.request.urlopen(url) as resp:
-                    data = json.loads(resp.read().decode())
-                if isinstance(data, list):
-                    jailbreaks = data
-                elif "jailbreaks" in data:
-                    jailbreaks = data["jailbreaks"]
-                else:
-                    jailbreaks = data.get("data", data.get("results", []))
+    for method, url in urls.items():
+        try:
+            with urllib.request.urlopen(url) as resp:
+                data = json.loads(resp.read().decode())
+            if isinstance(data, list):
+                jailbreaks = data
+            elif "jailbreaks" in data:
+                jailbreaks = data["jailbreaks"]
+            else:
+                jailbreaks = data.get("data", data.get("results", []))
 
-                for j in jailbreaks:
-                    prompt = j.get("prompt", j.get("jailbreak", ""))
-                    jailbroken = j.get("jailbroken", True)
-                    if prompt and len(prompt) > 10:
-                        all_attacks.append((prompt, method, jailbroken))
-                print(f"[validate] {method}: {len([x for x in all_attacks if x[1]==method])} prompts loaded")
-            except Exception as e:
-                print(f"[validate] {method}: failed ({e})")
+            for j in jailbreaks:
+                prompt = j.get("prompt", j.get("jailbreak", ""))
+                jailbroken = j.get("jailbroken", True)
+                if prompt and len(prompt) > 10:
+                    all_attacks.append((prompt, method, jailbroken))
+            print(f"[validate] {method}: {len([x for x in all_attacks if x[1]==method])} prompts loaded")
+        except Exception as e:
+            print(f"[validate] {method}: failed ({e})")
 
     print(f"[validate] Total candidates: {len(all_attacks)}")
     return all_attacks
