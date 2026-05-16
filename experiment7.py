@@ -179,15 +179,20 @@ def lorentz_distance_torch(x, y, k=1.0):
 
 
 def contrastive_loss(anchors, labels, k=1.0, margin=2.0, tau=1.0):
-    """Vectorized contrastive loss with temperature scaling. FP32 for stability."""
+    """Vectorized contrastive loss with balanced weighting and temperature. FP32."""
     n = anchors.shape[0]
-    # All pairwise Lorentz distances (vectorized, FP32)
     anchors = anchors.float()
     inner = -anchors[:, 0:1] @ anchors[:, 0:1].T + anchors[:, 1:] @ anchors[:, 1:].T
-    inner = torch.clamp(inner, max=-1.0 / k - 1e-6)
-    dists = (1.0 / np.sqrt(k)) * torch.acosh(-k * inner)
 
-    # Temperature scaling
+    # Handle tensor k (learnable curvature) or scalar k
+    if isinstance(k, torch.Tensor):
+        clamp_val = (-1.0 / k - 1e-6).detach().item()
+        inner = torch.clamp(inner, max=clamp_val)
+        dists = (1.0 / torch.sqrt(k)) * torch.acosh(-k * inner)
+    else:
+        inner = torch.clamp(inner, max=-1.0 / k - 1e-6)
+        dists = (1.0 / np.sqrt(k)) * torch.acosh(-k * inner)
+
     dists = dists / tau
 
     # Masks
@@ -198,7 +203,6 @@ def contrastive_loss(anchors, labels, k=1.0, margin=2.0, tau=1.0):
     same_loss = (dists ** 2 * same_mask * triu).sum()
     diff_loss = (torch.clamp(margin - dists, min=0) ** 2 * diff_mask * triu).sum()
 
-    # Balanced weighting: normalize same-class and diff-class contributions equally
     n_same = (same_mask * triu).sum().clamp(min=1)
     n_diff = (diff_mask * triu).sum().clamp(min=1)
     return (same_loss / n_same + diff_loss / n_diff) / 2.0
@@ -253,7 +257,7 @@ def train_and_evaluate(X_all, labels, k, tag=""):
             h = proj(X_t[:, l, :])  # project layer l for all samples
             tau_l = proj.tau(l)     # per-layer temperature
             # Pass k as tensor for gradient flow through curvature
-            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k.detach().item(), tau=tau_l)
+            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k, tau=tau_l)
         total_loss = total_loss / n_layers
 
         optimizer.zero_grad()
@@ -414,8 +418,10 @@ def main():
 
     # Run ablation
     ablation_results = {}
+    ablation_full = {}
     for pool_mode in ["last", "mean", "last5"]:
         result = train_and_evaluate(X_by_mode[pool_mode], labels, config.HYPERBOLIC_K, tag=pool_mode)
+        ablation_full[pool_mode] = result
         ablation_results[pool_mode] = {
             "auroc": result["auroc"],
             "fpr_at_95": result["fpr_at_95"],
@@ -669,9 +675,9 @@ def main():
     baseline_results["nonlinear_euclidean"] = {"auroc": auroc_nl, "fpr_at_95": fpr95_nl, "f1": f1_nl}
     print(f"  [Nonlinear-Euclidean] AUROC={auroc_nl:.3f}  FPR@95={fpr95_nl:.3f}  F1={f1_nl:.3f}")
 
-    # ── Baseline 4: HPS-Full ──
-    print(f"\n[exp7] HPS-Full (Hyperbolic-Trained)...")
-    hps_result = train_and_evaluate(best_X, labels, config.HYPERBOLIC_K, tag="HPS-Full")
+    # ── Baseline 4: HPS-Full (reuse from pooling ablation — no retraining) ──
+    print(f"\n[exp7] HPS-Full (Hyperbolic-Trained) — reusing from pooling ablation...")
+    hps_result = ablation_full[best_pool]
     baseline_results["hyperbolic_trained"] = {
         "auroc": hps_result["auroc"], "fpr_at_95": hps_result["fpr_at_95"], "f1": hps_result["f1"]
     }
@@ -689,8 +695,8 @@ def main():
     #  PHASE 3: Final model + threshold + dual-use + plots
     # ══════════════════════════════════════════════════════════════════════════
 
-    print(f"\n[exp7] Using HPS-Full result as final model (no retraining)...")
-    final = hps_result  # reuse — same config, avoids inconsistent numbers
+    print(f"\n[exp7] Using HPS-Full result as final model (from pooling ablation, no retraining)...")
+    final = hps_result  # reuse from ablation — same config, consistent numbers
 
     # Extract features for dual-use scoring
     X_train_feat = extract_trajectory_features(final["proj"], best_X)
@@ -705,12 +711,16 @@ def main():
     threshold = max(float(np.percentile(adv_cv, 10)), float(np.percentile(benign_cv, 90)))
     print(f"[exp7] Threshold (from CV): {threshold:.4f}")
 
-    # ── Feature importance (permutation) ──
-    print(f"\n[exp7] Feature importance (permutation, 10 repeats)...")
+    # ── Feature importance (permutation on held-out split) ──
+    print(f"\n[exp7] Feature importance (permutation, held-out split)...")
     from sklearn.inspection import permutation_importance
+    n_val = max(10, len(all_prompts) // 5)
+    val_idx = np.random.RandomState(42).choice(len(all_prompts), n_val, replace=False)
+    train_idx = np.setdiff1d(np.arange(len(all_prompts)), val_idx)
     clf_imp = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
-    clf_imp.fit(X_train_s, labels)
-    perm_result = permutation_importance(clf_imp, X_train_s, labels, n_repeats=10, random_state=42, scoring="roc_auc")
+    clf_imp.fit(X_train_s[train_idx], labels[train_idx])
+    perm_result = permutation_importance(clf_imp, X_train_s[val_idx], labels[val_idx],
+                                         n_repeats=10, random_state=42, scoring="roc_auc")
     feat_names = ["mean_r", "max_r", "min_r", "std_r", "range_r",
                   "max_κ", "mean_κ", "std_κ", "spike_loc",
                   "displacement", "path_len", "progress"]
@@ -760,7 +770,8 @@ def main():
     elif auroc_flat > final["auroc"]:
         print(f"  ⚠ Direct classifier is better — 12 features lose signal")
     else:
-        print(f"  ✓ 12 features are sufficient (direct classifier not better)")
+        print(f"  ✓ 12 geometric features OUTPERFORM direct classifier "
+              f"(Δ={final['auroc']-auroc_flat:.3f}) — geometric structure more discriminative than raw projections")
 
     # Dual-use FPR at correct threshold
     print(f"\n[exp7] Dual-use FPR ({len(DUAL_USE_BUILTIN)} prompts, threshold={threshold:.3f})...")
@@ -776,7 +787,12 @@ def main():
     X_du_s = final["scaler"].transform(X_du_feat)
     du_scores = clf_final.predict_proba(X_du_s)[:, 1]
     du_fpr = float((du_scores > threshold).sum()) / len(du_scores)
-    print(f"  Dual-use FPR: {du_fpr:.3f}")
+    n_du = len(du_scores)
+    n_fp = int((du_scores > threshold).sum())
+    from scipy.stats import beta as beta_dist
+    ci_lo = beta_dist.ppf(0.025, n_fp + 1e-10, n_du - n_fp + 1) if n_fp > 0 else 0.0
+    ci_hi = beta_dist.ppf(0.975, n_fp + 1, n_du - n_fp + 1e-10)
+    print(f"  Dual-use FPR: {du_fpr:.3f}  95% CI: [{ci_lo:.3f}, {ci_hi:.3f}]  ({n_fp}/{n_du} flagged)")
 
     # ── Plots ──
     # ROC comparison (all curves from proper CV)
