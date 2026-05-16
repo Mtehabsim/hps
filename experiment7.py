@@ -9,7 +9,7 @@ Experiment 7 — Layer Discovery + Token Pooling Ablation
 Usage:
   python experiment7.py
 
-Requires: results/validated_attack_prompts.json, results/validated_benign_prompts.json
+Requires: validated_datasets.json (attacks), HuggingFace access (benign)
 """
 
 import sys, os, json
