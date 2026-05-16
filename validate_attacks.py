@@ -63,21 +63,8 @@ def load_jailbreakbench_artifacts():
     """Load all attack artifacts for vicuna-13b-v1.5 from JailbreakBench."""
     all_attacks = []
 
-    try:
-        import jailbreakbench as jbb
-        methods = ["PAIR", "GCG", "prompt_with_random_search", "JBC", "DSN"]
-        for method in methods:
-            try:
-                art = jbb.read_artifact(method=method, model_name="vicuna-13b-v1.5")
-                prompts = [(j.prompt, method, j.jailbroken) for j in art.jailbreaks if j.prompt]
-                all_attacks.extend(prompts)
-                n_jailbroken = sum(1 for j in art.jailbreaks if j.jailbroken)
-                print(f"[validate] {method}: {len(prompts)} total, {n_jailbroken} marked jailbroken")
-            except Exception as e:
-                print(f"[validate] {method}: failed ({e})")
-    except ImportError:
-        print("[validate] jailbreakbench not installed, falling back to raw URLs...")
-        import urllib.request
+    print("[validate] Loading from JailbreakBench raw URLs...")
+    import urllib.request
 
         urls = {
             "JBC": "https://raw.githubusercontent.com/JailbreakBench/artifacts/main/attack-artifacts/JBC/manual/vicuna-13b-v1.5.json",

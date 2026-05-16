@@ -46,14 +46,20 @@ def load_unusual_benign(n: int) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def load_adversarial_gcg(n: int) -> list:
+    # Try categorized file first (from validate_attacks.py)
+    cat_path = os.path.join(os.path.dirname(__file__), "results", "validated_attacks_categorized.json")
+    if os.path.exists(cat_path):
+        with open(cat_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # Load PAIR only (fluent attacks — the real test)
+        prompts = data.get("PAIR", [])
+        print(f"[dataset] Loaded {len(prompts)} PAIR attacks from categorized file")
+        return prompts[:n]
+
+    # Fallback to flat file
     file_path = os.path.join(os.path.dirname(__file__), "validated_datasets.json")
     if not os.path.exists(file_path):
-        # Try results folder
-        file_path = os.path.join(os.path.dirname(__file__), "results", "validated_attack_prompts.json")
-    if not os.path.exists(file_path):
-        print(f"[dataset] WARNING: No validated attacks file found. Looked in:")
-        print(f"  - {os.path.join(os.path.dirname(__file__), 'validated_datasets.json')}")
-        print(f"  - {os.path.join(os.path.dirname(__file__), 'results', 'validated_attack_prompts.json')}")
+        print(f"[dataset] WARNING: No validated attacks file found.")
         return []
 
     with open(file_path, "r", encoding="utf-8") as f:
