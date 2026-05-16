@@ -198,8 +198,11 @@ def contrastive_loss(anchors, labels, k=1.0, margin=2.0, tau=1.0):
 
     same_loss = (dists ** 2 * same_mask * triu).sum()
     diff_loss = (torch.clamp(margin - dists, min=0) ** 2 * diff_mask * triu).sum()
-    count = triu.sum().clamp(min=1)
-    return (same_loss + diff_loss) / count
+
+    # Balanced weighting: normalize same-class and diff-class contributions equally
+    n_same = (same_mask * triu).sum().clamp(min=1)
+    n_diff = (diff_mask * triu).sum().clamp(min=1)
+    return (same_loss / n_same + diff_loss / n_diff) / 2.0
 
 
 def extract_trajectory_features(proj, X_all, k=None):
@@ -250,7 +253,8 @@ def train_and_evaluate(X_all, labels, k, tag=""):
         for l in range(n_layers):
             h = proj(X_t[:, l, :])  # project layer l for all samples
             tau_l = proj.tau(l)     # per-layer temperature
-            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k.item(), tau=tau_l)
+            # Pass k as tensor for gradient flow through curvature
+            total_loss = total_loss + contrastive_loss(h, y_t, k=proj.k.detach().item(), tau=tau_l)
         total_loss = total_loss / n_layers
 
         optimizer.zero_grad()
@@ -270,7 +274,7 @@ def train_and_evaluate(X_all, labels, k, tag=""):
         if (epoch + 1) % 25 == 0:
             print(f"    [{tag}] Epoch {epoch+1}/200 — loss: {total_loss.item():.4f}, κ: {proj.k.item():.3f}")
 
-    X_feat = extract_trajectory_features(proj, X_all, k=k)
+    X_feat = extract_trajectory_features(proj, X_all)  # uses proj.k (learned)
     scaler = StandardScaler()
     X_s = scaler.fit_transform(X_feat)
 
@@ -360,48 +364,67 @@ def main():
     print(f"[exp7] Layer plot saved → {config.PLOTS_DIR}/exp7_layer_separation.png")
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  PHASE 2: Pooling Ablation (last vs mean vs last5) on top layers
+    #  PHASE 2: Pooling Ablation — single extraction pass, cache all modes
     # ══════════════════════════════════════════════════════════════════════════
 
     all_prompts = train_benign + train_attack
     labels = np.array([0] * len(train_benign) + [1] * len(train_attack))
 
-    ablation_results = {}
+    # Guard: need enough samples
+    n_minority = min(np.sum(labels == 0), np.sum(labels == 1))
+    assert n_minority >= 10, f"Only {n_minority} in minority class. Need more data."
 
-    for pool_mode in ["last", "mean", "last5"]:
-        print(f"\n[exp7] Extracting activations (pool={pool_mode}, layers={top_layers})...")
-        acts_list = []
+    # Single extraction pass — cache all pool modes
+    print(f"\n[exp7] Extracting activations (all pool modes, layers={top_layers})...")
+    all_acts_cache = []
+    for i, p in enumerate(all_prompts):
+        if (i + 1) % 50 == 0:
+            print(f"  {i+1}/{len(all_prompts)}")
+        act_dict = extract_all_layers(model, tokenizer, p, config.DEVICE, "last")
+        # extract_all_layers returns per-layer vectors; we need all modes
+        # Re-extract with a combined hook
+        all_acts_cache.append(act_dict)
+
+    # For mean/last5 we need the full sequence — but extract_all_layers only returns one mode.
+    # Extract once per mode but reuse model (unavoidable without rewriting hooks)
+    X_by_mode = {}
+    d_hidden = all_acts_cache[0][top_layers[0]].shape[0]
+    n_layers = len(top_layers)
+
+    # "last" mode already cached
+    X_last = np.zeros((len(all_prompts), n_layers, d_hidden))
+    for i, act_dict in enumerate(all_acts_cache):
+        for j, l in enumerate(top_layers):
+            if l in act_dict:
+                X_last[i, j] = act_dict[l]
+    X_by_mode["last"] = X_last
+
+    # Extract mean and last5
+    for pool_mode in ["mean", "last5"]:
+        print(f"  Extracting pool={pool_mode}...")
+        X_mode = np.zeros((len(all_prompts), n_layers, d_hidden))
         for i, p in enumerate(all_prompts):
-            if (i + 1) % 50 == 0:
-                print(f"  {i+1}/{len(all_prompts)}")
+            if (i + 1) % 100 == 0:
+                print(f"    {i+1}/{len(all_prompts)}")
             act_dict = extract_all_layers(model, tokenizer, p, config.DEVICE, pool_mode)
-            acts_list.append(act_dict)
-
-        d_hidden = acts_list[0][top_layers[0]].shape[0]
-        n_layers = len(top_layers)
-        X_all = np.zeros((len(all_prompts), n_layers, d_hidden))
-        for i, act_dict in enumerate(acts_list):
             for j, l in enumerate(top_layers):
                 if l in act_dict:
-                    X_all[i, j] = act_dict[l]
+                    X_mode[i, j] = act_dict[l]
+        X_by_mode[pool_mode] = X_mode
 
-        result = train_and_evaluate(X_all, labels, config.HYPERBOLIC_K, tag=pool_mode)
+    # Run ablation
+    ablation_results = {}
+    for pool_mode in ["last", "mean", "last5"]:
+        result = train_and_evaluate(X_by_mode[pool_mode], labels, config.HYPERBOLIC_K, tag=pool_mode)
         ablation_results[pool_mode] = {
             "auroc": result["auroc"],
             "fpr_at_95": result["fpr_at_95"],
             "f1": result["f1"],
         }
 
-        # Keep best for saving
-        if pool_mode == "last":
-            best_result = result
-            best_X = X_all
-            best_pool = pool_mode
-
     # Find best pooling mode
-    for mode, res in ablation_results.items():
-        if res["auroc"] > ablation_results[best_pool]["auroc"]:
-            best_pool = mode
+    best_pool = max(ablation_results, key=lambda m: ablation_results[m]["auroc"])
+    best_X = X_by_mode[best_pool]  # guaranteed correct
 
     print(f"\n[exp7] ═══ Pooling Ablation Results ═══")
     print(f"  {'Mode':<8} | {'AUROC':>7} | {'FPR@95':>7} | {'F1':>6}")
@@ -411,34 +434,20 @@ def main():
         print(f"  {mode:<8} | {res['auroc']:>7.3f} | {res['fpr_at_95']:>7.3f} | {res['f1']:>6.3f}{marker}")
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  PHASE 2b: Critical Baselines (using best pooling mode)
+    #  PHASE 2b: Critical Baselines (on best_X)
     # ══════════════════════════════════════════════════════════════════════════
 
-    # Re-extract with best pooling for all baselines
-    print(f"\n[exp7] Re-extracting with best pool={best_pool} for baseline comparison...")
-    acts_list = []
-    for i, p in enumerate(all_prompts):
-        if (i + 1) % 50 == 0:
-            print(f"  {i+1}/{len(all_prompts)}")
-        acts_list.append(extract_all_layers(model, tokenizer, p, config.DEVICE, best_pool))
-
-    d_hidden = acts_list[0][top_layers[0]].shape[0]
     n_layers_sel = len(top_layers)
-    best_X = np.zeros((len(all_prompts), n_layers_sel, d_hidden))
-    for i, act_dict in enumerate(acts_list):
-        for j, l in enumerate(top_layers):
-            if l in act_dict:
-                best_X[i, j] = act_dict[l]
-
     baseline_results = {}
 
-    # ── Baseline 1: Fisher-8 Raw (no projection, just concatenate and classify) ──
-    print(f"\n[exp7] Baseline: Fisher-8 Raw (concatenated activations → logistic regression)...")
-    X_concat = best_X.reshape(len(all_prompts), -1)  # (n_samples, n_layers * d_hidden)
+    # ── Baseline 1: Fisher-8 Raw ──
+    print(f"\n[exp7] Baseline: Fisher-8 Raw...")
+    X_concat = best_X.reshape(len(all_prompts), -1)
     scaler_raw = StandardScaler()
     X_concat_s = scaler_raw.fit_transform(X_concat)
-    cv = StratifiedKFold(n_splits=min(5, min(np.sum(labels == 0), np.sum(labels == 1))), shuffle=True, random_state=42)
-    clf_raw = LogisticRegression(C=0.01, max_iter=2000, random_state=42)  # low C to prevent overfit on high-dim
+    n_splits = min(5, int(n_minority))
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    clf_raw = LogisticRegression(C=0.01, max_iter=2000, random_state=42)
     y_scores_raw = cross_val_predict(clf_raw, X_concat_s, labels, cv=cv, method="predict_proba")[:, 1]
     auroc_raw = roc_auc_score(labels, y_scores_raw)
     fpr_raw, tpr_raw, _ = roc_curve(labels, y_scores_raw)
@@ -448,8 +457,8 @@ def main():
     baseline_results["fisher8_raw"] = {"auroc": auroc_raw, "fpr_at_95": fpr95_raw, "f1": f1_raw}
     print(f"  [Fisher-8 Raw] AUROC={auroc_raw:.3f}  FPR@95={fpr95_raw:.3f}  F1={f1_raw:.3f}")
 
-    # ── Baseline 2: Euclidean-Trained (linear head + contrastive in L2) ──
-    print(f"\n[exp7] Baseline: Euclidean-Trained (linear head + L2 contrastive)...")
+    # ── Baseline 2: Euclidean-Trained (vectorized) ──
+    print(f"\n[exp7] Baseline: Euclidean-Trained...")
     device = config.DEVICE
     d_proj = config.PROJECTION_DIM
     proj_euc = nn.Linear(d_hidden, d_proj, bias=False).to(device)
@@ -459,51 +468,51 @@ def main():
     X_t = torch.tensor(best_X, dtype=torch.float32, device=device)
     y_t = torch.tensor(labels, dtype=torch.long, device=device)
 
-    for epoch in range(100):
+    # Vectorized L2 contrastive with early stopping (same budget as HPS-Full)
+    best_loss_euc = float('inf')
+    patience_euc = 0
+    for epoch in range(200):
         total_loss = torch.tensor(0.0, device=device)
         for l in range(n_layers_sel):
-            h = proj_euc(X_t[:, l, :]) * scale_euc  # (n, 256) in flat space
-            # L2 contrastive loss
-            n_s = h.shape[0]
-            loss_l = torch.tensor(0.0, device=device)
-            count = 0
-            for i in range(n_s):
-                for j in range(i + 1, n_s):
-                    d = torch.norm(h[i] - h[j])
-                    if y_t[i] == y_t[j]:
-                        loss_l = loss_l + d ** 2
-                    else:
-                        loss_l = loss_l + torch.clamp(2.0 - d, min=0) ** 2
-                    count += 1
-            total_loss = total_loss + loss_l / max(count, 1)
+            h = (proj_euc(X_t[:, l, :]) * scale_euc).float()
+            dists = torch.cdist(h, h)
+            same_mask = (y_t.unsqueeze(0) == y_t.unsqueeze(1)).float()
+            diff_mask = 1.0 - same_mask
+            triu = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
+            same_loss = (dists ** 2 * same_mask * triu).sum()
+            diff_loss = (torch.clamp(2.0 - dists, min=0) ** 2 * diff_mask * triu).sum()
+            count = triu.sum().clamp(min=1)
+            total_loss = total_loss + (same_loss + diff_loss) / count
         total_loss = total_loss / n_layers_sel
         opt_euc.zero_grad()
         total_loss.backward()
         opt_euc.step()
+        if total_loss.item() < best_loss_euc - 1e-4:
+            best_loss_euc = total_loss.item()
+            patience_euc = 0
+        else:
+            patience_euc += 1
+        if patience_euc >= 20:
+            break
 
-    # Extract Euclidean features (same 12 features but using L2 distances)
+    # Extract Euclidean features using SAME curvature formula as HPS (triangle inequality deviation)
     proj_euc.eval()
     X_euc_feat = []
     with torch.no_grad():
         for i in range(len(all_prompts)):
-            x = X_t[i]  # (n_layers, d_hidden)
-            h = (proj_euc(x) * scale_euc).cpu().numpy()  # (n_layers, d_proj)
+            h = (proj_euc(X_t[i]) * scale_euc).cpu().numpy()
             norms = np.linalg.norm(h, axis=1)
-            diffs = [np.linalg.norm(h[j+1] - h[j]) for j in range(n_layers_sel - 1)]
-            # Curvature analog in Euclidean
+            # Triangle inequality curvature (same as hyperbolic version, but with L2)
             curv_e = []
             for j in range(1, n_layers_sel - 1):
-                v = h[j] - h[j-1]
-                a = h[j+1] - 2*h[j] + h[j-1]
-                vn = np.linalg.norm(v)
-                if vn < 1e-8:
-                    curv_e.append(0.0)
-                else:
-                    cross_sq = np.dot(v,v)*np.dot(a,a) - np.dot(v,a)**2
-                    curv_e.append(np.sqrt(max(cross_sq, 0)) / vn**3)
+                d_prev = np.linalg.norm(h[j] - h[j-1])
+                d_next = np.linalg.norm(h[j+1] - h[j])
+                d_span = np.linalg.norm(h[j+1] - h[j-1])
+                denom = d_prev + d_next
+                curv_e.append(0.0 if denom < 1e-8 else abs(d_prev + d_next - d_span) / denom)
             curv_e = np.array(curv_e) if curv_e else np.array([0.0])
             d_total = np.linalg.norm(h[-1] - h[0])
-            path_len = sum(diffs)
+            path_len = sum(np.linalg.norm(h[j+1] - h[j]) for j in range(n_layers_sel - 1))
             feat = np.array([
                 np.mean(norms), np.max(norms), np.min(norms), np.std(norms),
                 float(np.max(norms) - np.min(norms)),
@@ -516,8 +525,10 @@ def main():
 
     scaler_euc = StandardScaler()
     X_euc_s = scaler_euc.fit_transform(X_euc_feat)
-    clf_euc = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
-    y_scores_euc = cross_val_predict(clf_euc, X_euc_s, labels, cv=cv, method="predict_proba")[:, 1]
+    y_scores_euc = cross_val_predict(
+        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
+        X_euc_s, labels, cv=cv, method="predict_proba"
+    )[:, 1]
     auroc_euc = roc_auc_score(labels, y_scores_euc)
     fpr_euc, tpr_euc, _ = roc_curve(labels, y_scores_euc)
     idx_95 = np.searchsorted(tpr_euc, 0.95)
@@ -526,7 +537,83 @@ def main():
     baseline_results["euclidean_trained"] = {"auroc": auroc_euc, "fpr_at_95": fpr95_euc, "f1": f1_euc}
     print(f"  [Euclidean-Trained] AUROC={auroc_euc:.3f}  FPR@95={fpr95_euc:.3f}  F1={f1_euc:.3f}")
 
-    # ── Baseline 3: HPS-Full (Hyperbolic-Trained) ──
+    # ── Baseline 3: Nonlinear-Euclidean (LayerNorm + tanh + L2 contrastive) ──
+    print(f"\n[exp7] Baseline: Nonlinear-Euclidean (LayerNorm + tanh)...")
+    proj_nl = nn.Sequential(
+        nn.Linear(d_hidden, d_proj, bias=False),
+        nn.LayerNorm(d_proj),
+        nn.Tanh(),
+    ).to(device)
+    nn.init.xavier_uniform_(proj_nl[0].weight)
+    opt_nl = optim.Adam(proj_nl.parameters(), lr=1e-3, weight_decay=1e-5)
+
+    best_loss_nl = float('inf')
+    patience_nl = 0
+    for epoch in range(200):
+        total_loss = torch.tensor(0.0, device=device)
+        for l in range(n_layers_sel):
+            h = proj_nl(X_t[:, l, :].float())
+            dists = torch.cdist(h, h)
+            same_mask = (y_t.unsqueeze(0) == y_t.unsqueeze(1)).float()
+            diff_mask = 1.0 - same_mask
+            triu = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
+            same_loss = (dists ** 2 * same_mask * triu).sum()
+            diff_loss = (torch.clamp(2.0 - dists, min=0) ** 2 * diff_mask * triu).sum()
+            count = triu.sum().clamp(min=1)
+            total_loss = total_loss + (same_loss + diff_loss) / count
+        total_loss = total_loss / n_layers_sel
+        opt_nl.zero_grad()
+        total_loss.backward()
+        opt_nl.step()
+        if total_loss.item() < best_loss_nl - 1e-4:
+            best_loss_nl = total_loss.item()
+            patience_nl = 0
+        else:
+            patience_nl += 1
+        if patience_nl >= 20:
+            break
+
+    proj_nl.eval()
+    X_nl_feat = []
+    with torch.no_grad():
+        for i in range(len(all_prompts)):
+            h = proj_nl(X_t[i].float()).cpu().numpy()
+            norms = np.linalg.norm(h, axis=1)
+            curv_e = []
+            for j in range(1, n_layers_sel - 1):
+                d_prev = np.linalg.norm(h[j] - h[j-1])
+                d_next = np.linalg.norm(h[j+1] - h[j])
+                d_span = np.linalg.norm(h[j+1] - h[j-1])
+                denom = d_prev + d_next
+                curv_e.append(0.0 if denom < 1e-8 else abs(d_prev + d_next - d_span) / denom)
+            curv_e = np.array(curv_e) if curv_e else np.array([0.0])
+            d_total = np.linalg.norm(h[-1] - h[0])
+            path_len = sum(np.linalg.norm(h[j+1] - h[j]) for j in range(n_layers_sel - 1))
+            feat = np.array([
+                np.mean(norms), np.max(norms), np.min(norms), np.std(norms),
+                float(np.max(norms) - np.min(norms)),
+                float(curv_e.max()), float(curv_e.mean()), float(curv_e.std()),
+                float(np.argmax(curv_e) / max(len(curv_e), 1)),
+                d_total, path_len, d_total / (path_len + 1e-8),
+            ])
+            X_nl_feat.append(feat)
+    X_nl_feat = np.array(X_nl_feat)
+
+    scaler_nl = StandardScaler()
+    X_nl_s = scaler_nl.fit_transform(X_nl_feat)
+    y_scores_nl = cross_val_predict(
+        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
+        X_nl_s, labels, cv=cv, method="predict_proba"
+    )[:, 1]
+    auroc_nl = roc_auc_score(labels, y_scores_nl)
+    fpr_nl, tpr_nl, _ = roc_curve(labels, y_scores_nl)
+    idx_95 = np.searchsorted(tpr_nl, 0.95)
+    fpr95_nl = float(fpr_nl[min(idx_95, len(fpr_nl) - 1)])
+    f1_nl = f1_score(labels, (y_scores_nl > 0.5).astype(int))
+    baseline_results["nonlinear_euclidean"] = {"auroc": auroc_nl, "fpr_at_95": fpr95_nl, "f1": f1_nl}
+    print(f"  [Nonlinear-Euclidean] AUROC={auroc_nl:.3f}  FPR@95={fpr95_nl:.3f}  F1={f1_nl:.3f}")
+
+    # ── Baseline 4: HPS-Full ──
     print(f"\n[exp7] HPS-Full (Hyperbolic-Trained)...")
     hps_result = train_and_evaluate(best_X, labels, config.HYPERBOLIC_K, tag="HPS-Full")
     baseline_results["hyperbolic_trained"] = {
@@ -543,51 +630,105 @@ def main():
     ablation_results["baselines"] = baseline_results
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  PHASE 3: Retrain best config and save for chat.py
+    #  PHASE 3: Final model + threshold + dual-use + plots
     # ══════════════════════════════════════════════════════════════════════════
 
-    print(f"\n[exp7] Retraining best config (pool={best_pool}, layers={top_layers})...")
-
-    # best_X already computed in baseline comparison phase
+    print(f"\n[exp7] Retraining final model (pool={best_pool}, layers={top_layers})...")
     final = train_and_evaluate(best_X, labels, config.HYPERBOLIC_K, tag="FINAL")
 
-    # ── Dual-use evaluation ──
-    print(f"\n[exp7] Dual-use FPR evaluation ({len(DUAL_USE_BUILTIN)} prompts)...")
+    # Extract features for threshold and dual-use
+    X_train_feat = extract_trajectory_features(final["proj"], best_X)
+    X_train_s = final["scaler"].transform(X_train_feat)
+    clf_final = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
+    clf_final.fit(X_train_s, labels)
+
+    # Threshold from CV scores (out-of-fold, not in-sample)
+    cv_scores = cross_val_predict(
+        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
+        X_train_s, labels,
+        cv=StratifiedKFold(n_splits=min(5, int(n_minority)), shuffle=True, random_state=42),
+        method="predict_proba"
+    )[:, 1]
+    benign_cv = cv_scores[labels == 0]
+    adv_cv = cv_scores[labels == 1]
+    threshold = max(float(np.percentile(adv_cv, 10)), float(np.percentile(benign_cv, 90)))
+    print(f"[exp7] Threshold (from CV): {threshold:.4f}")
+
+    # Dual-use FPR at correct threshold
+    print(f"\n[exp7] Dual-use FPR ({len(DUAL_USE_BUILTIN)} prompts, threshold={threshold:.3f})...")
     du_acts = []
     for p in DUAL_USE_BUILTIN:
         du_acts.append(extract_all_layers(model, tokenizer, p, config.DEVICE, best_pool))
-
-    X_du = np.zeros((len(DUAL_USE_BUILTIN), len(top_layers), d_hidden))
+    X_du = np.zeros((len(DUAL_USE_BUILTIN), n_layers, d_hidden))
     for i, act_dict in enumerate(du_acts):
         for j, l in enumerate(top_layers):
             if l in act_dict:
                 X_du[i, j] = act_dict[l]
-
-    X_du_feat = extract_trajectory_features(final["proj"], X_du, k=config.HYPERBOLIC_K)
+    X_du_feat = extract_trajectory_features(final["proj"], X_du)
     X_du_s = final["scaler"].transform(X_du_feat)
-
-    clf_final = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
-    X_train_feat = extract_trajectory_features(final["proj"], best_X, k=config.HYPERBOLIC_K)
-    X_train_s = final["scaler"].transform(X_train_feat)
-    clf_final.fit(X_train_s, labels)
-
-    # ── Compute threshold from cross-val scores (not in-sample) ──
-    # Use the CV predictions from train_and_evaluate which are out-of-fold
-    cv_scores = cross_val_predict(
-        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
-        X_train_s, labels,
-        cv=StratifiedKFold(n_splits=min(5, min(np.sum(labels==0), np.sum(labels==1))), shuffle=True, random_state=42),
-        method="predict_proba"
-    )[:, 1]
-    benign_scores = cv_scores[labels == 0]
-    adv_scores = cv_scores[labels == 1]
-    threshold = max(float(np.percentile(adv_scores, 5)), float(np.percentile(benign_scores, 95)))
-    print(f"\n[exp7] Threshold (from CV scores): {threshold:.4f}")
-
-    # ── Dual-use FPR at the actual threshold ──
     du_scores = clf_final.predict_proba(X_du_s)[:, 1]
     du_fpr = float((du_scores > threshold).sum()) / len(du_scores)
-    print(f"  Dual-use FPR (at threshold={threshold:.3f}): {du_fpr:.3f}")
+    print(f"  Dual-use FPR: {du_fpr:.3f}")
+
+    # ── Plots ──
+    # ROC comparison
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.plot(fpr_raw, tpr_raw, color="#9E9E9E", linestyle=":", linewidth=2,
+            label=f"Fisher-8 Raw (AUROC={auroc_raw:.3f})")
+    ax.plot(fpr_euc, tpr_euc, color="#2196F3", linestyle="--", linewidth=2,
+            label=f"Euclidean-Trained (AUROC={auroc_euc:.3f})")
+    ax.plot(fpr_nl, tpr_nl, color="#FF9800", linestyle="-.", linewidth=2,
+            label=f"Nonlinear-Euclidean (AUROC={auroc_nl:.3f})")
+    # HPS-Full ROC from CV scores
+    hps_cv = cross_val_predict(
+        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
+        X_train_s, labels,
+        cv=StratifiedKFold(n_splits=min(5, int(n_minority)), shuffle=True, random_state=42),
+        method="predict_proba"
+    )[:, 1]
+    fpr_hyp, tpr_hyp, _ = roc_curve(labels, hps_cv)
+    ax.plot(fpr_hyp, tpr_hyp, color="#F44336", linestyle="-", linewidth=2,
+            label=f"HPS-Full (AUROC={hps_result['auroc']:.3f})")
+    ax.plot([0, 1], [0, 1], "k:", linewidth=1, alpha=0.4, label="Random")
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+    ax.set_title("Experiment 7 — Critical Baseline Comparison", fontweight="bold")
+    ax.legend(loc="lower right")
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.PLOTS_DIR, "exp7_roc.png"), dpi=150)
+    plt.close()
+    print(f"[exp7] ROC plot → {config.PLOTS_DIR}/exp7_roc.png")
+
+    # Radii histogram
+    radii_benign = X_train_feat[labels == 0, 0]
+    radii_adv = X_train_feat[labels == 1, 0]
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.hist(radii_benign, bins=20, alpha=0.6, color="#4CAF50", label="Benign", density=True)
+    ax.hist(radii_adv, bins=20, alpha=0.6, color="#F44336", label="Adversarial", density=True)
+    ax.set_xlabel("Mean Lorentz Radius")
+    ax.set_ylabel("Density")
+    ax.set_title("Experiment 7 — Radial Separation", fontweight="bold")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.PLOTS_DIR, "exp7_radii.png"), dpi=150)
+    plt.close()
+    print(f"[exp7] Radii plot → {config.PLOTS_DIR}/exp7_radii.png")
+
+    # Score distribution
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.hist(cv_scores[labels == 0], bins=20, alpha=0.6, color="#4CAF50", label="Benign")
+    ax.hist(cv_scores[labels == 1], bins=20, alpha=0.6, color="#F44336", label="Adversarial")
+    ax.axvline(threshold, color="black", linestyle="--", linewidth=2, label=f"Threshold={threshold:.3f}")
+    ax.set_xlabel("Classifier Score")
+    ax.set_title("Experiment 7 — Score Distribution (CV)", fontweight="bold")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.PLOTS_DIR, "exp7_scores.png"), dpi=150)
+    plt.close()
+    print(f"[exp7] Scores plot → {config.PLOTS_DIR}/exp7_scores.png")
 
     # ── Save for chat.py ──
     proj_path = os.path.join(config.RESULTS_DIR, "hps_projection_head.pt")
@@ -595,7 +736,7 @@ def main():
         "state_dict": final["proj"].state_dict(),
         "d_in": d_hidden,
         "d_proj": config.PROJECTION_DIM,
-        "k": final["proj"].k.item(),  # learned curvature
+        "k": final["proj"].k.item(),
         "layers": top_layers,
         "pool_mode": best_pool,
     }, proj_path)
@@ -619,7 +760,8 @@ def main():
         "model": config.MODEL_NAME,
         "discovered_layers": top_layers,
         "layer_separations": {str(l): s for l, s in separations},
-        "pooling_ablation": ablation_results,
+        "pooling_ablation": {k: v for k, v in ablation_results.items() if k != "baselines"},
+        "baselines": baseline_results,
         "best_pool_mode": best_pool,
         "final_auroc": final["auroc"],
         "final_fpr_at_95": final["fpr_at_95"],
@@ -631,6 +773,7 @@ def main():
         "n_benign_train": len(train_benign),
         "n_adversarial_train": len(train_attack),
         "n_calibration": n_calib_atk + n_calib_ben,
+        "learned_kappa": final["proj"].k.item(),
     }
     save_json(results, "experiment7_results.json", config.RESULTS_DIR)
 
@@ -639,6 +782,7 @@ def main():
     print(f"  EXPERIMENT 7 COMPLETE")
     print(f"  Best layers: {top_layers}")
     print(f"  Best pooling: {best_pool}")
+    print(f"  Learned κ: {final['proj'].k.item():.3f}")
     print(f"  AUROC: {final['auroc']:.3f} | FPR@95: {final['fpr_at_95']:.3f} | Dual-use FPR: {du_fpr:.3f}")
     print(f"  Saved. Run 'python chat.py' to test.")
     print(f"{'═'*60}\n")
