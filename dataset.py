@@ -46,14 +46,14 @@ def load_unusual_benign(n: int) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def load_adversarial_gcg(n: int) -> list:
-    # Try categorized file first (from validate_attacks.py)
+    # Load successful attacks (class 1) from validated_attacks.json
     cat_path = os.path.join(os.path.dirname(__file__), "results", "validated_attacks_categorized.json")
     if os.path.exists(cat_path):
         with open(cat_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # Load PAIR only (fluent attacks — the real test)
+        # Load PAIR only (fluent attacks)
         prompts = data.get("PAIR", [])
-        print(f"[dataset] Loaded {len(prompts)} PAIR attacks from categorized file")
+        print(f"[dataset] Loaded {len(prompts)} successful PAIR attacks")
         return prompts[:n]
 
     # Fallback to flat file
@@ -61,21 +61,24 @@ def load_adversarial_gcg(n: int) -> list:
     if not os.path.exists(file_path):
         print(f"[dataset] WARNING: No validated attacks file found.")
         return []
-
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    return (data if isinstance(data, list) else [])[:n]
 
-    prompts = []
-    if isinstance(data, list):
-        prompts = data
-    elif "validated_gcg" in data:
-        prompts = data["validated_gcg"]
-    else:
-        for key, val in data.items():
-            if isinstance(val, list):
-                prompts.extend(val)
 
-    return prompts[:n]
+def load_refused_attacks() -> list:
+    """Load refused attacks (class 0) — same harmful topics but model refused."""
+    attacks_path = os.path.join(os.path.dirname(__file__), "results", "validated_attacks.json")
+    if not os.path.exists(attacks_path):
+        print("[dataset] WARNING: validated_attacks.json not found. No refused attacks.")
+        return []
+    with open(attacks_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    refused = data.get("refused_attacks", [])
+    # Filter to PAIR only for fair comparison
+    pair_refused = [r["prompt"] for r in refused if r.get("method") == "PAIR"]
+    print(f"[dataset] Loaded {len(pair_refused)} refused PAIR attacks")
+    return pair_refused
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -120,8 +123,15 @@ BENIGN_UNUSUAL = load_unusual_benign(50)
 BENIGN = BENIGN_NL + BENIGN_CODE + BENIGN_MATH + BENIGN_CREATIVE + BENIGN_UNUSUAL
 random.shuffle(BENIGN)
 
-print("[dataset] Loading adversarial prompts...")
+print("[dataset] Loading adversarial prompts (successful attacks)...")
 ADVERSARIAL = load_adversarial_gcg(100)
+
+print("[dataset] Loading refused attacks (same topics, model refused)...")
+REFUSED = load_refused_attacks()
+
+# Add refused attacks to benign class — these are the hard negatives
+BENIGN = REFUSED + BENIGN  # refused first so they're in training, not cut off
+random.shuffle(BENIGN)
 
 DUAL_USE = DUAL_USE_BUILTIN
 
