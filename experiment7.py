@@ -454,14 +454,19 @@ def main():
     # ══════════════════════════════════════════════════════════════════════════
 
     n_layers_sel = len(top_layers)
+    n_layers_sel = len(top_layers)
     baseline_results = {}
+
+    # Shared CV object for all baselines
+    n_splits = min(5, int(n_minority))
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
     # ── Baseline 0: HPS-Lite (naive Lorentz projection, no training) ──
     print(f"\n[exp7] Baseline: HPS-Lite (naive projection, no training)...")
     from utils import hyperbolic_curvature as hyp_curv_fn, lorentz_distance as lor_dist_fn, to_lorentz as to_lor_fn
     X_lite_feat = []
     for i in range(len(all_prompts)):
-        pts = [to_lor_fn(best_X[i, l], k=config.HYPERBOLIC_K) for l in range(n_layers_sel)]
+        pts = [to_lor_fn(best_X[i, l] / (np.linalg.norm(best_X[i, l]) + 1e-8), k=config.HYPERBOLIC_K) for l in range(n_layers_sel)]
         radii = np.array([p[0] for p in pts])
         curv = hyp_curv_fn(pts, k=config.HYPERBOLIC_K)
         d_total = lor_dist_fn(pts[0], pts[-1], k=config.HYPERBOLIC_K)
@@ -479,8 +484,6 @@ def main():
     X_lite_feat = np.array(X_lite_feat)
     scaler_lite = StandardScaler()
     X_lite_s = scaler_lite.fit_transform(X_lite_feat)
-    n_splits = min(5, int(n_minority))
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     y_scores_lite = cross_val_predict(
         LogisticRegression(C=1.0, max_iter=1000, random_state=42),
         X_lite_s, labels, cv=cv, method="predict_proba"
@@ -498,8 +501,6 @@ def main():
     X_concat = best_X.reshape(len(all_prompts), -1)
     scaler_raw = StandardScaler()
     X_concat_s = scaler_raw.fit_transform(X_concat)
-    n_splits = min(5, int(n_minority))
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     clf_raw = LogisticRegression(C=0.01, max_iter=2000, random_state=42)
     y_scores_raw = cross_val_predict(clf_raw, X_concat_s, labels, cv=cv, method="predict_proba")[:, 1]
     auroc_raw = roc_auc_score(labels, y_scores_raw)
@@ -688,26 +689,78 @@ def main():
     #  PHASE 3: Final model + threshold + dual-use + plots
     # ══════════════════════════════════════════════════════════════════════════
 
-    print(f"\n[exp7] Retraining final model (pool={best_pool}, layers={top_layers})...")
-    final = train_and_evaluate(best_X, labels, config.HYPERBOLIC_K, tag="FINAL")
+    print(f"\n[exp7] Using HPS-Full result as final model (no retraining)...")
+    final = hps_result  # reuse — same config, avoids inconsistent numbers
 
-    # Extract features for threshold and dual-use
+    # Extract features for dual-use scoring
     X_train_feat = extract_trajectory_features(final["proj"], best_X)
     X_train_s = final["scaler"].transform(X_train_feat)
     clf_final = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
     clf_final.fit(X_train_s, labels)
 
-    # Threshold from CV scores (out-of-fold, not in-sample)
-    cv_scores = cross_val_predict(
-        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
-        X_train_s, labels,
-        cv=StratifiedKFold(n_splits=min(5, int(n_minority)), shuffle=True, random_state=42),
-        method="predict_proba"
-    )[:, 1]
+    # Threshold from CV scores (already computed inside train_and_evaluate)
+    cv_scores = final["y_scores"]
     benign_cv = cv_scores[labels == 0]
     adv_cv = cv_scores[labels == 1]
     threshold = max(float(np.percentile(adv_cv, 10)), float(np.percentile(benign_cv, 90)))
     print(f"[exp7] Threshold (from CV): {threshold:.4f}")
+
+    # ── Feature importance (permutation) ──
+    print(f"\n[exp7] Feature importance (permutation, 10 repeats)...")
+    from sklearn.inspection import permutation_importance
+    clf_imp = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
+    clf_imp.fit(X_train_s, labels)
+    perm_result = permutation_importance(clf_imp, X_train_s, labels, n_repeats=10, random_state=42, scoring="roc_auc")
+    feat_names = ["mean_r", "max_r", "min_r", "std_r", "range_r",
+                  "max_κ", "mean_κ", "std_κ", "spike_loc",
+                  "displacement", "path_len", "progress"]
+    print(f"  {'Feature':<14} | {'Importance':>10} | {'Category'}")
+    print(f"  {'─'*14}─┼─{'─'*10}─┼─{'─'*10}")
+    importances = perm_result.importances_mean
+    for idx in np.argsort(importances)[::-1]:
+        cat = "radial" if idx < 5 else ("curvature" if idx < 9 else "displacement")
+        print(f"  {feat_names[idx]:<14} | {importances[idx]:>10.4f} | {cat}")
+
+    # Category-level importance
+    radial_imp = importances[:5].sum()
+    curvature_imp = importances[5:9].sum()
+    displacement_imp = importances[9:].sum()
+    total_imp = importances.sum()
+    print(f"\n  Category breakdown:")
+    print(f"    Radial:       {radial_imp/total_imp:.1%}")
+    print(f"    Curvature:    {curvature_imp/total_imp:.1%}")
+    print(f"    Displacement: {displacement_imp/total_imp:.1%}")
+    if curvature_imp / total_imp < 0.20:
+        print(f"  ⚠ Curvature contributes <20% — 'curvature spike' narrative NOT supported by data")
+    else:
+        print(f"  ✓ Curvature contributes ≥20% — trajectory bending is a meaningful signal")
+
+    # ── Direct classifier ablation (flattened trajectory vs 12 features) ──
+    print(f"\n[exp7] Direct classifier ablation (flattened {n_layers_sel}×{config.PROJECTION_DIM+1} vs 12 features)...")
+    # Project all samples through final proj, flatten
+    final["proj"].eval()
+    with torch.no_grad():
+        X_t_all = torch.tensor(best_X, dtype=torch.float32, device=device)
+        X_flat_proj = []
+        for i in range(len(all_prompts)):
+            h = final["proj"](X_t_all[i]).cpu().numpy()  # (n_layers, d_proj+1)
+            X_flat_proj.append(h.flatten())
+    X_flat_proj = np.array(X_flat_proj)
+    scaler_flat = StandardScaler()
+    X_flat_s = scaler_flat.fit_transform(X_flat_proj)
+    y_scores_flat = cross_val_predict(
+        LogisticRegression(C=0.01, max_iter=2000, random_state=42),
+        X_flat_s, labels, cv=cv, method="predict_proba"
+    )[:, 1]
+    auroc_flat = roc_auc_score(labels, y_scores_flat)
+    print(f"  12-feature probe AUROC:     {final['auroc']:.3f}")
+    print(f"  Direct classifier AUROC:    {auroc_flat:.3f}")
+    if abs(auroc_flat - final["auroc"]) < 0.02:
+        print(f"  ✓ 12 features capture all discriminative info (no bottleneck)")
+    elif auroc_flat > final["auroc"]:
+        print(f"  ⚠ Direct classifier is better — 12 features lose signal")
+    else:
+        print(f"  ✓ 12 features are sufficient (direct classifier not better)")
 
     # Dual-use FPR at correct threshold
     print(f"\n[exp7] Dual-use FPR ({len(DUAL_USE_BUILTIN)} prompts, threshold={threshold:.3f})...")
@@ -734,7 +787,7 @@ def main():
             label=f"Fisher-8 Raw (AUROC={auroc_raw:.3f})")
     ax.plot(fpr_euc, tpr_euc, color="#2196F3", linestyle="--", linewidth=2,
             label=f"Euclidean-Trained (AUROC={auroc_euc:.3f})")
-    ax.plot(fpr_nl, tpr_nl, color="#FF9800", linestyle="-.", linewidth=2,
+    ax.plot(fpr_nl, tpr_nl, color="#FF9800", linestyle=(0, (5, 2)), linewidth=2,
             label=f"Nonlinear-Euclidean (AUROC={auroc_nl:.3f})")
     # HPS-Full uses ROC from train_and_evaluate's internal CV (no leakage)
     ax.plot(hps_result["fpr_arr"], hps_result["tpr_arr"], color="#F44336", linestyle="-", linewidth=2.5,
