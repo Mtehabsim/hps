@@ -54,7 +54,6 @@ def extract_all_layers(model, tokenizer, prompt, device, pool_mode="last"):
         prompt, return_tensors="pt", truncation=True, max_length=512, padding=False
     )
     inputs = {k: v.to(device) for k, v in inputs.items()}
-    seq_len = inputs["input_ids"].shape[1]
 
     captured = {}
     hooks = []
@@ -291,7 +290,8 @@ def train_and_evaluate(X_all, labels, k, tag=""):
     fpr_at_95 = float(fpr[min(idx_95, len(fpr) - 1)])
 
     print(f"  [{tag}] AUROC={auroc:.3f}  FPR@95={fpr_at_95:.3f}  F1={f1:.3f}")
-    return {"auroc": auroc, "fpr_at_95": fpr_at_95, "f1": f1, "proj": proj, "scaler": scaler}
+    return {"auroc": auroc, "fpr_at_95": fpr_at_95, "f1": f1, "proj": proj, "scaler": scaler,
+            "y_scores": y_scores, "fpr_arr": fpr, "tpr_arr": tpr}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -364,7 +364,7 @@ def main():
     print(f"[exp7] Layer plot saved → {config.PLOTS_DIR}/exp7_layer_separation.png")
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  PHASE 2: Pooling Ablation — single extraction pass, cache all modes
+    #  PHASE 2: Pooling Ablation — 3 extraction passes (one per pool mode)
     # ══════════════════════════════════════════════════════════════════════════
 
     all_prompts = train_benign + train_attack
@@ -374,7 +374,7 @@ def main():
     n_minority = min(np.sum(labels == 0), np.sum(labels == 1))
     assert n_minority >= 10, f"Only {n_minority} in minority class. Need more data."
 
-    # Single extraction pass — cache all pool modes
+    # Extract "last" mode first
     print(f"\n[exp7] Extracting activations (all pool modes, layers={top_layers})...")
     all_acts_cache = []
     for i, p in enumerate(all_prompts):
@@ -433,12 +433,65 @@ def main():
         marker = " ← best" if mode == best_pool else ""
         print(f"  {mode:<8} | {res['auroc']:>7.3f} | {res['fpr_at_95']:>7.3f} | {res['f1']:>6.3f}{marker}")
 
+    # Pooling ablation plot
+    fig, ax = plt.subplots(figsize=(6, 4))
+    modes = list(ablation_results.keys())
+    aurocs = [ablation_results[m]["auroc"] for m in modes]
+    colors = ["#4CAF50" if m == best_pool else "#BDBDBD" for m in modes]
+    ax.bar(modes, aurocs, color=colors)
+    ax.set_ylim(min(aurocs) - 0.05, 1.0)
+    ax.set_ylabel("AUROC")
+    ax.set_title("Pooling Ablation — HPS-Full", fontweight="bold")
+    for i, (m, v) in enumerate(zip(modes, aurocs)):
+        ax.text(i, v + 0.005, f"{v:.3f}", ha="center", fontsize=10)
+    plt.tight_layout()
+    plt.savefig(os.path.join(config.PLOTS_DIR, "exp7_pooling_ablation.png"), dpi=150)
+    plt.close()
+    print(f"[exp7] Pooling plot → {config.PLOTS_DIR}/exp7_pooling_ablation.png")
+
     # ══════════════════════════════════════════════════════════════════════════
     #  PHASE 2b: Critical Baselines (on best_X)
     # ══════════════════════════════════════════════════════════════════════════
 
     n_layers_sel = len(top_layers)
     baseline_results = {}
+
+    # ── Baseline 0: HPS-Lite (naive Lorentz projection, no training) ──
+    print(f"\n[exp7] Baseline: HPS-Lite (naive projection, no training)...")
+    from utils import hyperbolic_curvature as hyp_curv_fn, lorentz_distance as lor_dist_fn, to_lorentz as to_lor_fn
+    X_lite_feat = []
+    for i in range(len(all_prompts)):
+        pts = [to_lor_fn(best_X[i, l], k=config.HYPERBOLIC_K) for l in range(n_layers_sel)]
+        radii = np.array([p[0] for p in pts])
+        curv = hyp_curv_fn(pts, k=config.HYPERBOLIC_K)
+        d_total = lor_dist_fn(pts[0], pts[-1], k=config.HYPERBOLIC_K)
+        path_len = sum(lor_dist_fn(pts[j], pts[j+1], k=config.HYPERBOLIC_K) for j in range(n_layers_sel - 1))
+        feat = np.array([
+            np.mean(radii), np.max(radii), np.min(radii), np.std(radii),
+            float(np.max(radii) - np.min(radii)),
+            float(curv.max()) if len(curv) > 0 else 0,
+            float(curv.mean()) if len(curv) > 0 else 0,
+            float(curv.std()) if len(curv) > 0 else 0,
+            float(np.argmax(curv) / max(len(curv), 1)) if len(curv) > 0 else 0,
+            d_total, path_len, d_total / (path_len + 1e-8),
+        ])
+        X_lite_feat.append(feat)
+    X_lite_feat = np.array(X_lite_feat)
+    scaler_lite = StandardScaler()
+    X_lite_s = scaler_lite.fit_transform(X_lite_feat)
+    n_splits = min(5, int(n_minority))
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    y_scores_lite = cross_val_predict(
+        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
+        X_lite_s, labels, cv=cv, method="predict_proba"
+    )[:, 1]
+    auroc_lite = roc_auc_score(labels, y_scores_lite)
+    fpr_lite, tpr_lite, _ = roc_curve(labels, y_scores_lite)
+    idx_95 = np.searchsorted(tpr_lite, 0.95)
+    fpr95_lite = float(fpr_lite[min(idx_95, len(fpr_lite) - 1)])
+    f1_lite = f1_score(labels, (y_scores_lite > 0.5).astype(int))
+    baseline_results["hyperbolic_naive"] = {"auroc": auroc_lite, "fpr_at_95": fpr95_lite, "f1": f1_lite}
+    print(f"  [HPS-Lite] AUROC={auroc_lite:.3f}  FPR@95={fpr95_lite:.3f}  F1={f1_lite:.3f}")
 
     # ── Baseline 1: Fisher-8 Raw ──
     print(f"\n[exp7] Baseline: Fisher-8 Raw...")
@@ -481,8 +534,9 @@ def main():
             triu = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
             same_loss = (dists ** 2 * same_mask * triu).sum()
             diff_loss = (torch.clamp(2.0 - dists, min=0) ** 2 * diff_mask * triu).sum()
-            count = triu.sum().clamp(min=1)
-            total_loss = total_loss + (same_loss + diff_loss) / count
+            n_same = (same_mask * triu).sum().clamp(min=1)
+            n_diff = (diff_mask * triu).sum().clamp(min=1)
+            total_loss = total_loss + (same_loss / n_same + diff_loss / n_diff) / 2.0
         total_loss = total_loss / n_layers_sel
         opt_euc.zero_grad()
         total_loss.backward()
@@ -559,8 +613,9 @@ def main():
             triu = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
             same_loss = (dists ** 2 * same_mask * triu).sum()
             diff_loss = (torch.clamp(2.0 - dists, min=0) ** 2 * diff_mask * triu).sum()
-            count = triu.sum().clamp(min=1)
-            total_loss = total_loss + (same_loss + diff_loss) / count
+            n_same = (same_mask * triu).sum().clamp(min=1)
+            n_diff = (diff_mask * triu).sum().clamp(min=1)
+            total_loss = total_loss + (same_loss / n_same + diff_loss / n_diff) / 2.0
         total_loss = total_loss / n_layers_sel
         opt_nl.zero_grad()
         total_loss.backward()
@@ -671,23 +726,18 @@ def main():
     print(f"  Dual-use FPR: {du_fpr:.3f}")
 
     # ── Plots ──
-    # ROC comparison
-    fig, ax = plt.subplots(figsize=(7, 6))
+    # ROC comparison (all curves from proper CV)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(fpr_lite, tpr_lite, color="#9C27B0", linestyle="-.", linewidth=2,
+            label=f"HPS-Lite (AUROC={auroc_lite:.3f})")
     ax.plot(fpr_raw, tpr_raw, color="#9E9E9E", linestyle=":", linewidth=2,
             label=f"Fisher-8 Raw (AUROC={auroc_raw:.3f})")
     ax.plot(fpr_euc, tpr_euc, color="#2196F3", linestyle="--", linewidth=2,
             label=f"Euclidean-Trained (AUROC={auroc_euc:.3f})")
     ax.plot(fpr_nl, tpr_nl, color="#FF9800", linestyle="-.", linewidth=2,
             label=f"Nonlinear-Euclidean (AUROC={auroc_nl:.3f})")
-    # HPS-Full ROC from CV scores
-    hps_cv = cross_val_predict(
-        LogisticRegression(C=1.0, max_iter=1000, random_state=42),
-        X_train_s, labels,
-        cv=StratifiedKFold(n_splits=min(5, int(n_minority)), shuffle=True, random_state=42),
-        method="predict_proba"
-    )[:, 1]
-    fpr_hyp, tpr_hyp, _ = roc_curve(labels, hps_cv)
-    ax.plot(fpr_hyp, tpr_hyp, color="#F44336", linestyle="-", linewidth=2,
+    # HPS-Full uses ROC from train_and_evaluate's internal CV (no leakage)
+    ax.plot(hps_result["fpr_arr"], hps_result["tpr_arr"], color="#F44336", linestyle="-", linewidth=2.5,
             label=f"HPS-Full (AUROC={hps_result['auroc']:.3f})")
     ax.plot([0, 1], [0, 1], "k:", linewidth=1, alpha=0.4, label="Random")
     ax.set_xlabel("False Positive Rate")
