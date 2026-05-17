@@ -41,6 +41,31 @@ def load_unusual_benign(n: int) -> list:
     return [row["sentence"].strip() for row in ds if len(row["sentence"].strip()) > 20][:n]
 
 
+def load_hard_benign() -> list:
+    """Load validated hard benign (security education, edgy roleplay, sensitive professional, etc.)
+    from results/validated_benign.json. Only the v2_additions are loaded — v1 entries are
+    already covered by the HuggingFace loaders above."""
+    path = os.path.join(os.path.dirname(__file__), "results", "validated_benign.json")
+    if not os.path.exists(path):
+        print("[dataset] No validated_benign.json — skipping hard benign")
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Get v2 additions only — v1 entries overlap with our HF loaders
+    v2_count = data.get("v2_additions", {}).get("added_validated", 0)
+    if v2_count == 0:
+        print("[dataset] No v2 hard benign yet — run validate_benign_v2.py to add")
+        return []
+
+    # The v2 additions are the LAST `v2_count` entries in validated_benign
+    all_validated = data.get("validated_benign", [])
+    v2_entries = all_validated[-v2_count:] if v2_count > 0 else []
+    prompts = [v["prompt"] for v in v2_entries]
+    print(f"[dataset] Loaded {len(prompts)} hard benign (v2 additions)")
+    return prompts
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Adversarial Loader
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -120,9 +145,11 @@ BENIGN_CODE = load_code(50)
 BENIGN_MATH = load_math(100)
 BENIGN_CREATIVE = load_creative_writing(50)
 BENIGN_UNUSUAL = load_unusual_benign(50)
+BENIGN_HARD = load_hard_benign()
 
-BENIGN = BENIGN_NL + BENIGN_CODE + BENIGN_MATH + BENIGN_CREATIVE + BENIGN_UNUSUAL
+BENIGN = BENIGN_NL + BENIGN_CODE + BENIGN_MATH + BENIGN_CREATIVE + BENIGN_UNUSUAL + BENIGN_HARD
 random.shuffle(BENIGN)
+print(f"[dataset] Total benign: {len(BENIGN)} (clean: {len(BENIGN) - len(BENIGN_HARD)}, hard: {len(BENIGN_HARD)})")
 
 print("[dataset] Loading adversarial prompts (successful attacks)...")
 ADVERSARIAL = load_adversarial_gcg(9999)  # load all

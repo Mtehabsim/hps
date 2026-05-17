@@ -258,20 +258,31 @@ def main():
     n_layers_sel = len(selected_layers)
     methods_unique = sorted(set(attack_methods))
 
+    # Split benign 80/20 ONCE so all cross-attack folds use same benign train/test sets.
+    # Without this, all benign would be in both train and test → trivial FPR=0 by memorization.
+    benign_idx = np.where(labels == 0)[0]
+    rng = np.random.RandomState(42)
+    benign_perm = rng.permutation(benign_idx)
+    n_benign_train = int(0.8 * len(benign_perm))
+    benign_train_idx = set(benign_perm[:n_benign_train].tolist())
+    benign_test_idx = set(benign_perm[n_benign_train:].tolist())
+
+    print(f"\n  Benign split: {len(benign_train_idx)} train / {len(benign_test_idx)} test (held out)")
     print(f"\n  {'Held-out':<28} | {'n_test':>6} | {'Raw':>6} | {'Euclidean':>9} | {'Hyperbolic':>10}")
     print(f"  {'─'*28}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*9}─┼─{'─'*10}")
 
     cross_results = {}
     for held_out in methods_unique:
         train_mask = np.array([
-            (labels[i] == 0) or (methods_arr[i] != held_out)
+            (i in benign_train_idx) or (labels[i] == 1 and methods_arr[i] != held_out)
             for i in range(len(all_prompts))
         ])
         test_mask = np.array([
-            (labels[i] == 0) or (methods_arr[i] == held_out)
+            (i in benign_test_idx) or (labels[i] == 1 and methods_arr[i] == held_out)
             for i in range(len(all_prompts))
         ])
         n_test_atk = int((labels[test_mask] == 1).sum())
+        n_test_ben = int((labels[test_mask] == 0).sum())
 
         # Raw baseline (high-dim, needs heavy regularization)
         X_flat = X_full.reshape(len(all_prompts), -1)
@@ -307,28 +318,36 @@ def main():
             feat_h_tr, labels[train_mask], feat_h_te, labels[test_mask]
         )
 
-        # Compute FPR/TPR at threshold=0.5
+        # Compute TPR at calibrated FPR=1% per method (fair deployment comparison)
         y_test = labels[test_mask]
-        def fpr_tpr(scores, y, t=0.5):
-            preds = (scores > t).astype(int)
-            n_ben = int((y == 0).sum())
-            n_atk = int((y == 1).sum())
-            fp = int(((preds == 1) & (y == 0)).sum())
-            tp = int(((preds == 1) & (y == 1)).sum())
-            return (fp / max(n_ben, 1), tp / max(n_atk, 1))
 
-        fpr_raw, tpr_raw = fpr_tpr(scores_raw, y_test)
-        fpr_euc, tpr_euc = fpr_tpr(scores_euc, y_test)
-        fpr_hyp, tpr_hyp = fpr_tpr(scores_hyp, y_test)
+        def tpr_at_fixed_fpr(scores, y, target_fpr=0.01):
+            """Calibrate threshold to achieve target FPR on benign, then return TPR.
+            This is the standard fair comparison across methods with different score scales."""
+            ben_scores = scores[y == 0]
+            atk_scores = scores[y == 1]
+            if len(ben_scores) == 0 or len(atk_scores) == 0:
+                return 0.0, 0.0, 0.0
+            # Threshold = (1 - target_fpr)-th percentile of benign scores
+            threshold = float(np.quantile(ben_scores, 1.0 - target_fpr))
+            tpr = float((atk_scores > threshold).mean())
+            actual_fpr = float((ben_scores > threshold).mean())
+            return tpr, actual_fpr, threshold
+
+        tpr_raw, fpr_raw, thr_raw = tpr_at_fixed_fpr(scores_raw, y_test, 0.01)
+        tpr_euc, fpr_euc, thr_euc = tpr_at_fixed_fpr(scores_euc, y_test, 0.01)
+        tpr_hyp, fpr_hyp, thr_hyp = tpr_at_fixed_fpr(scores_hyp, y_test, 0.01)
 
         print(f"  {held_out:<28} | {n_test_atk:>6} | {auroc_raw:>6.3f} | {auroc_euc:>9.3f} | {auroc_hyp:>10.3f}")
-        print(f"    {'@ threshold=0.5: Raw FPR/TPR={:.3f}/{:.3f}  Euc={:.3f}/{:.3f}  Hyp={:.3f}/{:.3f}'.format(fpr_raw, tpr_raw, fpr_euc, tpr_euc, fpr_hyp, tpr_hyp)}")
+        print(f"    n_test: {n_test_atk} attacks + {n_test_ben} benign")
+        print(f"    TPR@FPR=1%: Raw={tpr_raw:.3f}  Euc={tpr_euc:.3f}  Hyp={tpr_hyp:.3f}")
 
         cross_results[held_out] = {
-            "raw": {"auroc": auroc_raw, "fpr": fpr_raw, "tpr": tpr_raw},
-            "euclidean": {"auroc": auroc_euc, "fpr": fpr_euc, "tpr": tpr_euc},
-            "hyperbolic": {"auroc": auroc_hyp, "fpr": fpr_hyp, "tpr": tpr_hyp},
-            "n_test": n_test_atk,
+            "raw": {"auroc": auroc_raw, "tpr_at_fpr01": tpr_raw, "actual_fpr": fpr_raw, "threshold": thr_raw},
+            "euclidean": {"auroc": auroc_euc, "tpr_at_fpr01": tpr_euc, "actual_fpr": fpr_euc, "threshold": thr_euc},
+            "hyperbolic": {"auroc": auroc_hyp, "tpr_at_fpr01": tpr_hyp, "actual_fpr": fpr_hyp, "threshold": thr_hyp},
+            "n_test_attacks": n_test_atk,
+            "n_test_benign": n_test_ben,
         }
     results["cross_attack"] = cross_results
 
@@ -336,12 +355,15 @@ def main():
     mean_raw = np.mean([r["raw"]["auroc"] for r in cross_results.values()])
     mean_euc = np.mean([r["euclidean"]["auroc"] for r in cross_results.values()])
     mean_hyp = np.mean([r["hyperbolic"]["auroc"] for r in cross_results.values()])
-    mean_fpr_raw = np.mean([r["raw"]["fpr"] for r in cross_results.values()])
-    mean_fpr_euc = np.mean([r["euclidean"]["fpr"] for r in cross_results.values()])
-    mean_fpr_hyp = np.mean([r["hyperbolic"]["fpr"] for r in cross_results.values()])
+    mean_tpr_raw = np.mean([r["raw"]["tpr_at_fpr01"] for r in cross_results.values()])
+    mean_tpr_euc = np.mean([r["euclidean"]["tpr_at_fpr01"] for r in cross_results.values()])
+    mean_tpr_hyp = np.mean([r["hyperbolic"]["tpr_at_fpr01"] for r in cross_results.values()])
     print(f"  {'─'*28}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*9}─┼─{'─'*10}")
     print(f"  {'MEAN':<28} | {'':>6} | {mean_raw:>6.3f} | {mean_euc:>9.3f} | {mean_hyp:>10.3f}")
-    results["cross_attack_mean"] = {"raw": mean_raw, "euclidean": mean_euc, "hyperbolic": mean_hyp}
+    results["cross_attack_mean"] = {
+        "auroc": {"raw": mean_raw, "euclidean": mean_euc, "hyperbolic": mean_hyp},
+        "tpr_at_fpr01": {"raw": mean_tpr_raw, "euclidean": mean_tpr_euc, "hyperbolic": mean_tpr_hyp},
+    }
 
     # ══════════════════════════════════════════════════════════════════════════
     #  DIAGNOSTIC 4: Refused attacks
@@ -406,9 +428,9 @@ def main():
     print(f"  DIAGNOSTICS COMPLETE — KEY FINDINGS")
     print(f"{'═'*60}")
     print(f"  Cross-attack mean AUROC:")
-    print(f"    Raw:        {mean_raw:.3f}    FPR on benign @ 0.5: {mean_fpr_raw:.3f}")
-    print(f"    Euclidean:  {mean_euc:.3f}    FPR on benign @ 0.5: {mean_fpr_euc:.3f}")
-    print(f"    Hyperbolic: {mean_hyp:.3f}    FPR on benign @ 0.5: {mean_fpr_hyp:.3f}")
+    print(f"    Raw:        {mean_raw:.3f}    TPR @ FPR=1%: {mean_tpr_raw:.3f}")
+    print(f"    Euclidean:  {mean_euc:.3f}    TPR @ FPR=1%: {mean_tpr_euc:.3f}")
+    print(f"    Hyperbolic: {mean_hyp:.3f}    TPR @ FPR=1%: {mean_tpr_hyp:.3f}")
     if mean_hyp > mean_euc + 0.02:
         print(f"  ✓ Hyperbolic generalizes BETTER than Euclidean (Δ={mean_hyp-mean_euc:.3f})")
     elif mean_hyp < mean_euc - 0.02:
