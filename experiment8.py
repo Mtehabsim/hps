@@ -275,7 +275,7 @@ def main():
 
         # Raw baseline (high-dim, needs heavy regularization)
         X_flat = X_full.reshape(len(all_prompts), -1)
-        auroc_raw, _, _ = evaluate_classifier(
+        auroc_raw, _, scores_raw = evaluate_classifier(
             X_flat[train_mask], labels[train_mask],
             X_flat[test_mask], labels[test_mask],
             C=0.01,
@@ -290,7 +290,7 @@ def main():
             X_full[train_mask], labels[train_mask],
             X_full[test_mask], n_layers_sel
         )
-        auroc_euc, _, _ = evaluate_classifier(
+        auroc_euc, _, scores_euc = evaluate_classifier(
             feat_e_tr, labels[train_mask], feat_e_te, labels[test_mask]
         )
 
@@ -303,21 +303,42 @@ def main():
             X_full[train_mask], labels[train_mask],
             X_full[test_mask], n_layers_sel
         )
-        auroc_hyp, _, _ = evaluate_classifier(
+        auroc_hyp, _, scores_hyp = evaluate_classifier(
             feat_h_tr, labels[train_mask], feat_h_te, labels[test_mask]
         )
 
+        # Compute FPR/TPR at threshold=0.5
+        y_test = labels[test_mask]
+        def fpr_tpr(scores, y, t=0.5):
+            preds = (scores > t).astype(int)
+            n_ben = int((y == 0).sum())
+            n_atk = int((y == 1).sum())
+            fp = int(((preds == 1) & (y == 0)).sum())
+            tp = int(((preds == 1) & (y == 1)).sum())
+            return (fp / max(n_ben, 1), tp / max(n_atk, 1))
+
+        fpr_raw, tpr_raw = fpr_tpr(scores_raw, y_test)
+        fpr_euc, tpr_euc = fpr_tpr(scores_euc, y_test)
+        fpr_hyp, tpr_hyp = fpr_tpr(scores_hyp, y_test)
+
         print(f"  {held_out:<28} | {n_test_atk:>6} | {auroc_raw:>6.3f} | {auroc_euc:>9.3f} | {auroc_hyp:>10.3f}")
+        print(f"    {'@ threshold=0.5: Raw FPR/TPR={:.3f}/{:.3f}  Euc={:.3f}/{:.3f}  Hyp={:.3f}/{:.3f}'.format(fpr_raw, tpr_raw, fpr_euc, tpr_euc, fpr_hyp, tpr_hyp)}")
+
         cross_results[held_out] = {
-            "raw": auroc_raw, "euclidean": auroc_euc, "hyperbolic": auroc_hyp,
+            "raw": {"auroc": auroc_raw, "fpr": fpr_raw, "tpr": tpr_raw},
+            "euclidean": {"auroc": auroc_euc, "fpr": fpr_euc, "tpr": tpr_euc},
+            "hyperbolic": {"auroc": auroc_hyp, "fpr": fpr_hyp, "tpr": tpr_hyp},
             "n_test": n_test_atk,
         }
     results["cross_attack"] = cross_results
 
     # Aggregate
-    mean_raw = np.mean([r["raw"] for r in cross_results.values()])
-    mean_euc = np.mean([r["euclidean"] for r in cross_results.values()])
-    mean_hyp = np.mean([r["hyperbolic"] for r in cross_results.values()])
+    mean_raw = np.mean([r["raw"]["auroc"] for r in cross_results.values()])
+    mean_euc = np.mean([r["euclidean"]["auroc"] for r in cross_results.values()])
+    mean_hyp = np.mean([r["hyperbolic"]["auroc"] for r in cross_results.values()])
+    mean_fpr_raw = np.mean([r["raw"]["fpr"] for r in cross_results.values()])
+    mean_fpr_euc = np.mean([r["euclidean"]["fpr"] for r in cross_results.values()])
+    mean_fpr_hyp = np.mean([r["hyperbolic"]["fpr"] for r in cross_results.values()])
     print(f"  {'─'*28}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*9}─┼─{'─'*10}")
     print(f"  {'MEAN':<28} | {'':>6} | {mean_raw:>6.3f} | {mean_euc:>9.3f} | {mean_hyp:>10.3f}")
     results["cross_attack_mean"] = {"raw": mean_raw, "euclidean": mean_euc, "hyperbolic": mean_hyp}
@@ -385,9 +406,9 @@ def main():
     print(f"  DIAGNOSTICS COMPLETE — KEY FINDINGS")
     print(f"{'═'*60}")
     print(f"  Cross-attack mean AUROC:")
-    print(f"    Raw:        {mean_raw:.3f}")
-    print(f"    Euclidean:  {mean_euc:.3f}")
-    print(f"    Hyperbolic: {mean_hyp:.3f}")
+    print(f"    Raw:        {mean_raw:.3f}    FPR on benign @ 0.5: {mean_fpr_raw:.3f}")
+    print(f"    Euclidean:  {mean_euc:.3f}    FPR on benign @ 0.5: {mean_fpr_euc:.3f}")
+    print(f"    Hyperbolic: {mean_hyp:.3f}    FPR on benign @ 0.5: {mean_fpr_hyp:.3f}")
     if mean_hyp > mean_euc + 0.02:
         print(f"  ✓ Hyperbolic generalizes BETTER than Euclidean (Δ={mean_hyp-mean_euc:.3f})")
     elif mean_hyp < mean_euc - 0.02:
