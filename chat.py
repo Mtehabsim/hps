@@ -27,15 +27,21 @@ from utils import (
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LorentzProjection(nn.Module):
-    def __init__(self, d_in, d_proj=256, k=1.0):
+    def __init__(self, d_in, d_proj=256, k=1.0, n_layers=8):
         super().__init__()
         self.proj = nn.Linear(d_in, d_proj, bias=False)
         self.scale = nn.Parameter(torch.tensor(1.0 / np.sqrt(d_proj)))
-        self.k = k
+        self.log_k = nn.Parameter(torch.tensor(np.log(k)))
+        self.log_tau = nn.Parameter(torch.zeros(n_layers))
         nn.init.xavier_uniform_(self.proj.weight)
 
+    @property
+    def k(self):
+        return torch.exp(self.log_k).clamp(min=0.1, max=10.0)
+
     def forward(self, x):
-        x_proj = self.proj(x) * self.scale
+        x_fp32 = x.float()
+        x_proj = self.proj(x_fp32) * self.scale
         norm_sq = (x_proj ** 2).sum(dim=-1, keepdim=True)
         x0 = torch.sqrt(1.0 / self.k + norm_sq)
         return torch.cat([x0, x_proj], dim=-1)
@@ -211,7 +217,7 @@ def main():
         d_in = checkpoint["d_in"]
         d_proj = checkpoint["d_proj"]
         k = checkpoint["k"]
-        proj = LorentzProjection(d_in, d_proj, k).to(config.DEVICE)
+        proj = LorentzProjection(d_in, d_proj, k, n_layers=len(layers)).to(config.DEVICE)
         proj.load_state_dict(checkpoint["state_dict"])
         proj.eval()
         threshold = float(np.load(THRESH_PATH))

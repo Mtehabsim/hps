@@ -46,14 +46,15 @@ def load_unusual_benign(n: int) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def load_adversarial_gcg(n: int) -> list:
-    # Load successful attacks (class 1) from validated_attacks.json
+    # Load ALL successful attacks (all methods) from categorized file
     cat_path = os.path.join(os.path.dirname(__file__), "results", "validated_attacks_categorized.json")
     if os.path.exists(cat_path):
         with open(cat_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # Load PAIR only (fluent attacks)
-        prompts = data.get("PAIR", [])
-        print(f"[dataset] Loaded {len(prompts)} successful PAIR attacks")
+        prompts = []
+        for method, method_prompts in data.items():
+            prompts.extend(method_prompts)
+        print(f"[dataset] Loaded {len(prompts)} successful attacks (all methods)")
         return prompts[:n]
 
     # Fallback to flat file
@@ -75,10 +76,10 @@ def load_refused_attacks() -> list:
     with open(attacks_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     refused = data.get("refused_attacks", [])
-    # Filter to PAIR only for fair comparison
-    pair_refused = [r["prompt"] for r in refused if r.get("method") == "PAIR"]
-    print(f"[dataset] Loaded {len(pair_refused)} refused PAIR attacks")
-    return pair_refused
+    # ALL refused attacks from all methods
+    refused_prompts = [r["prompt"] for r in refused]
+    print(f"[dataset] Loaded {len(refused_prompts)} refused attacks (all methods)")
+    return refused_prompts
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -124,14 +125,10 @@ BENIGN = BENIGN_NL + BENIGN_CODE + BENIGN_MATH + BENIGN_CREATIVE + BENIGN_UNUSUA
 random.shuffle(BENIGN)
 
 print("[dataset] Loading adversarial prompts (successful attacks)...")
-ADVERSARIAL = load_adversarial_gcg(100)
+ADVERSARIAL = load_adversarial_gcg(9999)  # load all
 
-print("[dataset] Loading refused attacks (same topics, model refused)...")
+print("[dataset] Loading refused attacks (for analysis only, NOT used in training)...")
 REFUSED = load_refused_attacks()
-
-# Add refused attacks to benign class — these are the hard negatives
-BENIGN = REFUSED + BENIGN  # refused first so they're in training, not cut off
-random.shuffle(BENIGN)
 
 DUAL_USE = DUAL_USE_BUILTIN
 
