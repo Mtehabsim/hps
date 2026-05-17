@@ -199,7 +199,7 @@ def main():
     print(f"[exp9] Benign mean length (chars): {benign_avg_len}")
 
     # ── Load model ──
-    model, tokenizer, _ = load_model(config.MODEL_NAME, config.DEVICE)
+    model, tokenizer = load_model(config.MODEL_NAME, config.DEVICE, config.DTYPE)
 
     # ── Build train/test split (consistent with experiment8) ──
     selected_layers = [0, 1, 2, 35, 36, 37, 38, 39]
