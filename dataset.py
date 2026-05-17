@@ -42,28 +42,16 @@ def load_unusual_benign(n: int) -> list:
 
 
 def load_hard_benign() -> list:
-    """Load validated hard benign (security education, edgy roleplay, sensitive professional, etc.)
-    from results/validated_benign.json. Only the v2_additions are loaded — v1 entries are
-    already covered by the HuggingFace loaders above."""
-    path = os.path.join(os.path.dirname(__file__), "results", "validated_benign.json")
-    if not os.path.exists(path):
-        print("[dataset] No validated_benign.json — skipping hard benign")
+    """Hard benign prompts: security education, edgy roleplay, sensitive professional,
+    dark fiction, code with security keywords. These are benign by curation — no model
+    validation needed since they're definitionally benign."""
+    try:
+        from hard_benign import HARD_BENIGN
+        print(f"[dataset] Loaded {len(HARD_BENIGN)} hard benign (curated)")
+        return list(HARD_BENIGN)
+    except ImportError:
+        print("[dataset] hard_benign.py not found — skipping")
         return []
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # Get v2 additions only — v1 entries overlap with our HF loaders
-    v2_count = data.get("v2_additions", {}).get("added_validated", 0)
-    if v2_count == 0:
-        print("[dataset] No v2 hard benign yet — run validate_benign_v2.py to add")
-        return []
-
-    # The v2 additions are the LAST `v2_count` entries in validated_benign
-    all_validated = data.get("validated_benign", [])
-    v2_entries = all_validated[-v2_count:] if v2_count > 0 else []
-    prompts = [v["prompt"] for v in v2_entries]
-    print(f"[dataset] Loaded {len(prompts)} hard benign (v2 additions)")
-    return prompts
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
