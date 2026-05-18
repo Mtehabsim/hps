@@ -318,32 +318,6 @@ def main():
     print(f"\n  Calibrated thresholds (from un-perturbed benign, FPR=1%):")
     print(f"    Raw: {thr_raw:.4f}  Euc: {thr_euc:.4f}  Hyp: {thr_hyp:.4f}")
 
-    # ── Sanity check: do ORIGINAL un-perturbed attacks still jailbreak under our refusal detector? ──
-    # If they don't, the refusal detector is too strict and we're not measuring perturbation effects.
-    print(f"\n  [sanity] Verifying refusal detector on un-perturbed attacks (sample of 30)...")
-    sanity_sample = test_attack_prompts[:30]
-    sanity_kept = 0
-    sanity_skipped = 0
-    for p in sanity_sample:
-        try:
-            resp = generate_response(model, tokenizer, p, max_tokens=80)
-            if not is_refusal(resp):
-                sanity_kept += 1
-            else:
-                sanity_skipped += 1
-        except Exception:
-            sanity_skipped += 1
-    sanity_rate = sanity_kept / max(len(sanity_sample), 1)
-    print(f"  [sanity] Original attack survival: {sanity_kept}/{len(sanity_sample)} = {sanity_rate:.1%}")
-    if sanity_rate < 0.5:
-        print(f"  [sanity] ⚠ Refusal detector flags >50% of confirmed attacks — too strict. Adjust REFUSAL_PHRASES.")
-
-    results["sanity_check"] = {
-        "n_sampled": len(sanity_sample),
-        "n_kept_as_attacks": sanity_kept,
-        "survival_rate": sanity_rate,
-    }
-
     # ══════════════════════════════════════════════════════════════════════
     #  ADAPTIVE PERTURBATIONS
     # ══════════════════════════════════════════════════════════════════════
@@ -372,32 +346,16 @@ def main():
             perturbed_attacks = [perturb_combined(p, benign_avg_len) for p in test_attack_prompts]
             perturbed_benign = [perturb_combined(p, benign_avg_len) for p in test_benign_prompts]
 
-        # ── Verify perturbed attacks STILL jailbreak ──
-        print(f"\n  Verifying {len(perturbed_attacks)} perturbed attacks still jailbreak...")
-        confirmed_attacks = []
-        skipped = 0
-        for i, p in enumerate(perturbed_attacks):
-            try:
-                resp = generate_response(model, tokenizer, p, max_tokens=80)
-                if not is_refusal(resp):
-                    confirmed_attacks.append(p)
-                else:
-                    skipped += 1
-            except Exception as e:
-                skipped += 1
-            if (i + 1) % 20 == 0:
-                print(f"    {i+1}/{len(perturbed_attacks)} (kept {len(confirmed_attacks)}, skipped {skipped})")
-
-        keep_rate = len(confirmed_attacks) / max(len(perturbed_attacks), 1)
-        print(f"\n  Attack survival rate: {len(confirmed_attacks)}/{len(perturbed_attacks)} = {keep_rate:.1%}")
-        if len(confirmed_attacks) < 10:
-            print(f"  ⚠ Too few confirmed attacks ({len(confirmed_attacks)}) — perturbation broke most attacks. Skipping.")
-            results["perturbations"][variant_name] = {
-                "skipped": True,
-                "reason": f"only {len(confirmed_attacks)} attacks survived",
-                "attack_survival_rate": keep_rate,
-            }
-            continue
+        # ── No re-verification: original attacks already validated by validate_attacks.py ──
+        # Premise: even if some perturbed attacks no longer jailbreak Vicuna, we measure
+        # the CLASSIFIER's behavior on the perturbed input. The question is whether the
+        # classifier still flags these prompts as attacks, NOT whether the model still
+        # complies. The classifier sees only the prompt; whether the model would have
+        # complied is irrelevant to detection.
+        confirmed_attacks = perturbed_attacks
+        keep_rate = 1.0
+        print(f"\n  Using all {len(confirmed_attacks)} perturbed attacks (no re-verification)")
+        print(f"  (Originals were validated; classifier is being tested on prompt features only)")
 
         # ── Re-extract activations for confirmed perturbed prompts ──
         print(f"\n  Re-extracting activations for perturbed prompts...")
@@ -492,7 +450,7 @@ def main():
             print(f"\n  {vname}: SKIPPED ({vres['reason']})")
             continue
         recal = vres["recalibrated"]
-        print(f"\n  {vname}: {vres['n_attacks_confirmed']}/{vres['n_attacks_perturbed']} attacks survived")
+        print(f"\n  {vname}: {vres['n_attacks_confirmed']} attacks tested")
         print(f"    Raw:        {recal['raw']['tpr_at_fpr01']:.3f}")
         print(f"    Euclidean:  {recal['euclidean']['tpr_at_fpr01']:.3f}")
         print(f"    Hyperbolic: {recal['hyperbolic']['tpr_at_fpr01']:.3f}")
