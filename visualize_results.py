@@ -146,7 +146,7 @@ def make_summary_figure():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def make_concept_figure():
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(15, 7))
 
     np.random.seed(42)
     n = 60
@@ -202,13 +202,13 @@ def make_concept_figure():
     # Draw the "circular boundary the mentor asks about"
     circle_e = plt.Circle((0, 0), 1.5, color="blue", fill=False, linestyle=":", linewidth=2.0)
     ax1.add_patch(circle_e)
-    ax1.text(0, -3.2, "If you tried a circular threshold (||x|| > R):\nPAIR is at low radius — it falls INSIDE the circle\nand is misclassified as benign.",
+    ax1.text(0, -3.5, "Even a circular threshold (||x|| > R)\nwould miss PAIR — it's at low radius.",
              ha="center", fontsize=9, color="blue", fontweight="bold")
 
-    ax1.annotate("PAIR lands NEAR benign:\nprojection W never saw\nthis direction during training,\nso it didn't push PAIR outward.",
+    ax1.annotate("PAIR (held out) lands\nNEAR benign — projection W\nnever saw this direction.",
                  xy=(pair_e[:, 0].mean(), pair_e[:, 1].mean()),
-                 xytext=(-3.7, 1.5),
-                 fontsize=9, color=holdout_color,
+                 xytext=(-4.3, 2.3),
+                 fontsize=8.5, color=holdout_color,
                  arrowprops=dict(arrowstyle="->", color=holdout_color, lw=1.4),
                  ha="left", fontweight="bold")
 
@@ -266,13 +266,13 @@ def make_concept_figure():
     boundary = plt.Circle((0, 0), 0.55, color="blue", fill=False,
                           linestyle=":", linewidth=2.5)
     ax2.add_patch(boundary)
-    ax2.text(0, -1.45, "Radial threshold (||x|| > R) catches ALL attacks\nincluding PAIR — the geometry forces it.",
+    ax2.text(0, -1.55, "Radial threshold (||x|| > R)\ncatches ALL attacks including PAIR.",
              ha="center", fontsize=9, color="blue", fontweight="bold")
 
-    ax2.annotate("PAIR is pushed to HIGH RADIUS\n(hyperbolic loss penalty grows\nexponentially with distance from origin\n→ ALL attacks land at boundary)",
+    ax2.annotate("PAIR pushed to HIGH RADIUS:\nhyperbolic loss rewards\npushing ALL attacks to\nboundary, regardless of direction",
                  xy=(pair_h[:, 0].mean(), pair_h[:, 1].mean()),
-                 xytext=(-1.4, 1.05),
-                 fontsize=9, color=holdout_color,
+                 xytext=(-1.55, 1.2),
+                 fontsize=8.5, color=holdout_color,
                  arrowprops=dict(arrowstyle="->", color=holdout_color, lw=1.4),
                  ha="left", fontweight="bold")
 
@@ -289,14 +289,6 @@ def make_concept_figure():
     fig.suptitle("Why a Euclidean Circle Doesn't Solve It — Hyperbolic Geometry Changes the Training Dynamics",
                  fontweight="bold", y=1.00, fontsize=13)
 
-    # Add explanatory caption below
-    fig.text(0.5, -0.04,
-             "KEY INSIGHT: It's not just about the boundary shape — it's about where the TRAINED PROJECTION places held-out attacks.\n"
-             "In Euclidean space, contrastive loss creates DIRECTION-SPECIFIC separation: attacks that match training-direction features get pushed away;\n"
-             "novel-direction attacks (e.g., PAIR) stay near origin and even a circular boundary fails to catch them.\n"
-             "In hyperbolic space, geodesic distance grows exponentially with radius, so the loss rewards pushing ALL attacks to the boundary regardless of direction.",
-             ha="center", fontsize=10, style="italic", color="#222")
-
     out_path = os.path.join(OUT_DIR, "hps_concept.png")
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     print(f"Saved → {out_path}")
@@ -308,47 +300,186 @@ def make_concept_figure():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def make_pipeline_figure():
-    fig, ax = plt.subplots(figsize=(13, 4))
-    ax.set_xlim(0, 14)
-    ax.set_ylim(0, 4)
-    ax.set_aspect("equal")
-    ax.axis("off")
+    fig = plt.figure(figsize=(15, 6.5))
+    gs = fig.add_gridspec(1, 5, width_ratios=[1.4, 1.6, 1.6, 1.6, 1.0],
+                          wspace=0.35)
 
-    boxes = [
-        (0.5, 1.5, 2.0, 1.0, "Input prompt", "#F4F1DE"),
-        (3.0, 1.5, 2.0, 1.0, "Vicuna-13B\nforward pass", "#E8E1D5"),
-        (5.5, 1.5, 2.2, 1.0, "Layer activations\n(8 layers × 5120)", "#DBE7E4"),
-        (8.2, 1.5, 2.2, 1.0, "Lorentz lift\n+ contrastive\nprojection", COLOR_HPS),
-        (10.9, 1.5, 1.6, 1.0, "12 trajectory\nfeatures", "#B8D4E3"),
-        (12.7, 1.5, 1.0, 1.0, "Logistic\nregression", "#C8B8DB"),
-    ]
-    for x, y, w, h, txt, color in boxes:
-        face = color
-        text_color = "white" if color == COLOR_HPS else "black"
-        rect = plt.Rectangle((x, y), w, h, facecolor=face, edgecolor="black",
-                             linewidth=1.2)
-        ax.add_patch(rect)
-        ax.text(x + w/2, y + h/2, txt, ha="center", va="center",
-                fontsize=10, color=text_color, fontweight="bold" if color == COLOR_HPS else "normal")
+    # ── Stage 1: Input prompt ──
+    ax1 = fig.add_subplot(gs[0])
+    ax1.set_xlim(0, 1); ax1.set_ylim(0, 1); ax1.axis("off")
+    ax1.set_title("1. Input Prompt", fontweight="bold", fontsize=12, pad=10)
 
-    arrow_y = 2.0
-    arrow_xs = [(2.5, 3.0), (5.0, 5.5), (7.7, 8.2), (10.4, 10.9), (12.5, 12.7)]
-    for x1, x2 in arrow_xs:
-        ax.annotate("", xy=(x2, arrow_y), xytext=(x1, arrow_y),
-                    arrowprops=dict(arrowstyle="->", color="black", lw=1.5))
+    # Two example prompts: benign (green) and attack (red)
+    bubble1 = mpatches.FancyBboxPatch((0.05, 0.55), 0.9, 0.32,
+        boxstyle="round,pad=0.02", facecolor="#E8F4E8",
+        edgecolor=COLOR_BENIGN, linewidth=2)
+    ax1.add_patch(bubble1)
+    ax1.text(0.5, 0.715, "BENIGN", ha="center", color=COLOR_BENIGN,
+             fontweight="bold", fontsize=10)
+    ax1.text(0.5, 0.62, "\"How does\nphotosynthesis\nwork?\"", ha="center",
+             fontsize=8.5, style="italic")
 
-    ax.text(9.3, 0.7, "Hyperbolic geometry\n(novel)", ha="center", color=COLOR_HPS,
-            fontweight="bold", fontsize=10)
-    ax.annotate("", xy=(9.3, 1.4), xytext=(9.3, 1.0),
-                arrowprops=dict(arrowstyle="->", color=COLOR_HPS, lw=2))
+    bubble2 = mpatches.FancyBboxPatch((0.05, 0.10), 0.9, 0.32,
+        boxstyle="round,pad=0.02", facecolor="#F8E8E8",
+        edgecolor=COLOR_ATTACK, linewidth=2)
+    ax1.add_patch(bubble2)
+    ax1.text(0.5, 0.275, "ATTACK", ha="center", color=COLOR_ATTACK,
+             fontweight="bold", fontsize=10)
+    ax1.text(0.5, 0.18, "\"How to make...\n[GCG suffix]\nxyzABC123\"", ha="center",
+             fontsize=8.5, style="italic", family="monospace")
 
-    # Output
-    ax.text(13.2, 0.5, "BLOCK / ALLOW", fontsize=11, fontweight="bold", ha="center")
-    ax.annotate("", xy=(13.2, 1.0), xytext=(13.2, 1.4),
-                arrowprops=dict(arrowstyle="<-", color="black", lw=1.5))
+    # ── Stage 2: LLM forward pass ──
+    ax2 = fig.add_subplot(gs[1])
+    ax2.set_xlim(0, 1); ax2.set_ylim(0, 1); ax2.axis("off")
+    ax2.set_title("2. Vicuna-13B (40 layers)", fontweight="bold", fontsize=12, pad=10)
 
-    ax.set_title("HPS Pipeline: Activation Trajectory Detection in Hyperbolic Space",
-                 fontweight="bold", fontsize=13)
+    # Draw stack of layers
+    n_layers_show = 8
+    layer_height = 0.08
+    layer_y_start = 0.15
+    layer_x = 0.25
+    layer_w = 0.5
+    selected_layers_viz = [0, 1, 2, 5, 6, 7]  # indices into n_layers_show that are selected
+    for i in range(n_layers_show):
+        y = layer_y_start + i * layer_height
+        is_selected = i in selected_layers_viz
+        color = COLOR_HPS if is_selected else "#D8D8D8"
+        rect = mpatches.Rectangle((layer_x, y), layer_w, layer_height * 0.85,
+                                   facecolor=color, edgecolor="black", linewidth=0.7)
+        ax2.add_patch(rect)
+        if is_selected:
+            ax2.text(layer_x + layer_w + 0.04, y + layer_height * 0.4,
+                     "←", color=COLOR_HPS, fontweight="bold", fontsize=12)
+    # Layer labels
+    ax2.text(layer_x - 0.05, layer_y_start, "L0", fontsize=8, ha="right")
+    ax2.text(layer_x - 0.05, layer_y_start + 7 * layer_height, "L39", fontsize=8, ha="right")
+    ax2.text(0.5, 0.05, "Tap 8 selected layers\n(top-Fisher score)", ha="center",
+             fontsize=9, color=COLOR_HPS, fontweight="bold")
+    ax2.text(0.5, 0.92, "Hidden states\nat each layer", ha="center", fontsize=9, style="italic")
+
+    # ── Stage 3: Hyperbolic projection ──
+    ax3 = fig.add_subplot(gs[2])
+    ax3.set_xlim(-1.4, 1.4); ax3.set_ylim(-1.3, 1.3)
+    ax3.set_aspect("equal"); ax3.axis("off")
+    ax3.set_title("3. Lorentz Projection\n(novel)", fontweight="bold", fontsize=12,
+                  color=COLOR_HPS, pad=10)
+
+    # Poincaré disk
+    theta = np.linspace(0, 2 * np.pi, 200)
+    ax3.plot(np.cos(theta), np.sin(theta), "k-", linewidth=2)
+    ax3.fill(np.cos(theta), np.sin(theta), color="#E8F4F8", alpha=0.5)
+
+    np.random.seed(7)
+    # Benign trajectory: stays near origin (dots connected by arrows showing layer-to-layer)
+    benign_traj = []
+    for i in range(8):
+        r = 0.05 + i * 0.03 + np.random.uniform(-0.02, 0.02)
+        ang = 0.5 + i * 0.15
+        benign_traj.append([r * np.cos(ang), r * np.sin(ang)])
+    benign_traj = np.array(benign_traj)
+    ax3.plot(benign_traj[:, 0], benign_traj[:, 1], "-",
+             color=COLOR_BENIGN, linewidth=1.5, alpha=0.8)
+    ax3.scatter(benign_traj[:, 0], benign_traj[:, 1], c=COLOR_BENIGN, s=35,
+                edgecolor="darkgreen", linewidth=0.6, zorder=3)
+
+    # Attack trajectory: drifts to high radius
+    attack_traj = []
+    for i in range(8):
+        r = 0.15 + i * 0.10 + np.random.uniform(-0.02, 0.02)
+        ang = -0.7 + i * 0.05
+        attack_traj.append([r * np.cos(ang), r * np.sin(ang)])
+    attack_traj = np.array(attack_traj)
+    ax3.plot(attack_traj[:, 0], attack_traj[:, 1], "-",
+             color=COLOR_ATTACK, linewidth=1.5, alpha=0.8)
+    ax3.scatter(attack_traj[:, 0], attack_traj[:, 1], c=COLOR_ATTACK, s=35,
+                edgecolor="darkred", linewidth=0.6, zorder=3)
+
+    # Annotate trajectories
+    ax3.text(benign_traj[-1, 0] + 0.05, benign_traj[-1, 1] + 0.05,
+             "benign\ntrajectory", fontsize=8, color=COLOR_BENIGN, fontweight="bold")
+    ax3.text(attack_traj[-1, 0] - 0.45, attack_traj[-1, 1] - 0.15,
+             "attack\ntrajectory", fontsize=8, color=COLOR_ATTACK, fontweight="bold")
+    ax3.text(0, -1.18, "Each layer's activation\n→ point on hyperboloid",
+             ha="center", fontsize=8.5, style="italic")
+
+    # ── Stage 4: Trajectory features ──
+    ax4 = fig.add_subplot(gs[3])
+    ax4.set_xlim(0, 1); ax4.set_ylim(0, 1); ax4.axis("off")
+    ax4.set_title("4. Trajectory Features", fontweight="bold", fontsize=12, pad=10)
+
+    # Show 12-feature vector visually as small bar chart
+    feat_names_compact = ["mean r", "max r", "min r", "std r", "range r",
+                          "max κ", "mean κ", "std κ", "spike loc",
+                          "displ", "path", "ratio"]
+    np.random.seed(3)
+    benign_feats = np.random.uniform(0.0, 0.3, 12)
+    attack_feats = np.random.uniform(0.5, 1.0, 12)
+    attack_feats[0] = 0.95; benign_feats[0] = 0.10  # mean r dominant
+
+    x_pos = np.arange(12)
+    width = 0.4
+    ax4.set_xlim(-0.5, 12)
+    ax4.set_ylim(-0.05, 1.15)
+    ax4.bar(x_pos - width/2, benign_feats, width, color=COLOR_BENIGN,
+            edgecolor="darkgreen", linewidth=0.5, alpha=0.8, label="Benign")
+    ax4.bar(x_pos + width/2, attack_feats, width, color=COLOR_ATTACK,
+            edgecolor="darkred", linewidth=0.5, alpha=0.8, label="Attack")
+    ax4.set_xticks(x_pos)
+    ax4.set_xticklabels(feat_names_compact, fontsize=6.5, rotation=70, ha="right")
+    ax4.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    ax4.set_ylabel("Value", fontsize=8)
+    ax4.tick_params(axis="y", labelsize=7)
+    ax4.spines["top"].set_visible(False)
+    ax4.spines["right"].set_visible(False)
+    ax4.text(5.5, 1.08, "12 geometric features\n(radial / curvature / displacement)",
+             ha="center", fontsize=8.5, style="italic", transform=ax4.transData)
+
+    # ── Stage 5: Decision ──
+    ax5 = fig.add_subplot(gs[4])
+    ax5.set_xlim(0, 1); ax5.set_ylim(0, 1); ax5.axis("off")
+    ax5.set_title("5. Decision", fontweight="bold", fontsize=12, pad=10)
+
+    # Traffic-light style decision boxes
+    allow_box = mpatches.FancyBboxPatch((0.1, 0.55), 0.8, 0.32,
+        boxstyle="round,pad=0.02", facecolor="#D4F0D4",
+        edgecolor=COLOR_BENIGN, linewidth=2.2)
+    ax5.add_patch(allow_box)
+    ax5.text(0.5, 0.78, "✓ ALLOW", ha="center", color="darkgreen",
+             fontweight="bold", fontsize=14)
+    ax5.text(0.5, 0.625, "score < threshold", ha="center", fontsize=8, style="italic")
+
+    block_box = mpatches.FancyBboxPatch((0.1, 0.10), 0.8, 0.32,
+        boxstyle="round,pad=0.02", facecolor="#F8D4D4",
+        edgecolor=COLOR_ATTACK, linewidth=2.2)
+    ax5.add_patch(block_box)
+    ax5.text(0.5, 0.34, "✗ BLOCK", ha="center", color="darkred",
+             fontweight="bold", fontsize=14)
+    ax5.text(0.5, 0.18, "score > threshold", ha="center", fontsize=8, style="italic")
+
+    # ── Add arrows between stages ──
+    arrow_kw = dict(arrowstyle="->", color="black", lw=1.8,
+                    connectionstyle="arc3,rad=0")
+    # We need to draw arrows in figure coordinates spanning between subplots
+    fig.canvas.draw()
+    # Use figure-level annotations
+    arrow_ys = [0.5]
+    bbox1 = ax1.get_position()
+    bbox2 = ax2.get_position()
+    bbox3 = ax3.get_position()
+    bbox4 = ax4.get_position()
+    bbox5 = ax5.get_position()
+
+    pairs = [(bbox1, bbox2), (bbox2, bbox3), (bbox3, bbox4), (bbox4, bbox5)]
+    for b1, b2 in pairs:
+        x_start = b1.x1 - 0.01
+        x_end = b2.x0 + 0.01
+        y = (b1.y0 + b1.y1) / 2
+        fig.add_artist(FancyArrowPatch((x_start, y), (x_end, y),
+                                       arrowstyle="->", color="black",
+                                       mutation_scale=15, lw=1.5))
+
+    fig.suptitle("HPS Pipeline: Activation Trajectory Detection in Hyperbolic Space",
+                 fontweight="bold", fontsize=14, y=1.02)
 
     out_path = os.path.join(OUT_DIR, "hps_pipeline.png")
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
