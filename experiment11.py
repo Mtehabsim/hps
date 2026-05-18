@@ -392,21 +392,33 @@ def main():
     device = config.DEVICE
     d_hidden = X_train.shape[2]
 
-    torch.manual_seed(42); np.random.seed(42)
-    proj_h = LorentzProjection(d_hidden, config.PROJECTION_DIM, 1.0, n_layers=n_layers_sel).to(device)
-    import torch.optim as optim
-    opt = optim.Adam(proj_h.parameters(), lr=1e-3, weight_decay=1e-5)
-    X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
-    y_t = torch.tensor(y_train, dtype=torch.long, device=device)
-    for _ in range(120):
-        total_loss = torch.tensor(0.0, device=device)
-        for l in range(n_layers_sel):
-            h_proj = proj_h(X_t[:, l, :])
-            tau_l = proj_h.tau(l)
-            total_loss = total_loss + contrastive_loss(h_proj, y_t, k=proj_h.k, tau=tau_l)
-        total_loss = total_loss / n_layers_sel
-        opt.zero_grad(); total_loss.backward(); opt.step()
-    proj_h.eval()
+    # Try to load adversarially-trained HPS first
+    adv_path = os.path.join(config.RESULTS_DIR, "hps_adv_projection.pt")
+    use_adv = os.path.exists(adv_path)
+    if use_adv:
+        print(f"[exp11] Found HPS-Adv projection at {adv_path} — loading instead of retraining")
+        ckpt = torch.load(adv_path, map_location=device, weights_only=False)
+        proj_h = LorentzProjection(d_hidden, config.PROJECTION_DIM, 1.0,
+                                    n_layers=n_layers_sel).to(device)
+        proj_h.load_state_dict(ckpt["state_dict"])
+        proj_h.eval()
+        print(f"[exp11] Using HPS-Adv (trained at eps={ckpt.get('eps_train', '?')})")
+    else:
+        torch.manual_seed(42); np.random.seed(42)
+        proj_h = LorentzProjection(d_hidden, config.PROJECTION_DIM, 1.0, n_layers=n_layers_sel).to(device)
+        import torch.optim as optim
+        opt = optim.Adam(proj_h.parameters(), lr=1e-3, weight_decay=1e-5)
+        X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
+        y_t = torch.tensor(y_train, dtype=torch.long, device=device)
+        for _ in range(120):
+            total_loss = torch.tensor(0.0, device=device)
+            for l in range(n_layers_sel):
+                h_proj = proj_h(X_t[:, l, :])
+                tau_l = proj_h.tau(l)
+                total_loss = total_loss + contrastive_loss(h_proj, y_t, k=proj_h.k, tau=tau_l)
+            total_loss = total_loss / n_layers_sel
+            opt.zero_grad(); total_loss.backward(); opt.step()
+        proj_h.eval()
 
     # ── Train Euclidean projection ──
     print(f"[exp11] Training Euclidean projection...")

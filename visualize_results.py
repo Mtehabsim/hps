@@ -217,8 +217,8 @@ def make_concept_figure():
     ax1.set_aspect("equal")
     ax1.set_title("Euclidean Contrastive Projection",
                   fontweight="bold")
-    ax1.set_xlabel("Trained projection dim 1\n(direction-specific contrastive separation)")
-    ax1.set_ylabel("Trained projection dim 2")
+    ax1.set_xlabel("Projection dim 1 (illustrative)\n(actual HPS uses d_p=64 dimensions; this is a 2D schematic)")
+    ax1.set_ylabel("Projection dim 2 (illustrative)")
     ax1.legend(loc="upper right", framealpha=0.95, fontsize=8)
     ax1.grid(alpha=0.3)
 
@@ -281,13 +281,14 @@ def make_concept_figure():
     ax2.set_aspect("equal")
     ax2.set_title("Hyperbolic Contrastive Projection (Poincaré disk view)",
                   fontweight="bold")
-    ax2.set_xlabel("Lorentz coordinate x₁\n(radius = ||x|| has consistent meaning across directions)")
-    ax2.set_ylabel("Lorentz coordinate x₂")
+    ax2.set_xlabel("Lorentz coordinate x₁ (illustrative)\n(actual HPS uses 64-dim Lorentz hyperboloid; this is a Poincaré disk schematic)")
+    ax2.set_ylabel("Lorentz coordinate x₂ (illustrative)")
     ax2.legend(loc="upper right", framealpha=0.95, fontsize=8)
     ax2.grid(alpha=0.3)
 
-    fig.suptitle("Why a Euclidean Circle Doesn't Solve It — Hyperbolic Geometry Changes the Training Dynamics",
-                 fontweight="bold", y=1.00, fontsize=13)
+    fig.suptitle("Why a Euclidean Circle Doesn't Solve It — Hyperbolic Geometry Changes the Training Dynamics\n"
+                 "(Conceptual illustration — schematic 2D projection, not real activation data)",
+                 fontweight="bold", y=1.00, fontsize=12)
 
     out_path = os.path.join(OUT_DIR, "hps_concept.png")
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
