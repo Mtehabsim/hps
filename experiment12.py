@@ -423,15 +423,29 @@ def main():
         print(f"    ⚠ Attack logits very large (>5) — sigmoid saturated. Attacking logit directly to avoid gradient masking.")
 
     # PGD on test attacks (attack the LOGIT to avoid sigmoid saturation / gradient masking)
+    _pgd_diag_printed = [False]  # mutable flag for first-sample diagnostic
+
     def pgd_minimize_score(scorer, h, eps, n_steps=50):
         """Minimize logit (pre-sigmoid). Avoids gradient masking from saturated sigmoid.
         See Athalye et al. 2018, Carlini & Wagner 2017."""
         h0 = h.detach().clone()
         delta = torch.zeros_like(h0, requires_grad=True)
         lr = (eps / max(n_steps, 1)) * 2.5
-        for _ in range(n_steps):
+        for step in range(n_steps):
             logit = scorer(h0 + delta, return_logit=True)
             grad = torch.autograd.grad(logit, delta, create_graph=False)[0]
+
+            # Diagnostic: print on first sample, first/last steps
+            if not _pgd_diag_printed[0] and step in (0, n_steps - 1):
+                has_nan = torch.isnan(grad).any().item()
+                print(f"    [DIAG] eps={eps} step={step}: logit={logit.item():.4f}, "
+                      f"grad_norm={grad.norm().item():.2e}, grad_max={grad.abs().max().item():.2e}, "
+                      f"has_nan={has_nan}, delta_norm={delta.norm().item():.2e}")
+                if step == n_steps - 1:
+                    final_s = float(torch.sigmoid(logit))
+                    print(f"    [DIAG] final sigmoid={final_s:.6f}, threshold={threshold:.6f}")
+                    _pgd_diag_printed[0] = True
+
             with torch.no_grad():
                 delta_new = delta - lr * torch.sign(grad)
                 delta_new = torch.clamp(delta_new, -eps, +eps)
@@ -440,6 +454,7 @@ def main():
         return float(scorer(h0 + delta.detach()))
 
     for eps in eval_epsilons:
+        _pgd_diag_printed[0] = False  # reset diagnostic for each epsilon
         n_evaded = 0
         for i in range(len(X_test_atk)):
             h_t = torch.tensor(X_test_atk[i], dtype=torch.float32, device=device)
