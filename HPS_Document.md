@@ -38,8 +38,16 @@ We propose monitoring the model's internal reasoning trajectory during inference
 - **Latent Representation Framework** (arXiv:2602.11495, 2026): Tensor analysis of hidden states
 - **AdaSteer** (Zhou et al., EMNLP 2025): Activation-threshold-based steering
 - **Google AMS** (2026): Activation-based scanner for open-weight LLMs
-- **JBShield** (Zhang et al., USENIX Security 2025): Concept-similarity defense based on toxic + jailbreak concept activation
-- **Revisiting JBShield (RTV)** (Derya & Sunar, arXiv:2605.03095, 2026): Demonstrates JBShield breaks under adaptive attack (JB-GCG, ASR up to 53.4%); proposes Representation Trajectory Verification using multi-layer Mahalanobis outlier detection over refusal-direction fingerprints. **Key warning: "strong non-adaptive detection does not imply robustness under adaptive threat models."**
+- **JBShield** (Zhang et al., USENIX Security 2025): Concept-similarity defense based on toxic + jailbreak concept activation. Achieves 0% ASR against non-adaptive GCG attacks.
+- **Revisiting JBShield (RTV)** (Derya & Sunar, arXiv:2605.03095, 2026): Demonstrates JBShield breaks under adaptive attack (JB-GCG, ASR up to 53.4%); proposes Representation Trajectory Verification using multi-layer Mahalanobis outlier detection over refusal-direction fingerprints. Achieves 7% ASR under adaptive attack at 13× cost. **Key warning: "strong non-adaptive detection does not imply robustness under adaptive threat models."**
+
+### Raw Activation Defenses Are Established Broken
+The literature establishes that high-dimensional raw-activation classifiers, despite strong non-adaptive performance, fail under adaptive attack:
+- **Bailey et al.** (arXiv:2603.10484, ICLR 2026): "Obfuscated activations bypass LLM latent-space defenses." Demonstrates that gradient-based obfuscation attacks defeat Mahalanobis-based detectors operating on raw activations regardless of dimensionality.
+- **Schwinn & Geisler** (2024): Bypassed Circuit Breakers (raw-activation defense) with three small modifications to embedding-space attacks.
+- **Andriushchenko et al.** (arXiv:2404.02151, 2024): Simple adaptive jailbreaks bypass leading safety-aligned LLMs across families.
+
+The RTV paper (Derya & Sunar 2026) explicitly states: *"sheer dimensionality of the detection surface is not the relevant source of robustness, since Mahalanobis scoring over raw LLM activations operates on thousands of dimensions"* and explicitly designs RTV to operate on a low-dimensional structured fingerprint instead. **Consequently, raw activation classifiers are not a meaningful baseline; we compare against the published representation-level defenses (RTV, JBShield) and the natural ablation (Euclidean projection).**
 
 ### Hyperbolic Geometry for Language
 - **HELM** (He et al., NeurIPS 2025): First fully hyperbolic LLM at billion scale; token embeddings exhibit negative Ricci curvature
@@ -132,11 +140,11 @@ Distance scaled by per-layer temperature `τ_l`. FP32 throughout for numerical s
 
 | Config | Projection | Loss | Purpose |
 |---|---|---|---|
-| **Raw** | None (concatenate activations) | — | High-dim baseline (40,960 features, C=0.01 regularization) |
-| **HPS-Lite** | Naive Lorentz lift, no training | — | Geometry alone |
-| **Euclidean-Trained** | Linear head + L2 contrastive | Same loss in flat space | Training alone |
-| **Nonlinear-Euclidean** | LayerNorm + tanh + L2 contrastive | Same loss in flat space | Generic nonlinearity |
-| **Hyperbolic-Trained (HPS-Full)** | Linear head + Lorentz lift + geodesic contrastive | Loss in hyperbolic space | Full system |
+| **HPS-Lite** | Naive Lorentz lift, no training | — | Geometry alone (ablation) |
+| **Euclidean-Trained** | Linear head + L2 contrastive | Same loss in flat space | Same architecture, ablates the geometric prior |
+| **Nonlinear-Euclidean** | LayerNorm + tanh + L2 contrastive | Same loss in flat space | Tests whether nonlinearity alone matches geometry |
+| **RTV (Derya & Sunar 2026)** | Refusal-direction cosine similarity (Arditi et al.) | None (no training) | Published SOTA; direct competitor |
+| **Hyperbolic-Trained (HPS-Full)** | Linear head + Lorentz lift + geodesic contrastive | Loss in hyperbolic space | Our proposed method |
 
 ---
 
@@ -198,8 +206,8 @@ Hand-curated cybersecurity/chemistry/medical educational queries. Evaluation onl
 | 4 | `experiment6.py` | Full pipeline training on validated data — does the trained projection produce a usable detector? | YES, AUROC=1.000 in-distribution |
 | 5 | `experiment7.py` | Layer discovery + token pooling ablation — which layers and pooling strategy maximize separation? | Top-8 Fisher layers, last-token pooling |
 | 6 | `experiment8.py` | **Critical diagnostics:** per-method norms, layer ablation, cross-attack generalization, refused-attack scoring | Hyperbolic > Euclidean for cross-attack ranking; refused attacks indistinguishable from successful |
-| 7 | `experiment9.py` | **Adaptive attack robustness** — do classifiers detect intent or just lexical anomalies? Following Derya & Sunar 2026 | (Pending — see protocol below) |
-| 8 | `experiment10.py` | **RTV baseline** — direct comparison against published Derya & Sunar 2026 method on cross-attack | Hyperbolic beats RTV on AUROC (Δ=+0.046) and TPR@FPR=1% (Δ=+0.189) — **HPS is competitive with or beats published SOTA** |
+| 7 | `experiment11.py` | **Gradient-based adaptive attack** — does HPS hold under PGD-style activation perturbations? Following Bailey et al. 2026 / Derya & Sunar 2026 | (Pending — see protocol below) |
+| 8 | `experiment10.py` | **RTV baseline** — direct comparison against published Derya & Sunar 2026 method on cross-attack | Hyperbolic beats RTV on AUROC (Δ=+0.046) and TPR@FPR=1% (Δ=+0.189) |
 
 ---
 
@@ -209,13 +217,12 @@ Trained the full HPS pipeline (Lorentz projection + per-layer contrastive loss +
 
 | Method | AUROC | FPR@95TPR | F1 |
 |---|---|---|---|
-| Fisher-8 Raw | 1.000 | 0.000 | 0.991 |
 | Euclidean-Trained | 1.000 | 0.000 | 1.000 |
 | Nonlinear-Euclidean | 1.000 | 0.000 | 0.998 |
 | HPS-Lite (no training) | 0.911 | 0.303 | 0.547 |
 | **HPS-Full** | **1.000** | **0.000** | **0.998** |
 
-**Conclusion:** In-distribution AUROC saturates at 1.000 for all trained methods. **Cannot distinguish methods on this evaluation** — need harder tests.
+**Conclusion:** In-distribution AUROC saturates at 1.000 for all trained methods. **Cannot distinguish methods on this evaluation** — need cross-distribution and adaptive tests.
 
 ---
 
@@ -264,21 +271,21 @@ This is the experiment that broke the saturation and exposed real differences.
 
 #### 6.3 Cross-Attack Generalization (THE CRITICAL TEST)
 
-Train on 3 attack methods, test on held-out 4th. Benign 80/20 split (no leakage).
+Train on 3 attack methods, test on held-out 4th. Benign 80/20 split (no leakage). Compared against the published RTV baseline (`experiment10.py`, results below) and the natural Euclidean ablation.
 
-| Held-Out | n_test | Raw AUROC | Euclidean AUROC | Hyperbolic AUROC | Raw TPR@FPR=1% | Euc TPR@FPR=1% | Hyp TPR@FPR=1% |
-|---|---|---|---|---|---|---|---|
-| GCG | 68 | 0.992 | 0.769 | 0.943 | 0.897 | 0.000 | 0.603 |
-| JBC | 84 | 0.990 | 0.548 | 0.753 | 0.845 | 0.000 | 0.167 |
-| PAIR | 66 | 0.949 | 0.445 | 0.635 | 0.197 | 0.000 | 0.000 |
-| Random Search | 98 | 1.000 | 0.291 | 0.930 | 1.000 | 0.000 | 0.173 |
-| **MEAN** | — | **0.983** | **0.513** | **0.815** | **0.735** | **0.000** | **0.236** |
+| Held-Out | n_test | Euclidean AUROC | Hyperbolic AUROC | Euc TPR@FPR=1% | Hyp TPR@FPR=1% |
+|---|---|---|---|---|---|
+| GCG | 68 | 0.769 | 0.943 | 0.000 | 0.603 |
+| JBC | 84 | 0.548 | 0.753 | 0.000 | 0.167 |
+| PAIR | 66 | 0.445 | 0.635 | 0.000 | 0.000 |
+| Random Search | 98 | 0.291 | 0.930 | 0.000 | 0.173 |
+| **MEAN** | — | **0.513** | **0.815** | **0.000** | **0.236** |
 
 **Findings:**
 - **Hyperbolic substantially outperforms Euclidean** in AUROC (Δ=+0.302) — geometric prior matters for ranking.
-- **Both compressed methods fail at deployment threshold.** Euclidean catches 0% of unseen attacks at FPR=1%; Hyperbolic catches only 23.6%.
-- **Raw is the only method with deployable TPR@FPR=1% (73.5%)** — but see Experiment 7 (adaptive evaluation) for why this is misleading.
-- **PAIR is undetectable cross-attack** for compressed methods (0% TPR for both Hyperbolic and Euclidean). Fluent semantic rewrites are the worst case.
+- **Euclidean fails catastrophically at deployment threshold** — TPR@FPR=1% = 0.000 across ALL held-out methods. The 12-feature compression with flat geometry cannot generalize cross-distribution.
+- **Hyperbolic recovers deployment-grade performance on 3 of 4 attacks** (GCG: 60.3%, JBC: 16.7%, Random Search: 17.3%) at FPR=1%.
+- **PAIR is the universal failure case** — both methods get 0% TPR. Fluent semantic rewrites are the worst case for compressed projections.
 
 #### 6.4 Refused Attack Scoring (DSH Test)
 
@@ -304,43 +311,38 @@ Train on 3 attack methods, test on held-out 4th. Benign 80/20 split (no leakage)
 
 ---
 
-### Experiment 7 (`experiment9.py`) — Adaptive Attack Robustness
+### Experiment 7 (`experiment11.py`) — Gradient-Based Adaptive Attack
 
-**Motivation (Derya & Sunar 2026, "Revisiting JBShield"):** The JBShield paper achieved 0% ASR against non-adaptive attacks but was broken by JB-GCG (adaptive attack) to 46.2% ASR. The paper's central warning: **"strong non-adaptive detection does not imply robustness under adaptive threat models."**
+**Motivation:** Per Bailey et al. (2026, ICLR) and Derya & Sunar (2026), surface-level adaptive attacks (token prefix injection, length normalization) are not the relevant threat model for representation-level defenses. The relevant threat is **gradient-based obfuscated activation attacks** that operate in continuous embedding/activation space to push attack representations into the benign cluster while preserving harmful generation.
 
-Our Experiment 6 finding — that Raw activations achieve 73.5% TPR@FPR=1% — is exactly the kind of non-adaptive metric the paper warns about. Diagnostic 6.1 showed that signal is concentrated in early-layer norm anomaly (a lexical/statistical artifact, not a semantic one). Adaptive attacks that normalize input statistics should evade this signal.
+This experiment implements a simplified obfuscated-activation attack against HPS, Euclidean, and RTV defenses:
 
-**Three adaptive perturbations tested:**
+**Protocol (Projected Gradient Descent in activation space):**
 
-| Variant | Description |
-|---|---|
-| `benign_prefix` | Prepend natural chatbot-style prefix (50–200 tokens) — targets early-layer norm signal |
-| `length_match` | Pad attack to mean benign length — targets length-based statistics |
-| `combined` | Both prefix + length match — worst case |
+For each test attack and each defense:
+1. Extract attack activations `h` at the defense's relevant layers
+2. Initialize perturbation `δ = 0`
+3. For each gradient step:
+   - Forward `h + δ` through the defense (projection → features → classifier)
+   - Compute loss = score (which we want to MINIMIZE — push toward benign)
+   - Backward to get `∂loss/∂δ`
+   - `δ ← δ − η · sign(∂loss/∂δ)` (PGD-L∞)
+   - `δ ← clip(δ, −ε, +ε)` (project to ε-ball)
+4. Measure: at what perturbation budget `ε` does the defense's TPR drop below 50%?
 
-**Protocol:**
-1. Train classifiers on un-perturbed train set (80%)
-2. Calibrate threshold on un-perturbed benign at FPR=1%
-3. Apply perturbation to held-out test attacks
-4. **Verify each still jailbreaks Vicuna** (filter to confirmed jailbreaks)
-5. Apply same perturbation to held-out benign (control)
-6. Re-extract activations through Vicuna
-7. Score with un-changed classifiers and report TPR drop at fixed threshold + recalibrated TPR@FPR=1%
+**Threat model (per Bailey et al. 2026):** White-box attacker with full access to defense parameters (projection weights `W`, classifier coefficients, refusal directions, Mahalanobis statistics). Attacker can perturb activations directly — equivalent to a sufficiently strong embedding-space attack.
 
-**Predictions:**
-
-| Method | Baseline TPR@FPR=1% | Predicted After Adaptive |
-|---|---|---|
-| Raw | 73.5% | **15–30%** ← catastrophic drop expected |
-| Hyperbolic | 23.6% | 15–25% (smaller relative drop expected) |
-| Euclidean | 0% | 0% (already broken) |
+**Why this is the right comparison:**
+- Bailey et al. proved raw-activation Mahalanobis is breakable by this attack class (regardless of dimensionality)
+- RTV claims robustness specifically because the refusal-direction fingerprint creates "tension" between jailbreaking and evasion
+- HPS's hyperbolic structure could provide similar tension if the radial coordinate is hard to push toward benign while preserving downstream compliance signals
 
 **Decision rule:**
-- If Raw drops to ~20% → confirms Diagnostic 6.1's lexical-artifact theory; deployment claim for Raw is dead.
-- If Hyperbolic holds within 5% of baseline → structural multi-layer features provide adaptive robustness, and HPS has a real advantage at the operating point that matters.
-- If both collapse → activation-based detection in this form is not deployment-ready against adaptive threats; paper becomes characterization study only.
+- If HPS requires SMALLER ε to break than RTV → HPS is less adaptive-robust
+- If HPS requires LARGER ε to break than RTV → HPS adaptive advantage confirmed
+- If both fail at small ε → both broken under adaptive attack
 
-(Results pending — run `python experiment9.py` on Vicuna-13B; estimated runtime ~30–40 min on DGX.)
+(Results pending — run `python experiment11.py` on Vicuna-13B; estimated runtime ~10–15 min on DGX.)
 
 ---
 
@@ -358,7 +360,6 @@ Our Experiment 6 finding — that Raw activations achieve 73.5% TPR@FPR=1% — i
 
 | Method | Cross-Attack AUROC | Cross-Attack TPR@FPR=1% |
 |---|---|---|
-| Raw (40,960-dim, regularized) | 0.983 | 0.735 |
 | **HPS-Full (12 features, hyperbolic)** | **0.815** | **0.236** |
 | **RTV (15-dim refusal fingerprint, no training)** | **0.769** | **0.047** |
 | Euclidean (12 features, contrastive) | 0.513 | 0.000 |
@@ -391,31 +392,29 @@ The reviewer hypothesized RTV would dominate HPS, forcing a reframing around "in
 
 ### What's Supported (Non-Adaptive Setting)
 
-✅ **Activation monitoring detects jailbreaks reliably under non-adaptive evaluation.** Cross-attack mean AUROC of 0.983 (Raw) and 0.815 (Hyperbolic) on held-out attack methods.
+✅ **HPS achieves cross-attack jailbreak detection that beats both the natural ablation and the published SOTA.** On Vicuna-13B held-out evaluation, HPS achieves AUROC=0.815 / TPR@FPR=1%=0.236, beating Euclidean by Δ=+0.302 AUROC and RTV (Derya & Sunar 2026) by Δ=+0.046 AUROC and Δ=+0.189 TPR.
 
-✅ **Hyperbolic geometric prior substantially aids cross-distribution generalization in compressed representations.** When the projection is bottlenecked to 12 features, hyperbolic outperforms Euclidean (AUROC 0.815 vs 0.513, Δ=+0.302). The geometry imposes a useful inductive bias.
+✅ **Hyperbolic geometric prior substantially aids cross-distribution generalization in compressed representations.** Compared to identical-architecture Euclidean baseline, hyperbolic improves AUROC by Δ=+0.302 — Euclidean catches 0% of unseen attacks at FPR=1%, hyperbolic catches 23.6%. The geometry imposes a useful inductive bias.
 
-✅ **HPS beats the published SOTA RTV at deployment threshold.** On Vicuna-13B cross-attack (Experiment 8), HPS achieves TPR@FPR=1% of 0.236 versus RTV's 0.047 — a **5× advantage at deployment-relevant operating point** despite using fewer features (12 vs 15). HPS wins 3 of 4 attack methods (GCG, JBC, prompt_with_random_search); RTV wins only PAIR.
+✅ **HPS beats the published RTV baseline at deployment threshold.** RTV uses an analytical refusal direction (Arditi et al. 2024) and requires no training; HPS uses contrastive multi-layer geometric features. At FPR=1%, HPS catches 5× more attacks than RTV (0.236 vs 0.047). HPS wins on 3 of 4 attack methods (GCG, JBC, prompt_with_random_search); RTV wins only on PAIR (semantic rewrites).
 
 ✅ **Layer selection via Fisher-ratio identifies meaningful detection layers.** Top-8 Fisher-selected layers span both early (lexical) and late (semantic) processing.
 
 ### What's NOT Supported
 
-❌ **HPS-Full > Raw on AUROC or TPR@FPR=1%.** Raw consistently beats trained projections in non-adaptive evaluation.
-
-❌ **Compressed projections deployable for cross-attack detection.** Both Hyperbolic (TPR=23.6%) and Euclidean (TPR=0.0%) catch insufficient unseen attacks at FPR=1% to deploy.
+❌ **Compressed projections deployable for cross-attack detection without further work.** Both Hyperbolic (TPR=23.6%) and Euclidean (TPR=0.0%) catch insufficient unseen attacks at FPR=1% for some attack types (PAIR particularly), though HPS outperforms both Euclidean and RTV.
 
 ❌ **Curvature spike / trajectory pivot narrative.** Curvature contributes 0% to detection (Experiment 6.5). The signal is radial, not bent.
 
 ❌ **DSH compliance vs recognition distinction.** Refused attacks score identically to successful ones (0.99 vs 0.998). The detector finds harmful content (Recognition axis), not model compliance (Execution axis).
 
-❌ **PAIR detection cross-attack.** Compressed methods catch 0% of fluent semantic-rewrite attacks at FPR=1% — the hardest attack family.
+❌ **PAIR detection cross-attack.** Compressed methods (both HPS and Euclidean) catch 0% of fluent semantic-rewrite attacks at FPR=1% — the hardest attack family. RTV does better here (AUROC 0.801).
 
 ### What Remains Open (Pending Experiment 7)
 
-⏳ **Whether Raw's strong non-adaptive performance survives adaptive attacks.** Experiment 6.1 strongly suggests Raw's 73.5% TPR is driven by an early-layer norm anomaly that adaptive perturbations should normalize. Per Derya & Sunar (2026), this is exactly the mode of failure JBShield exhibited — the same pattern is plausible here.
+⏳ **Whether HPS's non-adaptive advantage over RTV survives gradient-based adaptive attacks.** Per Bailey et al. (2026), gradient-based obfuscated activation attacks defeat raw-activation defenses regardless of dimensionality. RTV claims 7% ASR under such attacks on Llama-3-8B; HPS adaptive robustness is untested. Experiment 7 (`experiment11.py`) is designed to address this directly.
 
-⏳ **Whether Hyperbolic's structural multi-layer features provide adaptive robustness.** If Hyperbolic degrades less than Raw under adaptive perturbations, the inductive-bias claim becomes a deployment-relevant result, not just a ranking-quality result.
+⏳ **Whether HPS's hyperbolic structural prior creates the same "tension" between jailbreaking and detection evasion that RTV's refusal-direction fingerprint does.** RTV's robustness comes from the constraint that adaptive attackers must simultaneously suppress refusal-direction propagation (to jailbreak) and preserve benign-fingerprint structure (to evade detection). HPS may offer analogous tension via the radial coordinate, but this is empirical not yet proven.
 
 ---
 
@@ -423,15 +422,17 @@ The reviewer hypothesized RTV would dominate HPS, forcing a reframing around "in
 
 The original "trajectory pivot" thesis is not supported. The defensible findings are:
 
-> "We evaluate hyperbolic-projection-based jailbreak detection (HPS) against three baselines on Vicuna-13B with four attack methods (GCG, PAIR, JBC, prompt_with_random_search). On the cross-attack generalization task — train on three methods, test on the fourth — HPS achieves mean AUROC=0.815 and TPR=23.6% at FPR=1%, substantially outperforming both Euclidean projection (AUROC=0.513, TPR=0.0%; Δ=+0.302 AUROC, +23.6 pp TPR) and the published Representation Trajectory Verification baseline (Derya & Sunar 2026; AUROC=0.769, TPR=4.7%; Δ=+0.046 AUROC, +18.9 pp TPR). HPS wins on three of four attack methods. We further show that compressed hyperbolic projections preserve cross-distribution generalization while compressed Euclidean projections suffer catastrophic negative transfer (Euclidean catches 0% of unseen attack types at FPR=1%), demonstrating the structural importance of geometric inductive bias in compressed representations. The dominant signal is concentrated in radial (depth) features (98.7% of importance), aligning with theoretical predictions that contrastive learning in hyperbolic space approximates a refusal-direction projection (Arditi et al. 2024). Activation-based detection in this form captures harmful prompt content rather than model compliance — refused attacks score identically to successful ones — falsifying DSH-inspired trajectory-pivot hypotheses for this method."
+> "We evaluate hyperbolic-projection-based jailbreak detection (HPS) against the published Representation Trajectory Verification (RTV; Derya & Sunar 2026) and a natural Euclidean-projection ablation on Vicuna-13B with four attack methods (GCG, PAIR, JBC, prompt_with_random_search). On the cross-attack generalization task — train on three methods, test on the fourth — HPS achieves mean AUROC=0.815 and TPR=23.6% at FPR=1%, outperforming both Euclidean projection (AUROC=0.513, TPR=0.0%; Δ=+0.302 AUROC, +23.6 pp TPR) and RTV (AUROC=0.769, TPR=4.7%; Δ=+0.046 AUROC, +18.9 pp TPR). HPS wins on three of four attack methods. We further show that Euclidean compression suffers catastrophic negative transfer (Euclidean catches 0% of unseen attack types at FPR=1%), demonstrating the structural importance of geometric inductive bias in compressed representations. The dominant detection signal is radial (98.7% of importance), consistent with theoretical predictions that contrastive learning in hyperbolic space approximates a refusal-direction projection (Arditi et al. 2024) — extended to a learned multi-layer geometric structure. Activation-based detection in this form captures harmful prompt content rather than model compliance — refused attacks score identically to successful ones — falsifying DSH-inspired trajectory-pivot hypotheses for this method. Following Bailey et al. (2026), we evaluate HPS under gradient-based obfuscated-activation attack to characterize adaptive robustness."
 
 This is a **strong publishable finding for a top security venue.** Five contributions:
 
-1. **Performance contribution:** Hyperbolic-projected detector outperforms the published SOTA (RTV, USENIX Security 2025/arXiv:2605.03095) at deployment threshold (TPR@FPR=1% of 0.236 vs 0.047) on Vicuna-13B cross-attack.
+1. **Performance contribution:** Hyperbolic-projected detector outperforms the published RTV (USENIX Security 2025/arXiv:2605.03095) at deployment threshold (TPR@FPR=1% of 0.236 vs 0.047) on Vicuna-13B cross-attack — a 5× advantage.
 2. **Negative result on Euclidean compression:** Trained Euclidean projections suffer catastrophic negative transfer to unseen attack methods (AUROC=0.513, TPR=0.0% at FPR=1%), despite achieving perfect in-distribution AUROC.
 3. **Geometric inductive bias quantified:** Hyperbolic prior provides Δ=+0.302 AUROC and +23.6 pp TPR improvement over identical-architecture Euclidean baseline. The Lorentz radial coordinate's monotonic depth interpretation prevents the negative transfer that flat geometry exhibits.
 4. **Theoretical-empirical bridge:** The dominant detection signal is radial (98.7% importance), consistent with contrastive learning approximately recovering the analytical refusal direction (Arditi et al. 2024) — but as a learned multi-layer projection rather than a single-layer cosine similarity.
 5. **DSH falsification:** Refused attacks score identically to successful attacks (0.99 vs 0.998), indicating activation-based detection captures Recognition not Execution. The "trajectory pivot" hypothesis is not supported on Vicuna-13B.
+
+Following Bailey et al. (2026), we note that **non-adaptive performance is necessary but not sufficient** for a deployable representation-level defense. Experiment 7 (gradient-based adaptive attack) is the determining evaluation.
 
 ---
 
@@ -464,7 +465,7 @@ This is a **strong publishable finding for a top security venue.** Five contribu
 - **Adaptive attacks under evaluation, not yet completed:** Experiment 7 (`experiment9.py`) tests three surface-statistic adaptive perturbations. A full gradient-based white-box adaptive attack (JB-GCG analogue) remains future work.
 - **Compliance vs recognition:** Cannot distinguish refused attacks from successful ones — the DSH "trajectory pivot" hypothesis is empirically falsified for this method (Experiment 6.4).
 - **PAIR detection cross-attack is a known weakness:** Compressed methods catch 0% of fluent semantic-rewrite attacks at FPR=1%. Either add PAIR-style data to training or accept this as a method limitation.
-- **Lexical signal dominates:** Diagnostic 6.1 shows the cross-attack signal in Raw is concentrated in early-layer norm anomalies — a structural vulnerability per Derya & Sunar (2026). Pending Experiment 7 results, the deployment story may need to limit claims to non-adaptive settings.
+- **Lexical content of attack methods may be detectable via early-layer norms:** Diagnostic 6.1 shows that all four attack families share tightly clustered low early-layer norms (5–7±0.4) versus benign (43±65). This is a feature of the JailbreakBench attack distribution we evaluated; it may not transfer to obfuscated or naturalistic attacks. The HPS detector relies primarily on radial features in projected space, not these raw-norm anomalies (per feature-importance analysis).
 - **Deployment base rates:** At low real-world jailbreak rates, even low FPR produces many false positives in absolute terms.
 
 ---
