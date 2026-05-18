@@ -102,29 +102,60 @@ class HPSScorer(nn.Module):
             x_proj_list.append(x_proj.squeeze(0))
         x_lorentz = torch.stack(x_proj_list, dim=0)  # (n_layers, d_proj+1)
 
-        # Trajectory features (differentiable subset)
-        # Use radius (time coordinate) + simple displacement features
-        radii = x_lorentz[:, 0]  # (n_layers,)
-        norms = torch.norm(x_lorentz[:, 1:], dim=1)  # spatial norms
-        # 12 features matching extract_trajectory_features
-        feats = torch.cat([
-            norms.mean().unsqueeze(0),
-            norms.max().unsqueeze(0),
-            norms.min().unsqueeze(0),
-            norms.std().unsqueeze(0),
-            (norms.max() - norms.min()).unsqueeze(0),
-            # curvature placeholders (zero-importance per Diagnostic 6.5)
-            torch.zeros(4, device=device),
-            # displacement features
-            torch.norm(x_lorentz[-1] - x_lorentz[0]).unsqueeze(0),
-            sum(torch.norm(x_lorentz[j+1] - x_lorentz[j])
-                for j in range(n_layers - 1)).unsqueeze(0),
-            (torch.norm(x_lorentz[-1] - x_lorentz[0]) /
-             (sum(torch.norm(x_lorentz[j+1] - x_lorentz[j])
-                  for j in range(n_layers - 1)) + 1e-8)).unsqueeze(0),
-        ])  # (12,)
+        # Match extract_trajectory_features EXACTLY:
+        #   - radii = TIME coordinate (h[:, 0]), NOT spatial norms
+        #   - distances = Lorentz geodesic, NOT Euclidean
+        #   - all 12 features computed correctly
+        k = self.proj.k
+        radii = x_lorentz[:, 0]
 
-        # Standardize and apply logistic regression
+        def lorentz_inner(x, y):
+            return -x[0] * y[0] + (x[1:] * y[1:]).sum()
+
+        def lorentz_dist(x, y):
+            inner = lorentz_inner(x, y)
+            arg = -k * inner
+            arg = torch.clamp(arg, min=1.0 + 1e-7)
+            return torch.log(arg + torch.sqrt(arg * arg - 1.0)) / torch.sqrt(k)
+
+        # Curvature: triangle-inequality deviation in Lorentz distance
+        curvatures = []
+        for j in range(1, n_layers - 1):
+            d_prev = lorentz_dist(x_lorentz[j], x_lorentz[j - 1])
+            d_next = lorentz_dist(x_lorentz[j + 1], x_lorentz[j])
+            d_span = lorentz_dist(x_lorentz[j + 1], x_lorentz[j - 1])
+            denom = d_prev + d_next + 1e-8
+            curvatures.append(torch.abs(d_prev + d_next - d_span) / denom)
+        curv = torch.stack(curvatures) if curvatures else torch.zeros(1, device=device)
+
+        # Lorentz displacement features
+        d_total = lorentz_dist(x_lorentz[0], x_lorentz[-1])
+        path_segments = [lorentz_dist(x_lorentz[j], x_lorentz[j + 1])
+                         for j in range(n_layers - 1)]
+        path_len = torch.stack(path_segments).sum() if path_segments else torch.zeros(1, device=device).squeeze()
+
+        # Soft argmax for spike location (differentiable approximation)
+        if len(curv) > 0:
+            spike_loc = (torch.softmax(curv * 10.0, dim=0) *
+                         torch.arange(len(curv), dtype=torch.float32, device=device)).sum() / max(len(curv), 1)
+        else:
+            spike_loc = torch.zeros(1, device=device).squeeze()
+
+        feats = torch.stack([
+            radii.mean(),
+            radii.max(),
+            radii.min(),
+            radii.std(),
+            radii.max() - radii.min(),
+            curv.max() if len(curv) > 0 else torch.zeros(1, device=device).squeeze(),
+            curv.mean() if len(curv) > 0 else torch.zeros(1, device=device).squeeze(),
+            curv.std() if len(curv) > 1 else torch.zeros(1, device=device).squeeze(),
+            spike_loc,
+            d_total,
+            path_len,
+            d_total / (path_len + 1e-8),
+        ])
+
         feats_s = (feats - self.scaler_mean) / (self.scaler_std + 1e-8)
         logit = torch.dot(feats_s, self.clf_coef) + self.clf_intercept
         return torch.sigmoid(logit)
@@ -153,19 +184,47 @@ class EuclideanScorer(nn.Module):
             h_proj_list.append(hp)
         h_proj = torch.stack(h_proj_list, dim=0)  # (n_layers, d_proj)
 
+        # Match train_and_extract_euclidean's feats_for() exactly:
+        #   - norms in projected space
+        #   - Euclidean curvature (triangle inequality)
+        #   - all 12 features
         norms = torch.norm(h_proj, dim=1)
-        feats = torch.cat([
-            norms.mean().unsqueeze(0),
-            norms.max().unsqueeze(0),
-            norms.min().unsqueeze(0),
-            norms.std().unsqueeze(0),
-            (norms.max() - norms.min()).unsqueeze(0),
-            torch.zeros(4, device=device),
-            torch.norm(h_proj[-1] - h_proj[0]).unsqueeze(0),
-            sum(torch.norm(h_proj[j+1] - h_proj[j]) for j in range(n_layers - 1)).unsqueeze(0),
-            (torch.norm(h_proj[-1] - h_proj[0]) /
-             (sum(torch.norm(h_proj[j+1] - h_proj[j]) for j in range(n_layers - 1)) + 1e-8)).unsqueeze(0),
+
+        curvatures = []
+        for j in range(1, n_layers - 1):
+            d_prev = torch.norm(h_proj[j] - h_proj[j - 1])
+            d_next = torch.norm(h_proj[j + 1] - h_proj[j])
+            d_span = torch.norm(h_proj[j + 1] - h_proj[j - 1])
+            denom = d_prev + d_next + 1e-8
+            curvatures.append(torch.abs(d_prev + d_next - d_span) / denom)
+        curv = torch.stack(curvatures) if curvatures else torch.zeros(1, device=device)
+
+        d_total = torch.norm(h_proj[-1] - h_proj[0])
+        path_segments = [torch.norm(h_proj[j + 1] - h_proj[j])
+                         for j in range(n_layers - 1)]
+        path_len = torch.stack(path_segments).sum() if path_segments else torch.zeros(1, device=device).squeeze()
+
+        if len(curv) > 0:
+            spike_loc = (torch.softmax(curv * 10.0, dim=0) *
+                         torch.arange(len(curv), dtype=torch.float32, device=device)).sum() / max(len(curv), 1)
+        else:
+            spike_loc = torch.zeros(1, device=device).squeeze()
+
+        feats = torch.stack([
+            norms.mean(),
+            norms.max(),
+            norms.min(),
+            norms.std(),
+            norms.max() - norms.min(),
+            curv.max() if len(curv) > 0 else torch.zeros(1, device=device).squeeze(),
+            curv.mean() if len(curv) > 0 else torch.zeros(1, device=device).squeeze(),
+            curv.std() if len(curv) > 1 else torch.zeros(1, device=device).squeeze(),
+            spike_loc,
+            d_total,
+            path_len,
+            d_total / (path_len + 1e-8),
         ])
+
         feats_s = (feats - self.scaler_mean) / (self.scaler_std + 1e-8)
         logit = torch.dot(feats_s, self.clf_coef) + self.clf_intercept
         return torch.sigmoid(logit)

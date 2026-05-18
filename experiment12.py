@@ -65,19 +65,20 @@ CLEAN_LOSS_WEIGHT = 0.5  # weight on clean loss (mix to avoid forgetting clean p
 #  PGD inner loop (find worst-case delta)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def pgd_find_worst_delta(proj_h, X_layer, y, eps, n_steps, alpha):
+def pgd_find_worst_delta(proj_h, X_layer, y, eps, n_steps, alpha, layer_idx):
     """Find delta within L_inf ball that MAXIMIZES the contrastive loss.
 
     X_layer: (B, d_hidden) - clean activations at one layer
     y: (B,) - labels
+    layer_idx: which layer this is (used for per-layer tau)
 
     Returns: delta of shape X_layer.shape
     """
     delta = torch.zeros_like(X_layer, requires_grad=True)
     for _ in range(n_steps):
         h = proj_h(X_layer + delta)
-        # Use the SAME loss the defender minimizes
-        loss = contrastive_loss(h, y, k=proj_h.k, tau=proj_h.tau(0))
+        # Use the SAME tau the defender will use for this layer
+        loss = contrastive_loss(h, y, k=proj_h.k, tau=proj_h.tau(layer_idx))
         # Attacker MAXIMIZES this loss
         grad = torch.autograd.grad(loss, delta, create_graph=False)[0]
         with torch.no_grad():
@@ -103,7 +104,7 @@ def adversarial_train_step(proj_h, X, y, optimizer, eps, n_pgd_steps, alpha,
     # Find worst-case delta per layer (independent perturbations)
     deltas = []
     for l in range(n_layers):
-        delta_l = pgd_find_worst_delta(proj_h, X[:, l, :], y, eps, n_pgd_steps, alpha)
+        delta_l = pgd_find_worst_delta(proj_h, X[:, l, :], y, eps, n_pgd_steps, alpha, layer_idx=l)
         deltas.append(delta_l)
 
     # Compute clean and adversarial losses
@@ -308,7 +309,11 @@ def main():
         "self_attack": {},
     }
 
-    # Build a differentiable scorer to attack against
+    # Build a differentiable scorer to attack against.
+    # Mirrors extract_trajectory_features exactly:
+    #   - radii = TIME coordinate (h[:, 0]) NOT spatial norms
+    #   - distances = Lorentz geodesic distance NOT Euclidean
+    #   - all 12 features computed (not 8 + 4 zeros)
     class HPSAdvScorer(nn.Module):
         def __init__(self, proj, sc, clf, n_layers):
             super().__init__()
@@ -319,28 +324,77 @@ def main():
             self.register_buffer("clf_coef", torch.tensor(clf.coef_[0], dtype=torch.float32))
             self.register_buffer("clf_intercept", torch.tensor(float(clf.intercept_[0]), dtype=torch.float32))
 
+        @staticmethod
+        def lorentz_inner(x, y):
+            """⟨x,y⟩_L = -x_0 y_0 + sum_i x_i y_i (signature -+++)"""
+            return -x[0] * y[0] + (x[1:] * y[1:]).sum()
+
+        def lorentz_distance(self, x, y):
+            """Differentiable Lorentz geodesic distance.
+            d(x,y) = (1/sqrt(k)) * arccosh(-k <x,y>_L), with -k<x,y>_L ≥ 1.
+            """
+            k = self.proj.k
+            inner = self.lorentz_inner(x, y)
+            arg = -k * inner
+            # Clamp to avoid arccosh of < 1 due to numerical error
+            arg = torch.clamp(arg, min=1.0 + 1e-7)
+            # arccosh(z) = log(z + sqrt(z^2 - 1)), differentiable
+            arccosh = torch.log(arg + torch.sqrt(arg * arg - 1.0))
+            return arccosh / torch.sqrt(k)
+
         def forward(self, h, return_logit=False):
             n_layers, d_hidden = h.shape
+            # Project each layer to the Lorentz hyperboloid
             x_lorentz_list = []
             for l in range(n_layers):
                 x_lorentz_list.append(self.proj(h[l].unsqueeze(0)).squeeze(0))
-            x_lorentz = torch.stack(x_lorentz_list, dim=0)
+            x_lorentz = torch.stack(x_lorentz_list, dim=0)  # (n_layers, d_proj+1)
 
-            norms = torch.norm(x_lorentz[:, 1:], dim=1)
-            feats = torch.cat([
-                norms.mean().unsqueeze(0),
-                norms.max().unsqueeze(0),
-                norms.min().unsqueeze(0),
-                norms.std().unsqueeze(0),
-                (norms.max() - norms.min()).unsqueeze(0),
-                torch.zeros(4, device=h.device),
-                torch.norm(x_lorentz[-1] - x_lorentz[0]).unsqueeze(0),
-                sum(torch.norm(x_lorentz[j+1] - x_lorentz[j])
-                    for j in range(n_layers - 1)).unsqueeze(0),
-                (torch.norm(x_lorentz[-1] - x_lorentz[0]) /
-                 (sum(torch.norm(x_lorentz[j+1] - x_lorentz[j])
-                      for j in range(n_layers - 1)) + 1e-8)).unsqueeze(0),
+            # Radial features: TIME coordinate (matches extract_trajectory_features)
+            radii = x_lorentz[:, 0]
+
+            # Curvature features (triangle-inequality deviation in Lorentz distance)
+            curvatures = []
+            for j in range(1, n_layers - 1):
+                d_prev = self.lorentz_distance(x_lorentz[j], x_lorentz[j - 1])
+                d_next = self.lorentz_distance(x_lorentz[j + 1], x_lorentz[j])
+                d_span = self.lorentz_distance(x_lorentz[j + 1], x_lorentz[j - 1])
+                denom = d_prev + d_next + 1e-8
+                kappa = torch.abs(d_prev + d_next - d_span) / denom
+                curvatures.append(kappa)
+            if len(curvatures) > 0:
+                curv = torch.stack(curvatures)
+            else:
+                curv = torch.zeros(1, device=h.device)
+
+            # Lorentz displacement features
+            d_total = self.lorentz_distance(x_lorentz[0], x_lorentz[-1])
+            path_segments = []
+            for j in range(n_layers - 1):
+                path_segments.append(self.lorentz_distance(x_lorentz[j], x_lorentz[j + 1]))
+            path_len = torch.stack(path_segments).sum() if path_segments else torch.zeros(1, device=h.device).squeeze()
+
+            # Build the 12 features in the SAME order as extract_trajectory_features
+            # Note: argmax is non-differentiable; we use a soft argmax via softmax indexing
+            curv_max_arg = (torch.softmax(curv * 10.0, dim=0) *
+                            torch.arange(len(curv), dtype=torch.float32, device=h.device)).sum()
+            spike_loc = curv_max_arg / max(len(curv), 1)
+
+            feats = torch.stack([
+                radii.mean(),
+                radii.max(),
+                radii.min(),
+                radii.std(),
+                radii.max() - radii.min(),
+                curv.max(),
+                curv.mean(),
+                curv.std() if len(curv) > 1 else torch.zeros(1, device=h.device).squeeze(),
+                spike_loc,
+                d_total,
+                path_len,
+                d_total / (path_len + 1e-8),
             ])
+
             feats_s = (feats - self.scaler_mean) / (self.scaler_std + 1e-8)
             logit = torch.dot(feats_s, self.clf_coef) + self.clf_intercept
             if return_logit:
