@@ -284,7 +284,7 @@ def main():
     print(f"  (PGD on test attacks; lower evasion = more robust)")
     print(f"{'─'*60}")
 
-    eval_epsilons = [0.001, 0.01, 0.05, 0.1, 0.5, 1.0]
+    eval_epsilons = [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 20.0, 100.0]
 
     # Build a simple forward-pass scorer (just contrastive distance to benign cluster)
     # We use the contrastive loss "attack-class similarity" as an attack target
@@ -319,7 +319,7 @@ def main():
             self.register_buffer("clf_coef", torch.tensor(clf.coef_[0], dtype=torch.float32))
             self.register_buffer("clf_intercept", torch.tensor(float(clf.intercept_[0]), dtype=torch.float32))
 
-        def forward(self, h):
+        def forward(self, h, return_logit=False):
             n_layers, d_hidden = h.shape
             x_lorentz_list = []
             for l in range(n_layers):
@@ -343,22 +343,46 @@ def main():
             ])
             feats_s = (feats - self.scaler_mean) / (self.scaler_std + 1e-8)
             logit = torch.dot(feats_s, self.clf_coef) + self.clf_intercept
+            if return_logit:
+                return logit
             return torch.sigmoid(logit)
 
     scorer = HPSAdvScorer(proj_h, sc, clf, n_layers).to(device).eval()
 
-    # PGD on test attacks
+    # ── DIAGNOSTIC: Check for gradient masking via logit range ──
+    print(f"\n  Diagnostic: checking for gradient masking (saturated sigmoid)...")
+    benign_logits = []
+    attack_logits = []
+    for i in range(min(20, len(X_test_ben))):
+        h_t = torch.tensor(X_test_ben[i], dtype=torch.float32, device=device)
+        with torch.no_grad():
+            l = scorer(h_t, return_logit=True).item()
+        benign_logits.append(l)
+    for i in range(min(20, len(X_test_atk))):
+        h_t = torch.tensor(X_test_atk[i], dtype=torch.float32, device=device)
+        with torch.no_grad():
+            l = scorer(h_t, return_logit=True).item()
+        attack_logits.append(l)
+    print(f"    Benign logit range: [{min(benign_logits):.2f}, {max(benign_logits):.2f}]  mean={np.mean(benign_logits):.2f}")
+    print(f"    Attack logit range: [{min(attack_logits):.2f}, {max(attack_logits):.2f}]  mean={np.mean(attack_logits):.2f}")
+    if min(attack_logits) > 5.0:
+        print(f"    ⚠ Attack logits very large (>5) — sigmoid saturated. Attacking logit directly to avoid gradient masking.")
+
+    # PGD on test attacks (attack the LOGIT to avoid sigmoid saturation / gradient masking)
     def pgd_minimize_score(scorer, h, eps, n_steps=50):
+        """Minimize logit (pre-sigmoid). Avoids gradient masking from saturated sigmoid.
+        See Athalye et al. 2018, Carlini & Wagner 2017."""
         h0 = h.detach().clone()
         delta = torch.zeros_like(h0, requires_grad=True)
         lr = (eps / max(n_steps, 1)) * 2.5
         for _ in range(n_steps):
-            score = scorer(h0 + delta)
-            grad = torch.autograd.grad(score, delta, create_graph=False)[0]
+            logit = scorer(h0 + delta, return_logit=True)
+            grad = torch.autograd.grad(logit, delta, create_graph=False)[0]
             with torch.no_grad():
                 delta_new = delta - lr * torch.sign(grad)
                 delta_new = torch.clamp(delta_new, -eps, +eps)
             delta = delta_new.detach().requires_grad_(True)
+        # Return final score (post-sigmoid) for evasion comparison
         return float(scorer(h0 + delta.detach()))
 
     for eps in eval_epsilons:
