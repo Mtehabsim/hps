@@ -146,102 +146,157 @@ def make_summary_figure():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def make_concept_figure():
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
     np.random.seed(42)
     n = 60
 
-    # Generate fake data: benign near origin, attacks toward boundary
-    # Euclidean view: linear separation (overfits direction-specific)
-    benign_e = np.random.randn(n, 2) * 0.4
-    # Three "attack types" come from different directions
-    angles = [0.4, 1.6, 2.8]  # different angular positions
-    attacks_e = []
-    attack_labels = ["GCG", "JBC", "PAIR"]
-    for ang in angles:
-        cluster = np.array([[np.cos(ang), np.sin(ang)]]) * np.random.uniform(2.0, 3.0, (n // 3, 1))
-        cluster += np.random.randn(n // 3, 2) * 0.3
-        attacks_e.append(cluster)
+    # ───────────────────────────────────────────────────────────────────
+    #  Key insight:
+    #  Euclidean contrastive loss pushes TRAINED attacks far from benign
+    #  in specific learned directions, but held-out attack types may not
+    #  be radially separated at all — they can land NEAR benign in the
+    #  trained projection space because the projection only learned to
+    #  separate attacks IN DIRECTIONS IT SAW.
+    #
+    #  Hyperbolic geodesic loss makes radius the dominant signal because
+    #  hyperbolic distance grows exponentially with radius — the loss
+    #  landscape rewards pushing ALL attacks to high radius regardless
+    #  of angular direction.
+    # ───────────────────────────────────────────────────────────────────
 
-    # ── Panel 1: Euclidean ──
+    angles_train = [0.4, 1.6, 4.0]   # GCG, JBC, Random Search (in training)
+    angle_holdout = 2.8              # PAIR (held out)
+    attack_train_labels = ["GCG (train)", "JBC (train)", "Random Search (train)"]
+    train_colors = ["#D62828", "#F77F00", "#FCBF49"]
+    holdout_color = "#7E1F86"
+
+    # ───────────────────────────────────────────────────────────────────
+    #  Left panel: Euclidean trained projection
+    # ───────────────────────────────────────────────────────────────────
     ax1 = axes[0]
+    benign_e = np.random.randn(n, 2) * 0.4
+
+    # Trained attacks pushed far in specific learned directions
+    train_attacks_e = []
+    for ang in angles_train:
+        cluster = np.array([[np.cos(ang), np.sin(ang)]]) * np.random.uniform(2.2, 3.0, (n // 3, 1))
+        cluster += np.random.randn(n // 3, 2) * 0.25
+        train_attacks_e.append(cluster)
+
+    # Held-out PAIR attacks: NOT pushed to high radius because projection
+    # never saw this direction during contrastive training. Lands AMONG benign.
+    pair_e = np.array([[np.cos(angle_holdout), np.sin(angle_holdout)]]) * np.random.uniform(0.6, 1.0, (n // 3, 1))
+    pair_e += np.random.randn(n // 3, 2) * 0.35
+
+    # Plot
     ax1.scatter(benign_e[:, 0], benign_e[:, 1], c=COLOR_BENIGN, s=40, alpha=0.7,
                 edgecolor="darkgreen", linewidth=0.5, label="Benign")
-    attack_colors_eu = ["#D62828", "#F77F00", "#FCBF49"]
-    for i, (atk, lbl) in enumerate(zip(attacks_e, attack_labels)):
-        ax1.scatter(atk[:, 0], atk[:, 1], c=attack_colors_eu[i], s=40, alpha=0.7,
-                    edgecolor="darkred", linewidth=0.5, label=f"{lbl} attacks")
-    # Draw a Euclidean "decision boundary" that catches GCG but misses PAIR
-    boundary_x = np.linspace(-3.5, 3.5, 100)
-    boundary_y = -0.4 * boundary_x + 0.5  # arbitrary linear boundary fit to GCG
-    ax1.plot(boundary_x, boundary_y, "k--", linewidth=2, label="Trained decision boundary")
-    # Annotate the failure
-    ax1.annotate("PAIR attacks\nfall on benign side\n→ negative transfer",
-                 xy=(attacks_e[2][:, 0].mean(), attacks_e[2][:, 1].mean()),
-                 xytext=(-3.5, -2),
-                 fontsize=10, color="darkred",
-                 arrowprops=dict(arrowstyle="->", color="darkred", lw=1.2),
-                 ha="left")
-    ax1.set_xlim(-4, 4)
-    ax1.set_ylim(-3, 3.5)
+    for i, (atk, lbl) in enumerate(zip(train_attacks_e, attack_train_labels)):
+        ax1.scatter(atk[:, 0], atk[:, 1], c=train_colors[i], s=40, alpha=0.7,
+                    edgecolor="darkred", linewidth=0.5, label=lbl)
+    ax1.scatter(pair_e[:, 0], pair_e[:, 1], c=holdout_color, s=70,
+                marker="*", alpha=0.9, edgecolor="black", linewidth=0.8,
+                label="PAIR (HELD OUT)")
+
+    # Draw the "circular boundary the mentor asks about"
+    circle_e = plt.Circle((0, 0), 1.5, color="blue", fill=False, linestyle=":", linewidth=2.0)
+    ax1.add_patch(circle_e)
+    ax1.text(0, -3.2, "If you tried a circular threshold (||x|| > R):\nPAIR is at low radius — it falls INSIDE the circle\nand is misclassified as benign.",
+             ha="center", fontsize=9, color="blue", fontweight="bold")
+
+    ax1.annotate("PAIR lands NEAR benign:\nprojection W never saw\nthis direction during training,\nso it didn't push PAIR outward.",
+                 xy=(pair_e[:, 0].mean(), pair_e[:, 1].mean()),
+                 xytext=(-3.7, 1.5),
+                 fontsize=9, color=holdout_color,
+                 arrowprops=dict(arrowstyle="->", color=holdout_color, lw=1.4),
+                 ha="left", fontweight="bold")
+
+    ax1.set_xlim(-4.5, 4.0)
+    ax1.set_ylim(-4.0, 3.5)
     ax1.set_aspect("equal")
-    ax1.set_title("Euclidean Projection (catastrophic cross-attack failure)",
+    ax1.set_title("Euclidean Contrastive Projection",
                   fontweight="bold")
-    ax1.set_xlabel("Projected dim 1")
-    ax1.set_ylabel("Projected dim 2")
+    ax1.set_xlabel("Trained projection dim 1\n(direction-specific contrastive separation)")
+    ax1.set_ylabel("Trained projection dim 2")
     ax1.legend(loc="upper right", framealpha=0.95, fontsize=8)
     ax1.grid(alpha=0.3)
 
-    # ── Panel 2: Hyperbolic ──
+    # ───────────────────────────────────────────────────────────────────
+    #  Right panel: Hyperbolic trained projection (Poincaré disk view)
+    # ───────────────────────────────────────────────────────────────────
     ax2 = axes[1]
-    # Poincaré disk visualization
     theta = np.linspace(0, 2 * np.pi, 200)
-    ax2.plot(np.cos(theta), np.sin(theta), "k-", linewidth=2)  # boundary
+    ax2.plot(np.cos(theta), np.sin(theta), "k-", linewidth=2.5)
+    ax2.fill(np.cos(theta), np.sin(theta), color="#E8F4F8", alpha=0.3)
 
-    # Benign at small radius (interior), attacks at large radius (near boundary)
-    benign_r = np.random.uniform(0, 0.3, n)
+    benign_r = np.random.uniform(0, 0.30, n)
     benign_theta = np.random.uniform(0, 2 * np.pi, n)
     benign_h = np.column_stack([benign_r * np.cos(benign_theta),
                                  benign_r * np.sin(benign_theta)])
 
-    # Attacks at high radius BUT distributed in different angles
-    attacks_h = []
-    for ang in angles:
-        atk_r = np.random.uniform(0.75, 0.92, n // 3)
-        atk_theta = ang + np.random.randn(n // 3) * 0.25
+    # Trained attacks at high radius
+    train_attacks_h = []
+    for ang in angles_train:
+        atk_r = np.random.uniform(0.78, 0.92, n // 3)
+        atk_theta = ang + np.random.randn(n // 3) * 0.20
         atk = np.column_stack([atk_r * np.cos(atk_theta),
                                 atk_r * np.sin(atk_theta)])
-        attacks_h.append(atk)
+        train_attacks_h.append(atk)
 
-    ax2.scatter(benign_h[:, 0], benign_h[:, 1], c=COLOR_BENIGN, s=40, alpha=0.7,
+    # Held-out PAIR ALSO at high radius — because hyperbolic geodesic
+    # distance penalizes ANY point near origin if it's labeled adversarial,
+    # so the contrastive loss pressures the projection to push ALL attack
+    # representations toward the boundary regardless of angular direction.
+    pair_r = np.random.uniform(0.74, 0.88, n // 3)
+    pair_theta = angle_holdout + np.random.randn(n // 3) * 0.20
+    pair_h = np.column_stack([pair_r * np.cos(pair_theta),
+                               pair_r * np.sin(pair_theta)])
+
+    ax2.scatter(benign_h[:, 0], benign_h[:, 1], c=COLOR_BENIGN, s=40, alpha=0.8,
                 edgecolor="darkgreen", linewidth=0.5, label="Benign (near origin)")
-    for i, (atk, lbl) in enumerate(zip(attacks_h, attack_labels)):
-        ax2.scatter(atk[:, 0], atk[:, 1], c=attack_colors_eu[i], s=40, alpha=0.7,
-                    edgecolor="darkred", linewidth=0.5, label=f"{lbl} attacks")
-    # Radial boundary
-    boundary = plt.Circle((0, 0), 0.55, color="black", fill=False,
-                          linestyle="--", linewidth=2)
+    for i, (atk, lbl) in enumerate(zip(train_attacks_h, attack_train_labels)):
+        ax2.scatter(atk[:, 0], atk[:, 1], c=train_colors[i], s=40, alpha=0.8,
+                    edgecolor="darkred", linewidth=0.5, label=lbl)
+    ax2.scatter(pair_h[:, 0], pair_h[:, 1], c=holdout_color, s=80,
+                marker="*", alpha=0.95, edgecolor="black", linewidth=0.8,
+                label="PAIR (HELD OUT)")
+
+    # Radial threshold
+    boundary = plt.Circle((0, 0), 0.55, color="blue", fill=False,
+                          linestyle=":", linewidth=2.5)
     ax2.add_patch(boundary)
-    ax2.text(0, -0.65, "Radial threshold\n(direction-agnostic)",
-             ha="center", fontsize=9, fontweight="bold")
-    # Annotate the success
-    ax2.annotate("All attacks at\nhigh radius regardless\nof direction\n→ generalizes",
-                 xy=(0.7, 0.7), xytext=(1.05, 0.3),
-                 fontsize=9, color="darkblue",
-                 arrowprops=dict(arrowstyle="->", color="darkblue", lw=1.2),
-                 ha="left")
-    ax2.set_xlim(-1.4, 2.0)
-    ax2.set_ylim(-1.3, 1.5)
+    ax2.text(0, -1.45, "Radial threshold (||x|| > R) catches ALL attacks\nincluding PAIR — the geometry forces it.",
+             ha="center", fontsize=9, color="blue", fontweight="bold")
+
+    ax2.annotate("PAIR is pushed to HIGH RADIUS\n(hyperbolic loss penalty grows\nexponentially with distance from origin\n→ ALL attacks land at boundary)",
+                 xy=(pair_h[:, 0].mean(), pair_h[:, 1].mean()),
+                 xytext=(-1.4, 1.05),
+                 fontsize=9, color=holdout_color,
+                 arrowprops=dict(arrowstyle="->", color=holdout_color, lw=1.4),
+                 ha="left", fontweight="bold")
+
+    ax2.set_xlim(-1.6, 1.6)
+    ax2.set_ylim(-1.7, 1.5)
     ax2.set_aspect("equal")
-    ax2.set_title("Hyperbolic Projection (radial separation generalizes)",
+    ax2.set_title("Hyperbolic Contrastive Projection (Poincaré disk view)",
                   fontweight="bold")
-    ax2.set_xlabel("x₁")
-    ax2.set_ylabel("x₂")
+    ax2.set_xlabel("Lorentz coordinate x₁\n(radius = ||x|| has consistent meaning across directions)")
+    ax2.set_ylabel("Lorentz coordinate x₂")
     ax2.legend(loc="upper right", framealpha=0.95, fontsize=8)
     ax2.grid(alpha=0.3)
 
-    fig.suptitle("Why Hyperbolic Geometry Helps Cross-Attack Generalization",
-                 fontweight="bold", y=1.02)
+    fig.suptitle("Why a Euclidean Circle Doesn't Solve It — Hyperbolic Geometry Changes the Training Dynamics",
+                 fontweight="bold", y=1.00, fontsize=13)
+
+    # Add explanatory caption below
+    fig.text(0.5, -0.04,
+             "KEY INSIGHT: It's not just about the boundary shape — it's about where the TRAINED PROJECTION places held-out attacks.\n"
+             "In Euclidean space, contrastive loss creates DIRECTION-SPECIFIC separation: attacks that match training-direction features get pushed away;\n"
+             "novel-direction attacks (e.g., PAIR) stay near origin and even a circular boundary fails to catch them.\n"
+             "In hyperbolic space, geodesic distance grows exponentially with radius, so the loss rewards pushing ALL attacks to the boundary regardless of direction.",
+             ha="center", fontsize=10, style="italic", color="#222")
+
     out_path = os.path.join(OUT_DIR, "hps_concept.png")
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     print(f"Saved → {out_path}")
