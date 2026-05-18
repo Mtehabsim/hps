@@ -396,6 +396,7 @@ def main():
             ])
 
             feats_s = (feats - self.scaler_mean) / (self.scaler_std + 1e-8)
+            feats_s = feats_s.float()
             logit = torch.dot(feats_s, self.clf_coef) + self.clf_intercept
             if return_logit:
                 return logit
