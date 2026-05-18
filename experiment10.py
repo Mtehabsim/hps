@@ -341,29 +341,38 @@ def main():
         adv_acts, benign_acts, RTV_LAYERS
     )
 
-    # Try to load HPS-trained W from exp8 results / saved model
-    hps_W_path = os.path.join(
-        os.path.dirname(__file__),
-        "results", "hps_full_model.pt"
-    )
+    # Try to load HPS-trained W from saved checkpoint
+    hps_W_path = os.path.join(config.RESULTS_DIR, "hps_projection_head.pt")
 
     direction_results = {}
     if os.path.exists(hps_W_path):
         try:
-            ckpt = torch.load(hps_W_path, map_location="cpu")
-            W = ckpt.get("W")
-            if W is not None:
-                # W: (d_proj, d_hidden) — principal singular direction
-                if isinstance(W, torch.Tensor):
-                    W_np = W.detach().cpu().numpy()
-                else:
-                    W_np = np.asarray(W)
-                U, S, Vh = np.linalg.svd(W_np, full_matrices=False)
-                # Principal right-singular vector = direction in INPUT space (d_hidden)
-                # that gets stretched most by W.
-                hps_principal = Vh[0]  # (d_hidden,)
+            ckpt = torch.load(hps_W_path, map_location="cpu", weights_only=False)
+            state_dict = ckpt.get("state_dict", ckpt)
+            # LorentzProjection saves W as 'proj.weight' (nn.Linear bias=False)
+            W_key = None
+            for k in state_dict.keys():
+                if "weight" in k and "proj" in k:
+                    W_key = k
+                    break
+            if W_key is None:
+                # Fallback: any 2D weight matrix
+                for k, v in state_dict.items():
+                    if hasattr(v, "shape") and len(v.shape) == 2:
+                        W_key = k
+                        break
+            if W_key is not None:
+                W = state_dict[W_key]
+                W_np = W.detach().cpu().numpy() if isinstance(W, torch.Tensor) else np.asarray(W)
+                print(f"\n  Loaded HPS W from key '{W_key}' shape {W_np.shape}")
 
-                print(f"\n  Cosine similarity at each RTV layer:")
+                # SVD: W = U S V^T. V columns = directions in input space (d_hidden)
+                # ranked by singular value. Top right-singular vector = HPS's principal direction.
+                U, S, Vh = np.linalg.svd(W_np, full_matrices=False)
+                hps_principal = Vh[0]  # (d_hidden,)
+                print(f"  Top 5 singular values: {S[:5].tolist()}")
+
+                print(f"\n  Cosine similarity between HPS principal direction and RTV refusal direction:")
                 print(f"    {'Layer':<8} | {'cos(W_principal, r_l)':>20}")
                 print(f"    {'─'*8}─┼─{'─'*20}")
                 for l in RTV_LAYERS:
@@ -385,7 +394,8 @@ def main():
                     print(f"    → WEAK agreement: HPS learns something fundamentally different.")
                 direction_results["mean_abs_cos"] = avg_cos
             else:
-                print(f"\n  No 'W' tensor found in {hps_W_path}")
+                print(f"\n  No W matrix found in {hps_W_path} state_dict")
+                print(f"  Keys present: {list(state_dict.keys())}")
         except Exception as e:
             print(f"\n  Could not load HPS model: {e}")
     else:
