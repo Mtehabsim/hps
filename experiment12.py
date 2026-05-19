@@ -454,6 +454,24 @@ def main():
         # Return final score (post-sigmoid) for evasion comparison
         return float(scorer(h0 + delta.detach()))
 
+    # PGD to MAXIMIZE score (for adversarial FPR on benign samples)
+    def pgd_maximize_score(scorer, h, eps, n_steps=50):
+        """Maximize logit — pushes benign samples toward being flagged as attacks."""
+        h0 = h.detach().clone()
+        delta = torch.zeros_like(h0, requires_grad=True)
+        lr = (eps / max(n_steps, 1)) * 2.5
+        for _ in range(n_steps):
+            logit = scorer(h0 + delta, return_logit=True)
+            grad = torch.autograd.grad(logit, delta, create_graph=False)[0]
+            with torch.no_grad():
+                delta_new = delta + lr * torch.sign(grad)  # + to maximize
+                delta_new = torch.clamp(delta_new, -eps, +eps)
+            delta = delta_new.detach().requires_grad_(True)
+        return float(scorer(h0 + delta.detach()))
+
+    print(f"  {'ε':<9}| evasion | adv_FPR")
+    print(f"  {'─'*9}|─────────|────────")
+
     for eps in eval_epsilons:
         _pgd_diag_printed[0] = False  # reset diagnostic for each epsilon
         n_evaded = 0
@@ -463,8 +481,18 @@ def main():
             if final_score < threshold:
                 n_evaded += 1
         evasion_rate = n_evaded / max(len(X_test_atk), 1)
-        print(f"  {eps:<7.4f} |        {evasion_rate:.3f}")
-        results["self_attack"][f"eps_{eps}"] = evasion_rate
+
+        # Adversarial FPR: PGD on benign trying to push above threshold
+        n_false_pos = 0
+        for i in range(len(X_test_ben)):
+            h_t = torch.tensor(X_test_ben[i], dtype=torch.float32, device=device)
+            final_score = pgd_maximize_score(scorer, h_t, eps)
+            if final_score > threshold:
+                n_false_pos += 1
+        adv_fpr = n_false_pos / max(len(X_test_ben), 1)
+
+        print(f"  {eps:<9.4f}| {evasion_rate:.3f}   | {adv_fpr:.3f}")
+        results["self_attack"][f"eps_{eps}"] = {"evasion": evasion_rate, "adv_fpr": adv_fpr}
 
     save_json(results, "experiment12_adv_training.json", config.RESULTS_DIR)
 
