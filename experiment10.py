@@ -42,7 +42,7 @@ from sklearn.metrics import roc_auc_score
 import config
 from utils import load_model, save_json
 from utils import _get_transformer_layers
-from dataset import BENIGN, ADVERSARIAL
+from dataset import BENIGN, ADVERSARIAL, REFUSED
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -177,7 +177,11 @@ def main():
     print(f"  Fingerprint dim: {N_FEATURES}")
     print(f"{'═'*60}\n")
 
-    print(f"[exp10] {len(ADVERSARIAL)} attacks, {len(BENIGN)} benign")
+    print(f"[exp10] {len(ADVERSARIAL)} attacks, {len(BENIGN)} benign, {len(REFUSED)} refused")
+    assert len(REFUSED) >= 10, (
+        f"Need ≥10 refused prompts for RTV calibration, got {len(REFUSED)}. "
+        f"Check validated_attacks.json has a 'refused_attacks' field."
+    )
 
     # ── Load attack method labels (same pattern as exp8) ──
     cat_path = os.path.join(config.RESULTS_DIR, "validated_attacks_categorized.json")
@@ -210,6 +214,18 @@ def main():
         all_acts.append(ad)
         if (i + 1) % 100 == 0:
             print(f"  {i+1}/{len(all_prompts)}")
+
+    # ── Extract REFUSED prompts for refusal direction calibration ──
+    # RTV requires r_l = μ_harmful_refused - μ_harmless_benign
+    # "harmful_refused" = prompts the model recognizes as harmful and refuses
+    print(f"\n[exp10] Extracting refused prompts for refusal direction ({len(REFUSED)})...")
+    refused_acts = []
+    for i, p in enumerate(REFUSED):
+        ad = extract_multi_position(model, tokenizer, p, RTV_LAYERS, RTV_TOKEN_POSITIONS, config.DEVICE)
+        refused_acts.append(ad)
+        if (i + 1) % 50 == 0:
+            print(f"  {i+1}/{len(REFUSED)}")
+    print(f"[exp10] Extracted {len(refused_acts)} refused activations for calibration")
 
     benign_acts = [all_acts[i] for i in range(len(all_prompts)) if labels[i] == 0]
     adv_acts = [all_acts[i] for i in range(len(all_prompts)) if labels[i] == 1]
@@ -264,9 +280,10 @@ def main():
         train_adv_acts = [all_acts[i] for i in range(len(all_prompts))
                           if train_mask[i] and labels[i] == 1]
 
-        # Compute refusal directions on training data
+        # Compute refusal directions using REFUSED prompts (not successful jailbreaks)
+        # Per Arditi et al.: r_l = μ_harmful_refused - μ_harmless_benign
         refusal_dirs = compute_refusal_directions(
-            train_adv_acts, train_benign_acts, RTV_LAYERS
+            refused_acts, train_benign_acts, RTV_LAYERS
         )
 
         # Compute fingerprints for ALL prompts (train + test)
@@ -335,10 +352,10 @@ def main():
     print(f"    Cosine similarity between W's principal direction and r")
     print(f"    measures empirical agreement with this theoretical claim.")
 
-    # Compute global refusal direction (using ALL attacks vs ALL benign)
+    # Compute global refusal direction (using REFUSED prompts vs benign)
     # at each RTV layer
     global_refusal = compute_refusal_directions(
-        adv_acts, benign_acts, RTV_LAYERS
+        refused_acts, benign_acts, RTV_LAYERS
     )
 
     # Try to load HPS-trained W from saved checkpoint
