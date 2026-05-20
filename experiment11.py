@@ -41,6 +41,7 @@ np.random.seed(42)
 import torch
 torch.manual_seed(42)
 import torch.nn as nn
+import torch.optim as optim
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.covariance import LedoitWolf
@@ -467,7 +468,6 @@ def main():
     else:
         torch.manual_seed(42); np.random.seed(42)
         proj_h = LorentzProjection(d_hidden, config.PROJECTION_DIM, 1.0, n_layers=n_layers_sel).to(device)
-        import torch.optim as optim
         opt = optim.Adam(proj_h.parameters(), lr=1e-3, weight_decay=1e-5)
         X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
         y_t = torch.tensor(y_train, dtype=torch.long, device=device)
