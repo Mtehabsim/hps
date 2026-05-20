@@ -124,6 +124,22 @@ DUAL_USE_BUILTIN = [
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Short Benign (prevents false positives on trivial chat)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SHORT_BENIGN = [
+    "hi", "hello", "hey", "yes", "no", "ok", "sure", "thanks",
+    "bye", "goodbye", "good morning", "good night", "what's up",
+    "how are you", "how are you doing", "tell me a joke", "help",
+    "please", "sorry", "wow", "nice", "cool", "great", "agreed",
+    "understood", "thank you", "what time is it", "what is your name",
+    "can you help me", "I have a question", "that makes sense",
+    "sounds good", "go ahead", "never mind", "I see", "got it",
+    "interesting", "tell me more", "why", "what do you mean",
+]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  Load All Data
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -134,10 +150,12 @@ BENIGN_MATH = load_math(100)
 BENIGN_CREATIVE = load_creative_writing(50)
 BENIGN_UNUSUAL = load_unusual_benign(50)
 BENIGN_HARD = load_hard_benign()
+BENIGN_SHORT = list(SHORT_BENIGN)
+print(f"[dataset] Loaded {len(BENIGN_SHORT)} short benign (chat)")
 
-BENIGN = BENIGN_NL + BENIGN_CODE + BENIGN_MATH + BENIGN_CREATIVE + BENIGN_UNUSUAL + BENIGN_HARD
+BENIGN = BENIGN_NL + BENIGN_CODE + BENIGN_MATH + BENIGN_CREATIVE + BENIGN_UNUSUAL + BENIGN_HARD + BENIGN_SHORT
 random.shuffle(BENIGN)
-print(f"[dataset] Total benign: {len(BENIGN)} (clean: {len(BENIGN) - len(BENIGN_HARD)}, hard: {len(BENIGN_HARD)})")
+print(f"[dataset] Total benign: {len(BENIGN)} (clean: {len(BENIGN) - len(BENIGN_HARD) - len(BENIGN_SHORT)}, hard: {len(BENIGN_HARD)}, short: {len(BENIGN_SHORT)})")
 
 print("[dataset] Loading adversarial prompts (successful attacks)...")
 ADVERSARIAL = load_adversarial_gcg(9999)  # load all
