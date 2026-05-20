@@ -457,6 +457,10 @@ def main():
     # Try to load adversarially-trained HPS first
     adv_path = os.path.join(config.RESULTS_DIR, "hps_adv_projection.pt")
     use_adv = os.path.exists(adv_path)
+
+    X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
+    y_t = torch.tensor(y_train, dtype=torch.long, device=device)
+
     if use_adv:
         print(f"[exp11] Found HPS-Adv projection at {adv_path} — loading instead of retraining")
         ckpt = torch.load(adv_path, map_location=device, weights_only=False)
@@ -469,8 +473,6 @@ def main():
         torch.manual_seed(42); np.random.seed(42)
         proj_h = LorentzProjection(d_hidden, config.PROJECTION_DIM, 1.0, n_layers=n_layers_sel).to(device)
         opt = optim.Adam(proj_h.parameters(), lr=1e-3, weight_decay=1e-5)
-        X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
-        y_t = torch.tensor(y_train, dtype=torch.long, device=device)
         for _ in range(120):
             total_loss = torch.tensor(0.0, device=device)
             for l in range(n_layers_sel):
