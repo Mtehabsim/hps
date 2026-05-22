@@ -43,7 +43,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 # ═══════════════════════════════════════════════════════════════════════════
 
 MODEL_LAYERS = {
-    "lmsys/vicuna-13b-v1.5": [22, 31, 39],      # 40 layers, proportional to {18,25,32}/32
+    "lmsys/vicuna-13b-v1.5": [16, 22, 32],      # empirically discovered (peak refusal at 16)
     "meta-llama/Meta-Llama-3-8B-Instruct": [18, 25, 32],  # paper's exact layers
     "lmsys/vicuna-7b-v1.5": [14, 19, 25],       # 32 layers, same proportions
 }
