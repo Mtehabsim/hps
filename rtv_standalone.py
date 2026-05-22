@@ -43,7 +43,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 # ═══════════════════════════════════════════════════════════════════════════
 
 MODEL_LAYERS = {
-    "lmsys/vicuna-13b-v1.5": [16, 22, 32],      # empirically discovered (peak refusal at 16)
+    "lmsys/vicuna-13b-v1.5": [12, 16, 26],      # empirically discovered (uniform high separation)
     "meta-llama/Meta-Llama-3-8B-Instruct": [18, 25, 32],  # paper's exact layers
     "lmsys/vicuna-7b-v1.5": [14, 19, 25],       # 32 layers, same proportions
 }
@@ -302,13 +302,18 @@ def main():
                 data = json.load(f)
             if isinstance(data, dict):
                 attack_prompts = []
+                attack_methods = []
                 for method, prompts in data.items():
-                    attack_prompts.extend(prompts)
+                    for p in prompts:
+                        attack_prompts.append(p)
+                        attack_methods.append(method)
             else:
                 attack_prompts = data
+                attack_methods = ["unknown"] * len(data)
         else:
             df_atk = pd.read_csv(args.test_attacks)
             attack_prompts = df_atk.iloc[:, 0].dropna().tolist()
+            attack_methods = ["unknown"] * len(attack_prompts)
 
         print(f"  {len(attack_prompts)} attack prompts")
         attack_scores = []
@@ -345,6 +350,23 @@ def main():
         auroc = roc_auc_score(y_true, all_scores)
         print(f"  AUROC (attacks vs harmless): {auroc:.3f}")
         results["auroc"] = float(auroc)
+
+        # Per-method breakdown
+        methods_unique = sorted(set(attack_methods))
+        if len(methods_unique) > 1:
+            print(f"\n  Per-attack-type breakdown:")
+            print(f"  {'Method':<30} | {'N':>4} | {'TPR@5%':>7} | {'Median M(x)':>11} | {'Mean M(x)':>10}")
+            print(f"  {'─'*30}─┼─{'─'*4}─┼─{'─'*7}─┼─{'─'*11}─┼─{'─'*10}")
+            per_method = {}
+            for method in methods_unique:
+                idx = [i for i, m in enumerate(attack_methods) if m == method]
+                m_scores = attack_scores[idx]
+                m_tpr = float((m_scores > threshold).mean())
+                m_median = float(np.median(m_scores))
+                m_mean = float(np.mean(m_scores))
+                print(f"  {method:<30} | {len(idx):>4} | {m_tpr:>7.3f} | {m_median:>11.3f} | {m_mean:>10.3f}")
+                per_method[method] = {"n": len(idx), "tpr": m_tpr, "median": m_median, "mean": m_mean}
+            results["per_method"] = per_method
 
     # ── Test on benign (optional) ──
     if args.test_benign:
