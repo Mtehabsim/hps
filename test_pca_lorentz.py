@@ -102,9 +102,6 @@ def main():
         hs = extract_hidden_states(model, tokenizer, prompt, [LAYER])
         return hs[LAYER][-1]  # last token, shape (5120,)
 
-    acts_harmless = np.array([get_act(p) for i, p in enumerate(harmless[:n_cal])
-                              if not (i % 10 == 9 and print(f"    harmless {i+1}/{n_cal}"))])
-    # Redo without the print hack
     print("    Extracting harmless...")
     acts_harmless = []
     for i in range(n_cal):
@@ -245,7 +242,7 @@ def main():
         tr_harm, te_harm = harm_idx[:20], harm_idx[20:]
 
         X_tr = np.vstack([acts_harmless[tr_h], acts_harmful[tr_harm]])
-        pca_cv = PCA(n_components=PCA_DIM, random_state=42)
+        pca_cv = PCA(n_components=min(PCA_DIM, X_tr.shape[0] - 1), random_state=42)
         pca_cv.fit(X_tr)
 
         Xh_tr = pca_cv.transform(acts_harmless[tr_h])
@@ -258,7 +255,8 @@ def main():
         y_t_cv = torch.tensor([0]*len(Xh_tr) + [1]*len(Xharm_tr), dtype=torch.long)
 
         torch.manual_seed(fold)
-        proj_cv = LorentzProj(PCA_DIM, D_PROJ)
+        d_cv = Xh_tr.shape[1]
+        proj_cv = LorentzProj(d_cv, D_PROJ)
         opt_cv = optim.Adam(proj_cv.parameters(), lr=5e-3, weight_decay=1e-5)
         for ep in range(EPOCHS):
             pts_cv = proj_cv(X_t_cv)
