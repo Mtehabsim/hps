@@ -226,16 +226,10 @@ def main():
         mt = float((ms_attacks[idx] > ms_thr).mean())
         print(f"    {m:<30}: TPR={mt:.3f} (n={len(idx)})")
 
-    print(f"\n{'═'*60}\n")
-
-
-if __name__ == "__main__":
-    main()
-
     # ══════════════════════════════════════════════════════════════════════
     #  CROSS-VALIDATION: Verify this isn't overfitting
     # ══════════════════════════════════════════════════════════════════════
-    print(f"{'─'*60}")
+    print(f"\n{'─'*60}")
     print(f"  CROSS-VALIDATION (5 random splits, train on 20, threshold on 10)")
     print(f"{'─'*60}")
 
@@ -245,13 +239,11 @@ if __name__ == "__main__":
 
     for fold in range(n_splits):
         rng = np.random.RandomState(fold)
-        # Split calibration: 20 train, 10 test per class
         h_idx = rng.permutation(n_cal)
         harm_idx = rng.permutation(n_cal)
         tr_h, te_h = h_idx[:20], h_idx[20:]
         tr_harm, te_harm = harm_idx[:20], harm_idx[20:]
 
-        # PCA fit on train only
         X_tr = np.vstack([acts_harmless[tr_h], acts_harmful[tr_harm]])
         pca_cv = PCA(n_components=PCA_DIM, random_state=42)
         pca_cv.fit(X_tr)
@@ -262,7 +254,6 @@ if __name__ == "__main__":
         Xharm_te = pca_cv.transform(acts_harmful[te_harm])
         Xatk = pca_cv.transform(acts_attacks)
 
-        # Train Lorentz on train split
         X_t_cv = torch.tensor(np.vstack([Xh_tr, Xharm_tr]), dtype=torch.float32)
         y_t_cv = torch.tensor([0]*len(Xh_tr) + [1]*len(Xharm_tr), dtype=torch.long)
 
@@ -275,7 +266,6 @@ if __name__ == "__main__":
             opt_cv.zero_grad(); loss_cv.backward(); opt_cv.step()
         proj_cv.eval()
 
-        # Score: threshold from held-out calibration
         with torch.no_grad():
             p_h_te = proj_cv(torch.tensor(Xh_te, dtype=torch.float32))
             p_harm_te = proj_cv(torch.tensor(Xharm_te, dtype=torch.float32))
@@ -298,7 +288,6 @@ if __name__ == "__main__":
         s_harm_te = score_cv(p_harm_te)
         s_atk_cv = score_cv(p_atk)
 
-        # Threshold from held-out calibration (not train!)
         cal_cv = np.concatenate([s_h_te, s_harm_te])
         thr_cv = float(np.quantile(cal_cv, 1.0 - FPR_TARGET))
 
@@ -315,3 +304,7 @@ if __name__ == "__main__":
     print(f"  CV Mean TPR:   {np.mean(cv_tprs):.3f} ± {np.std(cv_tprs):.3f}")
     print(f"  (RTV baseline: AUROC=0.843, TPR=0.566)")
     print(f"\n{'═'*60}\n")
+
+
+if __name__ == "__main__":
+    main()
