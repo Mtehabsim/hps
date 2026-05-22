@@ -231,3 +231,87 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  CROSS-VALIDATION: Verify this isn't overfitting
+    # ══════════════════════════════════════════════════════════════════════
+    print(f"{'─'*60}")
+    print(f"  CROSS-VALIDATION (5 random splits, train on 20, threshold on 10)")
+    print(f"{'─'*60}")
+
+    cv_aurocs = []
+    cv_tprs = []
+    n_splits = 5
+
+    for fold in range(n_splits):
+        rng = np.random.RandomState(fold)
+        # Split calibration: 20 train, 10 test per class
+        h_idx = rng.permutation(n_cal)
+        harm_idx = rng.permutation(n_cal)
+        tr_h, te_h = h_idx[:20], h_idx[20:]
+        tr_harm, te_harm = harm_idx[:20], harm_idx[20:]
+
+        # PCA fit on train only
+        X_tr = np.vstack([acts_harmless[tr_h], acts_harmful[tr_harm]])
+        pca_cv = PCA(n_components=PCA_DIM, random_state=42)
+        pca_cv.fit(X_tr)
+
+        Xh_tr = pca_cv.transform(acts_harmless[tr_h])
+        Xharm_tr = pca_cv.transform(acts_harmful[tr_harm])
+        Xh_te = pca_cv.transform(acts_harmless[te_h])
+        Xharm_te = pca_cv.transform(acts_harmful[te_harm])
+        Xatk = pca_cv.transform(acts_attacks)
+
+        # Train Lorentz on train split
+        X_t_cv = torch.tensor(np.vstack([Xh_tr, Xharm_tr]), dtype=torch.float32)
+        y_t_cv = torch.tensor([0]*len(Xh_tr) + [1]*len(Xharm_tr), dtype=torch.long)
+
+        torch.manual_seed(fold)
+        proj_cv = LorentzProj(PCA_DIM, D_PROJ)
+        opt_cv = optim.Adam(proj_cv.parameters(), lr=5e-3, weight_decay=1e-5)
+        for ep in range(EPOCHS):
+            pts_cv = proj_cv(X_t_cv)
+            loss_cv = contrastive_loss(pts_cv, y_t_cv, proj_cv.k)
+            opt_cv.zero_grad(); loss_cv.backward(); opt_cv.step()
+        proj_cv.eval()
+
+        # Score: threshold from held-out calibration
+        with torch.no_grad():
+            p_h_te = proj_cv(torch.tensor(Xh_te, dtype=torch.float32))
+            p_harm_te = proj_cv(torch.tensor(Xharm_te, dtype=torch.float32))
+            p_atk = proj_cv(torch.tensor(Xatk, dtype=torch.float32))
+            p_h_tr = proj_cv(torch.tensor(Xh_tr, dtype=torch.float32))
+            p_harm_tr = proj_cv(torch.tensor(Xharm_tr, dtype=torch.float32))
+            c_pos_cv = p_h_tr.mean(0, keepdim=True)
+            c_neg_cv = p_harm_tr.mean(0, keepdim=True)
+            k_cv = proj_cv.k
+
+        def score_cv(pts):
+            s = []
+            for i in range(pts.shape[0]):
+                d1 = lorentz_distance(pts[i:i+1], c_pos_cv, k_cv).item()
+                d2 = lorentz_distance(pts[i:i+1], c_neg_cv, k_cv).item()
+                s.append(min(d1, d2))
+            return np.array(s)
+
+        s_h_te = score_cv(p_h_te)
+        s_harm_te = score_cv(p_harm_te)
+        s_atk_cv = score_cv(p_atk)
+
+        # Threshold from held-out calibration (not train!)
+        cal_cv = np.concatenate([s_h_te, s_harm_te])
+        thr_cv = float(np.quantile(cal_cv, 1.0 - FPR_TARGET))
+
+        tpr_cv = float((s_atk_cv > thr_cv).mean())
+        auroc_cv = roc_auc_score(
+            np.array([0]*len(s_h_te) + [1]*len(s_atk_cv)),
+            np.concatenate([s_h_te, s_atk_cv])
+        )
+        cv_aurocs.append(auroc_cv)
+        cv_tprs.append(tpr_cv)
+        print(f"  Fold {fold+1}: AUROC={auroc_cv:.3f}  TPR@5%={tpr_cv:.3f}")
+
+    print(f"\n  CV Mean AUROC: {np.mean(cv_aurocs):.3f} ± {np.std(cv_aurocs):.3f}")
+    print(f"  CV Mean TPR:   {np.mean(cv_tprs):.3f} ± {np.std(cv_tprs):.3f}")
+    print(f"  (RTV baseline: AUROC=0.843, TPR=0.566)")
+    print(f"\n{'═'*60}\n")
