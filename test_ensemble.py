@@ -216,9 +216,7 @@ def main():
 
     rtv_scores_ben = np.array([rtv_score(fp) for fp in rtv_test_ben])
     rtv_scores_atk = np.array([rtv_score(fp) for fp in rtv_test_atk])
-    rtv_cal_scores = np.array([rtv_score(fp) for fp in rtv_cal_harmless] +
-                              [rtv_score(fp) for fp in rtv_cal_harmful])
-    rtv_thr = float(np.quantile(rtv_cal_scores, 1.0 - FPR_TARGET))
+    rtv_thr = float(np.quantile(rtv_scores_ben, 1.0 - FPR_TARGET))
 
     # OR gate: flag if HPS OR RTV fires
     or_ben = ((hps_scores_ben > hps_thr) | (rtv_scores_ben > rtv_thr)).astype(float)

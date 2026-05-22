@@ -558,18 +558,21 @@ Concatenates HPS trajectory features (12) + suppression features (10) into a sin
 
 | Result | Status |
 |---|---|
-| HPS detects jailbreaks (baseline) | ✓ AUROC=0.987, TPR=81.2% at FPR=1% |
-| Hyperbolic > Euclidean (baseline) | ✓ 4.8× better TPR |
+| HPS detects jailbreaks (same-distribution) | ✓ AUROC=0.970, TPR=85.9% at FPR=5% |
+| Hyperbolic > Euclidean (cross-attack) | ✓ +0.302 AUROC (0.815 vs 0.513) |
 | Hyperbolic > Euclidean (adaptive robustness) | ✓ Larger breaking ε |
-| Cross-attack generalization advantage | ✓ Δ=+0.302 AUROC over Euclidean |
+| Cross-attack generalization | ✓ AUROC=0.815 mean (Euclidean=0.513) |
 | Adversarial training improves HPS | ✓ +20.8% TPR, modest robustness gain |
-| Ensemble (HPS+Suppression) beats individuals | ✓ TPR 0.781 vs 0.656 (HPS) and 0.453 (Supp) |
-| HPS more adaptive-robust than suppression | ✓ 26.6% vs 62.5% evasion at ε=0.001 |
+| HPS > RTV (same-distribution, supervised) | ✓ 0.970 vs 0.843 AUROC |
+| HPS > RTV per-method: JBC | ✓ 77.8% vs 9.5% TPR |
+| RTV > HPS per-method: PAIR (cross-attack) | ✓ 54.5% vs 0.0% TPR |
+| Ensemble adds value over HPS alone | ✗ 0.971 vs 0.970 — no improvement |
+| Hyperbolic helps in zero-shot regime | ✗ Ties RTV (0.845 vs 0.843 CV AUROC) |
 | Refusal suppression hypothesis | ✗ Empirically rejected |
 | Multi-turn drift detection | ✗ AUROC=0.593, not viable with synthetic data |
-| Short-prompt false positives | ✗ Fixed by adding SHORT_BENIGN to training |
-| HPS vs corrected RTV comparison | ⏳ Pending rerun of experiment11 |
-| PAIR detection | ✗ 0% TPR across all methods |
+| RTV sensitive to calibration data | ✓ 0.843 (JBShield 30) vs 0.729 (HarmBench 100) |
+| Jailbreaks geometrically orthogonal | ✓ PCA shows attacks on PC2, not PC1 |
+| PAIR detection (cross-attack, any method) | Partial: only RTV catches it (54.5%) |
 
 ---
 
@@ -648,11 +651,70 @@ Following Bailey et al. (2026), we note that **non-adaptive performance is neces
 | Short benign fix | `dataset.py` | Added 40 SHORT_BENIGN messages to prevent trivial-chat false positives |
 | Poincaré visualization | `visualize_poincare.py` | Trained HPS projection visualized on Poincaré disk |
 
-### Phase 2 (REMAINING) — Publication-Ready
+### Phase 2 (COMPLETED) — RTV Comparison + Ensemble
 
-1. **Rerun all experiments with SHORT_BENIGN** in training data (fixes 45% FP on chat)
-2. **Rerun experiment11 with corrected RTV** (uses REFUSED prompts + fixed optim import)
-3. **Multi-model validation** (Llama-3, Qwen, Mistral)
-4. **Real multi-turn attack data** (actual PAIR conversation logs for drift detection)
-5. **Latency benchmarks**
-6. **Paper writing** — frame around: geometric inductive bias + ensemble + negative results
+| Experiment | File | Result |
+|---|---|---|
+| RTV standalone (faithful reimplementation) | `rtv_standalone.py` | Correct implementation per paper: harmful+harmless calibration, min(d_pos,d_neg), LedoitWolf |
+| RTV layer discovery | `rtv_find_layers.py` | Empirically found refusal-sensitive layers for Vicuna-13B: [12,16,26] (peak at layer 16, separation=4.38) |
+| RTV with JBShield 30 samples | `rtv_standalone.py` | AUROC=0.843, TPR@5%=0.566. Per-method: GCG=0.735, JBC=0.095, PAIR=0.545, random_search=0.867 |
+| RTV with HarmBench 100 samples | `rtv_standalone.py` | AUROC=0.729, TPR@5%=0.193. Worse — calibration data distribution mismatch |
+| HPS-RTV (hyperbolic on fingerprints) | `hps_rtv_inspired.py` | AUROC=0.667. Hyperbolic on 15-dim fingerprint is worse than Mahalanobis |
+| PCA→Lorentz (raw activations) | `test_pca_lorentz.py` | Full-cal AUROC=0.984 (overfitted); CV AUROC=0.845±0.036 (ties RTV) |
+| HPS zero-shot (8-layer, harmful vs harmless) | `test_hps_zeroshot.py` | Full-cal AUROC=0.876; CV AUROC=0.757±0.074 (worse than RTV) |
+| Ensemble (HPS supervised + RTV) | `test_ensemble.py` | HPS alone: 0.970 AUROC, 85.9% TPR. RTV adds nothing — ensemble=HPS |
+
+### Key Findings from Phase 2
+
+**1. RTV is sensitive to calibration data distribution.**
+- JBShield's 30 samples: AUROC=0.843
+- HarmBench 100 samples: AUROC=0.729
+- Data quality > data quantity for analytical methods.
+
+**2. Hyperbolic geometry does NOT help in zero-shot regime.**
+- With 30-100 calibration samples (no attacks), learned projections tie or lose to RTV's analytical approach.
+- CV AUROC: Lorentz single-layer=0.845, HPS 8-layer=0.757, RTV=0.843.
+- The geometric prior can't compensate for insufficient training data.
+
+**3. Hyperbolic geometry DOES help with supervised data.**
+- With 416 benign + 252 attacks: HPS achieves 0.970 AUROC, 85.9% TPR.
+- Per-method: GCG=92.9%, JBC=77.8%, PAIR=80.0%, random_search=94.1%.
+- No method-specific blind spots in same-distribution evaluation.
+
+**4. RTV's weakness is JBC (role-play attacks).**
+- JBC TPR@5%: 0.095 (RTV) vs 0.778 (HPS supervised).
+- Role-play wrappers don't change the refusal-direction fingerprint — they look identical to raw harmful prompts.
+- This is a fundamental limitation of refusal-direction-based detection.
+
+**5. RTV's strength is PAIR (semantic attacks) in cross-attack.**
+- PAIR TPR: 0.545 (RTV zero-shot) vs 0.000 (HPS cross-attack, trained without PAIR).
+- The analytical refusal direction generalizes to semantic rewrites without needing examples.
+
+**6. Ensemble adds no value over supervised HPS.**
+- Ensemble AUROC=0.971 vs HPS alone=0.970.
+- When HPS has attack data, RTV features are redundant.
+- The logistic regression learns to ignore RTV features entirely.
+
+**7. Jailbreak activations are geometrically orthogonal to harmful/harmless.**
+- PCA visualization shows attacks displaced along PC2 (8.4% variance) while harmful/harmless separate along PC1 (88.9%).
+- Attacks don't just suppress refusal — they create a distinct activation geometry.
+
+### Phase 3 (REMAINING) — Publication
+
+**Immediate priorities:**
+1. Rerun ensemble with JBShield 30-sample calibration (RTV at its best)
+2. Cross-attack ensemble: train HPS on 3 methods + RTV zero-shot, test on held-out 4th
+3. Final per-method comparison table for the paper
+
+**Paper framing options:**
+
+| Option | Title | Core Claim |
+|---|---|---|
+| A (Strongest) | Complementary Detection Signals | Two orthogonal signals exist; HPS captures trajectory, RTV captures refusal. Neither alone is sufficient cross-attack. |
+| B (Cleanest) | Hyperbolic Inductive Bias for Jailbreak Detection | Hyperbolic geometry provides +0.302 AUROC over Euclidean in cross-attack. Requires labeled data but achieves 0.970 same-distribution. |
+| C (Most Novel) | Geometric Orthogonality of Jailbreak Activations | Jailbreaks create activations in a subspace orthogonal to harmful/harmless — explains why single-signal defenses have blind spots. |
+
+**Outstanding questions:**
+- Does the ensemble help in cross-attack (HPS trained without PAIR + RTV catching PAIR)?
+- Multi-model validation (Llama-3, Qwen)
+- Adaptive attack robustness of the ensemble
