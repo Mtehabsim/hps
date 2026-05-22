@@ -169,7 +169,7 @@ def main():
 
     # ── Cross-validation (train 20+20, threshold on 10+10) ──
     print(f"\n{'─'*60}")
-    print(f"  CROSS-VALIDATION (5 folds, train 20+20, threshold 10+10)")
+    print(f"  CROSS-VALIDATION (5 folds, train 70%, threshold 30%)")
     print(f"{'─'*60}")
 
     cv_aurocs, cv_tprs = [], []
@@ -177,8 +177,9 @@ def main():
         rng = np.random.RandomState(fold)
         h_idx = rng.permutation(n_cal)
         harm_idx = rng.permutation(n_cal)
-        tr_h, te_h = h_idx[:20], h_idx[20:]
-        tr_harm, te_harm = harm_idx[:20], harm_idx[20:]
+        n_tr = int(0.7 * n_cal)
+        tr_h, te_h = h_idx[:n_tr], h_idx[n_tr:]
+        tr_harm, te_harm = harm_idx[:n_tr], harm_idx[n_tr:]
 
         X_tr = np.concatenate([X_harmless[tr_h], X_harmful[tr_harm]])
         y_tr = np.array([0]*len(tr_h) + [1]*len(tr_harm))
