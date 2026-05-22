@@ -294,6 +294,7 @@ def main():
     }
 
     # ── Test on attacks ──
+    fps_attacks = None
     if args.test_attacks:
         print(f"\n[RTV] Evaluating on attack prompts...")
         if args.test_attacks.endswith(".json"):
@@ -311,15 +312,18 @@ def main():
 
         print(f"  {len(attack_prompts)} attack prompts")
         attack_scores = []
+        fps_attack_list = []
         for i, p in enumerate(attack_prompts):
             hs = extract_hidden_states(model, tokenizer, p, layers)
             fp = compute_fingerprint(hs, refusal_dirs, layers, TOKEN_POSITIONS)
             s = rtv_score(fp, mu_pos, prec_pos, mu_neg, prec_neg)
             attack_scores.append(s)
+            fps_attack_list.append(fp)
             if (i + 1) % 50 == 0:
                 print(f"  Attacks scored: {i+1}/{len(attack_prompts)}")
 
         attack_scores = np.array(attack_scores)
+        fps_attacks = np.array(fps_attack_list)
         tpr = float((attack_scores > threshold).mean())
         print(f"\n  Attack detection (TPR @ {FPR_TARGET*100:.0f}% FPR): {tpr:.3f}")
         print(f"  Attack median M(x): {np.median(attack_scores):.3f}")
@@ -368,6 +372,43 @@ def main():
     with open(args.output, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\n[RTV] Results saved → {args.output}")
+
+    # ── Visualize clusters ──
+    print(f"[RTV] Generating cluster visualization...")
+    from sklearn.decomposition import PCA
+    import matplotlib.pyplot as plt
+
+    all_fps = [fps_harmless, fps_harmful]
+    labels_viz = ['Harmless', 'Harmful']
+    colors = ['#2ecc71', '#e74c3c']
+
+    if args.test_attacks and fps_attacks is not None:
+        all_fps.append(fps_attacks)
+        labels_viz.append('Attacks')
+        colors.append('#9b59b6')
+
+    X_all = np.vstack(all_fps)
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_all)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    offset = 0
+    for i, (label, color) in enumerate(zip(labels_viz, colors)):
+        n = len(all_fps[i])
+        ax.scatter(X_pca[offset:offset+n, 0], X_pca[offset:offset+n, 1],
+                   c=color, label=label, alpha=0.6, s=40, edgecolors='w', linewidth=0.3)
+        offset += n
+
+    ax.set_title(f"RTV Fingerprint Space (PCA) — Layers {layers}\n"
+                 f"AUROC={results.get('auroc', 'N/A'):.3f}", fontsize=12)
+    ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)")
+    ax.legend(fontsize=11)
+    plt.tight_layout()
+    plot_path = args.output.replace('.json', '_clusters.png')
+    plt.savefig(plot_path, dpi=150)
+    plt.close()
+    print(f"[RTV] Cluster plot saved → {plot_path}")
 
     print(f"\n{'═'*60}")
     print(f"  RTV EVALUATION COMPLETE")
