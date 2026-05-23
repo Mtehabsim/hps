@@ -214,10 +214,28 @@ def main():
     clf = LogisticRegression(max_iter=2000, random_state=42)
     clf.fit(ens_feats_s, y_train)
 
-    # Threshold
-    ben_scores = clf.predict_proba(ens_feats_s[:n_train])[:, 1]
-    threshold = float(np.quantile(ben_scores, 0.95))
-    print(f"  Ensemble threshold: {threshold:.4f}")
+    # Threshold: extract held-out benign (indices n_train..n_train+50) for calibration
+    print(f"  Extracting calibration benign ({min(50, len(BENIGN)-n_train)})...")
+    calib_ben_feats = []
+    n_calib_ben = min(50, len(BENIGN) - n_train)
+    for i in range(n_train, n_train + n_calib_ben):
+        d = extract_all_layers(model, tokenizer, BENIGN[i], device, "last")
+        x = np.array([d[l] for l in HPS_LAYERS if l in d])
+        hf = extract_trajectory_features(proj, x[np.newaxis])[0]
+        fp = []
+        for l in RTV_LAYERS:
+            for p in TOKEN_POSITIONS:
+                if l in d:
+                    h = d[l]
+                    cos = float(np.dot(h, refusal_dirs[l]) / (np.linalg.norm(h) * np.linalg.norm(refusal_dirs[l]) + 1e-8))
+                    fp.append(cos)
+                else:
+                    fp.append(0.0)
+        calib_ben_feats.append(np.concatenate([hf, fp]))
+    calib_ben_feats = np.array(calib_ben_feats)
+    calib_ben_scores = clf.predict_proba(sc.transform(calib_ben_feats))[:, 1]
+    threshold = float(np.quantile(calib_ben_scores, 0.95))
+    print(f"  Ensemble threshold (held-out calib): {threshold:.4f}")
 
     # Build differentiable ensemble
     ensemble = DifferentiableEnsemble(
@@ -232,8 +250,8 @@ def main():
     print(f"{'─'*60}")
 
     rng = np.random.RandomState(42)
-    n_test = min(50, len(ADVERSARIAL))
-    test_idx = rng.permutation(len(ADVERSARIAL))[:n_test]
+    n_test = min(50, len(ADVERSARIAL) - n_train)
+    test_idx = rng.permutation(np.arange(n_train, len(ADVERSARIAL)))[:n_test]
 
     # Extract test activations
     print(f"  Extracting test attack activations ({n_test})...")

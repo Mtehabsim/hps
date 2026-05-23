@@ -523,8 +523,9 @@ def main():
     d_proj = config.PROJECTION_DIM
     proj_euc = nn.Linear(d_hidden, d_proj, bias=False).to(device)
     nn.init.xavier_uniform_(proj_euc.weight)
-    scale_euc = nn.Parameter(torch.tensor(1.0 / np.sqrt(d_proj)).to(device))
-    opt_euc = optim.Adam(list(proj_euc.parameters()) + [scale_euc], lr=1e-3, weight_decay=1e-5)
+    scale_per_layer_euc = nn.Parameter(torch.ones(n_layers_sel, device=device) / np.sqrt(d_proj))
+    log_margin_euc = nn.Parameter(torch.tensor(np.log(2.0), device=device))
+    opt_euc = optim.Adam(list(proj_euc.parameters()) + [scale_per_layer_euc, log_margin_euc], lr=1e-3, weight_decay=1e-5)
     X_t = torch.tensor(best_X, dtype=torch.float32, device=device)
     y_t = torch.tensor(labels, dtype=torch.long, device=device)
 
@@ -533,14 +534,15 @@ def main():
     patience_euc = 0
     for epoch in range(200):
         total_loss = torch.tensor(0.0, device=device)
+        margin = torch.exp(log_margin_euc).clamp(0.5, 5.0)
         for l in range(n_layers_sel):
-            h = (proj_euc(X_t[:, l, :]) * scale_euc).float()
+            h = (proj_euc(X_t[:, l, :]) * scale_per_layer_euc[l]).float()
             dists = torch.cdist(h, h)
             same_mask = (y_t.unsqueeze(0) == y_t.unsqueeze(1)).float()
             diff_mask = 1.0 - same_mask
             triu = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
             same_loss = (dists ** 2 * same_mask * triu).sum()
-            diff_loss = (torch.clamp(2.0 - dists, min=0) ** 2 * diff_mask * triu).sum()
+            diff_loss = (torch.clamp(margin - dists, min=0) ** 2 * diff_mask * triu).sum()
             n_same = (same_mask * triu).sum().clamp(min=1)
             n_diff = (diff_mask * triu).sum().clamp(min=1)
             total_loss = total_loss + (same_loss / n_same + diff_loss / n_diff) / 2.0
@@ -561,7 +563,10 @@ def main():
     X_euc_feat = []
     with torch.no_grad():
         for i in range(len(all_prompts)):
-            h = (proj_euc(X_t[i]) * scale_euc).cpu().numpy()
+            h_layers = []
+            for l in range(n_layers_sel):
+                h_layers.append((proj_euc(X_t[i, l:l+1]) * scale_per_layer_euc[l]).squeeze(0).cpu().numpy())
+            h = np.array(h_layers)
             norms = np.linalg.norm(h, axis=1)
             # Triangle inequality curvature (same as hyperbolic version, but with L2)
             curv_e = []

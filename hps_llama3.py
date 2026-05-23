@@ -92,6 +92,11 @@ def main():
     # Cache to disk to avoid re-extraction
     cache_path = "results/llama3_activations_cache.npz"
 
+    # Cache validation: invalidate if config changes
+    import hashlib
+    _cfg_str = f"{ALL_LAYERS}|{args.test_attacks}|{len(train_ben)}|{len(train_atk)}"
+    _cfg_hash = hashlib.md5(_cfg_str.encode()).hexdigest()[:8]
+
     def extract_all(prompts, label):
         results = []
         for i, p in enumerate(prompts):
@@ -132,13 +137,18 @@ def main():
         return min(dp, dn)
 
     if os.path.exists(cache_path):
-        print(f"  Loading cached activations from {cache_path}")
         cache = np.load(cache_path, allow_pickle=True)
-        hs_train_ben = cache["hs_train_ben"].tolist()
-        hs_train_atk = cache["hs_train_atk"].tolist()
-        hs_test_ben = cache["hs_test_ben"].tolist()
-        hs_test_atk = cache["hs_test_atk"].tolist()
-    else:
+        cached_hash = str(cache.get("cfg_hash", "")) if "cfg_hash" in cache else ""
+        if cached_hash == _cfg_hash:
+            print(f"  Loading cached activations from {cache_path} (hash={_cfg_hash})")
+            hs_train_ben = cache["hs_train_ben"].tolist()
+            hs_train_atk = cache["hs_train_atk"].tolist()
+            hs_test_ben = cache["hs_test_ben"].tolist()
+            hs_test_atk = cache["hs_test_atk"].tolist()
+        else:
+            print(f"  Cache stale (expected {_cfg_hash}, got {cached_hash}). Re-extracting...")
+            os.remove(cache_path)
+    if not os.path.exists(cache_path):
         print(f"\n  Extracting activations (all layers: {ALL_LAYERS})...")
         print("  Train benign...")
         hs_train_ben = extract_all(train_ben, "train benign")
@@ -154,8 +164,9 @@ def main():
                  hs_train_ben=np.array(hs_train_ben, dtype=object),
                  hs_train_atk=np.array(hs_train_atk, dtype=object),
                  hs_test_ben=np.array(hs_test_ben, dtype=object),
-                 hs_test_atk=np.array(hs_test_atk, dtype=object))
-        print(f"  Cached activations → {cache_path}")
+                 hs_test_atk=np.array(hs_test_atk, dtype=object),
+                 cfg_hash=np.array(_cfg_hash))
+        print(f"  Cached activations → {cache_path} (hash={_cfg_hash})")
 
     # ── HPS ──
     print(f"\n  Training HPS Lorentz projection...")
@@ -184,15 +195,23 @@ def main():
         X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
         y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 
-        for epoch in range(120):
+        best_loss = float('inf'); patience_ctr = 0
+        for epoch in range(200):
             loss = torch.tensor(0.0, device=device)
             for l in range(n_layers):
                 h = proj(X_t[:, l, :])
                 loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
             loss = loss / n_layers
             opt.zero_grad(); loss.backward(); opt.step()
-            if (epoch+1) % 40 == 0:
-                print(f"    Epoch {epoch+1}/120 loss={loss.item():.4f}")
+            if loss.item() < best_loss - 1e-4:
+                best_loss = loss.item(); patience_ctr = 0
+            else:
+                patience_ctr += 1
+            if patience_ctr >= 20:
+                print(f"    Early stop at epoch {epoch+1}")
+                break
+            if (epoch+1) % 50 == 0:
+                print(f"    Epoch {epoch+1}/200 loss={loss.item():.4f}")
 
         torch.save({
             "state_dict": proj.state_dict(),
@@ -210,7 +229,12 @@ def main():
     clf.fit(sc.fit_transform(feats_train), y_train)
     hps_scores_ben = clf.predict_proba(sc.transform(feats_te_ben))[:, 1]
     hps_scores_atk = clf.predict_proba(sc.transform(feats_te_atk))[:, 1]
-    hps_thr = float(np.quantile(hps_scores_ben, 1.0 - FPR_TARGET))
+
+    # Split test benign into calibration (threshold) + held-out (evaluation)
+    n_calib = len(hps_scores_ben) // 2
+    hps_scores_calib = hps_scores_ben[:n_calib]
+    hps_scores_ben = hps_scores_ben[n_calib:]  # held-out only
+    hps_thr = float(np.quantile(hps_scores_calib, 1.0 - FPR_TARGET))
 
     # ── RTV on same test set ──
     print(f"  Computing RTV scores on test set...")
@@ -218,7 +242,9 @@ def main():
                                for hs in hs_test_ben])
     rtv_scores_atk = np.array([rtv_score(compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS))
                                for hs in hs_test_atk])
-    rtv_thr = float(np.quantile(rtv_scores_ben, 1.0 - FPR_TARGET))
+    rtv_scores_calib = rtv_scores_ben[:n_calib]
+    rtv_scores_ben = rtv_scores_ben[n_calib:]
+    rtv_thr = float(np.quantile(rtv_scores_calib, 1.0 - FPR_TARGET))
 
     # ── Ensemble (HPS features + RTV fingerprints) ──
     print(f"  Computing Ensemble (12 HPS + 15 RTV = 27 features)...")
@@ -238,7 +264,9 @@ def main():
     clf_ens.fit(sc_ens.fit_transform(ens_train), y_train)
     ens_scores_ben = clf_ens.predict_proba(sc_ens.transform(ens_te_ben))[:, 1]
     ens_scores_atk = clf_ens.predict_proba(sc_ens.transform(ens_te_atk))[:, 1]
-    ens_thr = float(np.quantile(ens_scores_ben, 1.0 - FPR_TARGET))
+    ens_scores_calib = ens_scores_ben[:n_calib]
+    ens_scores_ben = ens_scores_ben[n_calib:]
+    ens_thr = float(np.quantile(ens_scores_calib, 1.0 - FPR_TARGET))
     ens_tpr = float((ens_scores_atk > ens_thr).mean())
     ens_auroc = roc_auc_score(np.array([0]*len(ens_scores_ben)+[1]*len(ens_scores_atk)),
                               np.concatenate([ens_scores_ben, ens_scores_atk]))
@@ -399,38 +427,45 @@ def main():
         X_cv_te_ben = to_hps_array(cv_ben_test_hs)
         X_cv_te_atk = to_hps_array(test_hs)
 
-        torch.manual_seed(42)
-        proj_cv = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-        opt_cv = optim.Adam(proj_cv.parameters(), lr=1e-3, weight_decay=1e-5)
+        # Multi-seed HPS cross-attack (3 seeds)
         X_cv_t = torch.tensor(X_cv_train, dtype=torch.float32, device=device)
         y_cv_t = torch.tensor(y_cv_train, dtype=torch.long, device=device)
-        for _ in range(120):
-            l = torch.tensor(0.0, device=device)
-            for li in range(n_layers):
-                h = proj_cv(X_cv_t[:, li, :])
-                l = l + contrastive_loss(h, y_cv_t, k=proj_cv.k, tau=proj_cv.tau(li))
-            l = l / n_layers
-            opt_cv.zero_grad(); l.backward(); opt_cv.step()
-        proj_cv.eval()
-
-        f_tr = extract_trajectory_features(proj_cv, X_cv_train)
-        f_te_ben = extract_trajectory_features(proj_cv, X_cv_te_ben)
-        f_te_atk = extract_trajectory_features(proj_cv, X_cv_te_atk)
-
-        sc_cv = StandardScaler()
-        clf_cv = LogisticRegression(max_iter=2000, random_state=42)
-        clf_cv.fit(sc_cv.fit_transform(f_tr), y_cv_train)
-        s_ben = clf_cv.predict_proba(sc_cv.transform(f_te_ben))[:, 1]
-        s_atk = clf_cv.predict_proba(sc_cv.transform(f_te_atk))[:, 1]
-        thr_cv = float(np.quantile(s_ben, 1.0 - FPR_TARGET))
-        hps_cv_tpr = float((s_atk > thr_cv).mean())
+        hps_seed_tprs = []
+        for _seed in range(3):
+            torch.manual_seed(_seed)
+            proj_cv = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
+            opt_cv = optim.Adam(proj_cv.parameters(), lr=1e-3, weight_decay=1e-5)
+            _bl = float('inf'); _pc = 0
+            for _ep in range(200):
+                l = torch.tensor(0.0, device=device)
+                for li in range(n_layers):
+                    h = proj_cv(X_cv_t[:, li, :])
+                    l = l + contrastive_loss(h, y_cv_t, k=proj_cv.k, tau=proj_cv.tau(li))
+                l = l / n_layers
+                opt_cv.zero_grad(); l.backward(); opt_cv.step()
+                if l.item() < _bl - 1e-4: _bl = l.item(); _pc = 0
+                else: _pc += 1
+                if _pc >= 20: break
+            proj_cv.eval()
+            f_tr = extract_trajectory_features(proj_cv, X_cv_train)
+            f_te_ben = extract_trajectory_features(proj_cv, X_cv_te_ben)
+            f_te_atk = extract_trajectory_features(proj_cv, X_cv_te_atk)
+            sc_cv = StandardScaler()
+            clf_cv = LogisticRegression(max_iter=2000, random_state=_seed)
+            clf_cv.fit(sc_cv.fit_transform(f_tr), y_cv_train)
+            s_ben = clf_cv.predict_proba(sc_cv.transform(f_te_ben))[:, 1]
+            s_atk = clf_cv.predict_proba(sc_cv.transform(f_te_atk))[:, 1]
+            n_cal = len(s_ben) // 2
+            thr_cv = float(np.quantile(s_ben[:n_cal], 1.0 - FPR_TARGET))
+            hps_seed_tprs.append(float((s_atk > thr_cv).mean()))
+        hps_cv_tpr = float(np.mean(hps_seed_tprs))
 
         # RTV on same held-out test
         rtv_s_ben = np.array([rtv_score(compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS))
                               for hs in cv_ben_test_hs])
         rtv_s_atk = np.array([rtv_score(compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS))
                               for hs in test_hs])
-        rtv_thr_cv = float(np.quantile(rtv_s_ben, 1.0 - FPR_TARGET))
+        rtv_thr_cv = float(np.quantile(rtv_s_ben[:n_cal], 1.0 - FPR_TARGET))
         rtv_cv_tpr = float((rtv_s_atk > rtv_thr_cv).mean())
 
         # Ensemble on same held-out test
@@ -448,7 +483,7 @@ def main():
         clf_ens_cv.fit(sc_ens_cv.fit_transform(ens_f_tr), y_cv_train)
         es_ben = clf_ens_cv.predict_proba(sc_ens_cv.transform(ens_f_te_ben))[:, 1]
         es_atk = clf_ens_cv.predict_proba(sc_ens_cv.transform(ens_f_te_atk))[:, 1]
-        ens_thr_cv = float(np.quantile(es_ben, 1.0 - FPR_TARGET))
+        ens_thr_cv = float(np.quantile(es_ben[:n_cal], 1.0 - FPR_TARGET))
         ens_cv_tpr = float((es_atk > ens_thr_cv).mean())
 
         print(f"  {held_out:<15} | {len(test_hs):>5} | {hps_cv_tpr:>6.3f} | {rtv_cv_tpr:>6.3f} | {ens_cv_tpr:>6.3f}")

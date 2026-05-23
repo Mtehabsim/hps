@@ -266,17 +266,19 @@ def main():
     test_scores = clf.predict_proba(feat_test_s)[:, 1]
     auroc_clean = roc_auc_score(y_test, test_scores)
 
-    # TPR @ FPR=1%
+    # TPR @ FPR=1% (split benign into calib + held-out)
     benign_scores = test_scores[y_test == 0]
     attack_scores = test_scores[y_test == 1]
-    threshold = float(np.quantile(benign_scores, 0.99))
+    n_cal = len(benign_scores) // 2
+    threshold = float(np.quantile(benign_scores[:n_cal], 0.99))
     tpr_at_fpr01 = float((attack_scores > threshold).mean())
+    fpr_actual = float((benign_scores[n_cal:] > threshold).mean())
 
     print(f"\n{'─'*60}")
     print(f"  HPS-Adv BASELINE (clean test)")
     print(f"{'─'*60}")
     print(f"  AUROC:        {auroc_clean:.3f}")
-    print(f"  TPR@FPR=1%:   {tpr_at_fpr01:.3f}")
+    print(f"  TPR@FPR=1%:   {tpr_at_fpr01:.3f}  (actual FPR={fpr_actual:.3f})")
     print(f"  threshold:    {threshold:.4f}")
 
     # ── Self-attack evaluation: PGD against the adversarially trained model ──
