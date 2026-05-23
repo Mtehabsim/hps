@@ -132,18 +132,9 @@ def main():
     else:
         transformer_layers = model.transformer.h
 
-    # Compute baseline radial scores for normalization
-    print(f"\n  Computing baseline radial scores...")
-    benign_radii = []
-    for i in range(min(20, len(benign_all))):
-        r = compute_hps_score(proj, model, tokenizer, benign_all[i], device)
-        benign_radii.append(r)
-    mean_benign_radius = np.mean(benign_radii)
-    print(f"  Mean benign radial score: {mean_benign_radius:.3f}")
-
-    # ── Mitigation hook with adaptive strength ──
+    # ── Mitigation hook: fixed strength when flagged ──
     mitigation_active = [False]
-    current_alpha = [0.0]
+    ALPHA = 4.0  # fixed injection strength
 
     def make_hook(layer_idx):
         def hook(module, inputs, outputs):
@@ -153,8 +144,7 @@ def main():
             orig_dtype = h.dtype
             h_f = h.float()
             r = refusal_tensors[layer_idx]
-            # Add refusal direction scaled by adaptive alpha
-            h_clean = h_f + current_alpha[0] * r
+            h_clean = h_f + ALPHA * r
             h_clean = h_clean.to(orig_dtype)
             if isinstance(outputs, tuple):
                 return (h_clean,) + outputs[1:]
@@ -193,30 +183,21 @@ def main():
 
     # ── With adaptive mitigation ──
     print(f"\n{'─'*60}")
-    print(f"  WITH ADAPTIVE MITIGATION (α = {ALPHA_BASE} × radial_excess)")
+    print(f"  WITH MITIGATION (inject refusal direction, α={ALPHA})")
     print(f"{'─'*60}")
     mitigation_active[0] = True
     mitigated_results = []
-    alphas_used = []
     for i, p in enumerate(test_attacks):
-        # Compute HPS radial score for this prompt
-        mitigation_active[0] = False  # temporarily disable for scoring
-        radius = compute_hps_score(proj, model, tokenizer, p, device)
-        # Adaptive alpha: proportional to how far above benign baseline
-        radial_excess = max(0, radius - mean_benign_radius)
-        alpha = ALPHA_BASE * radial_excess
-        current_alpha[0] = alpha
-        alphas_used.append(alpha)
-
-        # Generate with mitigation
-        mitigation_active[0] = True
         inputs = tokenizer(p, return_tensors="pt", truncation=True, max_length=512).to(device)
         with torch.no_grad():
             out = model.generate(**inputs, max_new_tokens=60, do_sample=False)
         response = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         mitigated_results.append(judge_response(response))
         if (i+1) % 10 == 0:
-            print(f"    {i+1}/{n_test_atk} (mean α={np.mean(alphas_used[-10:]):.2f})")
+            print(f"    {i+1}/{n_test_atk}")
+
+    mitigated_asr = sum(1 for v in mitigated_results if v == "complied") / len(mitigated_results)
+    print(f"  Mitigated ASR: {mitigated_asr:.3f} ({sum(1 for v in mitigated_results if v == 'complied')}/{n_test_atk})")
 
     mitigated_asr = sum(1 for v in mitigated_results if v == "complied") / len(mitigated_results)
     print(f"  Mitigated ASR: {mitigated_asr:.3f} ({sum(1 for v in mitigated_results if v == 'complied')}/{n_test_atk})")
@@ -228,13 +209,6 @@ def main():
     print(f"{'─'*60}")
     benign_results = []
     for i, p in enumerate(test_benign):
-        mitigation_active[0] = False
-        radius = compute_hps_score(proj, model, tokenizer, p, device)
-        radial_excess = max(0, radius - mean_benign_radius)
-        alpha = ALPHA_BASE * radial_excess
-        current_alpha[0] = alpha
-
-        mitigation_active[0] = True
         inputs = tokenizer(p, return_tensors="pt", truncation=True, max_length=512).to(device)
         with torch.no_grad():
             out = model.generate(**inputs, max_new_tokens=60, do_sample=False)
@@ -261,17 +235,15 @@ def main():
     print(f"  {'ASR Reduction':<30} | {baseline_asr - mitigated_asr:>8.3f}")
     print(f"  {'Helpfulness':<30} | {helpfulness:>8.3f}")
     print(f"  {'False Refusal Rate':<30} | {false_refusal:>8.3f}")
-    print(f"  {'Mean α (attacks)':<30} | {np.mean(alphas_used):>8.3f}")
     print(f"{'═'*60}\n")
 
     results = {
-        "config": {"alpha_base": ALPHA_BASE, "mitigation_layers": MITIGATION_LAYERS},
+        "config": {"alpha": ALPHA, "mitigation_layers": MITIGATION_LAYERS},
         "baseline_asr": float(baseline_asr),
         "mitigated_asr": float(mitigated_asr),
         "asr_reduction": float(baseline_asr - mitigated_asr),
         "helpfulness": float(helpfulness),
         "false_refusal_rate": float(false_refusal),
-        "mean_alpha": float(np.mean(alphas_used)),
     }
     save_json(results, "experiment_mitigation_v2.json", config.RESULTS_DIR)
 
