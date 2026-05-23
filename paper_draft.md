@@ -103,6 +103,12 @@ Bailey et al. (2026) establish that representation-space defenses must be evalua
 
 ## 3. Method
 
+### Figure 0: Method Overview
+
+[arch2.png]
+
+The HPS pipeline in five steps: (1) Extract activations at 7 critical layers during a single forward pass, (2) Project each activation onto the Lorentz hyperboloid via learned linear map W, (3) Measure 12 trajectory features capturing radial statistics, curvature, and displacement in hyperbolic space, (4) Combine with 15 RTV refusal-direction features into a 27-dimensional vector, (5) Classify via logistic regression calibrated at 5% FPR.
+
 ### 3.1 Overview
 
 ```
@@ -382,11 +388,21 @@ Wu et al. (2026) propose that safety in LLMs operates on two geometrically disti
 
 ### 6.4 Adaptive Robustness and Obfuscated Activations
 
-Under white-box PGD attack on activations (following Bailey et al., 2026), HPS-Adv is fully evaded at ε≥0.05 in activation space. An attacker with full access to the projection weights W, classifier coefficients, and detection threshold can minimize the radial coordinate (x₀) via gradient descent to push attack representations toward the benign region of the hyperboloid.
+Under white-box PGD attack on activations (following Bailey et al., 2026), we evaluate both HPS alone and the HPS+RTV ensemble:
 
-This is a shared limitation of all representation-level defenses operating in continuous activation space. Bailey et al. (2026) demonstrate this for Mahalanobis-based detectors; we confirm it extends to hyperbolic-projected detectors. The RTV paper (Derya & Sunar, 2026) achieves partial robustness (7% ASR) by exploiting the *tension* between refusal suppression (needed for jailbreak) and fingerprint preservation (needed for evasion). HPS's analogous tension — between maintaining harmful generation and minimizing radial position — provides modest robustness at small ε (73.4% caught at ε=0.001) but does not survive larger perturbation budgets.
+| ε (L∞ budget) | HPS-Adv evasion | Ensemble evasion |
+|---|---|---|
+| 0.001 | 26.6% | 6.0% |
+| 0.005 | — | 16.0% |
+| 0.01 | 53.1% | 26.0% |
+| 0.05 | 96.9% | 90.0% |
+| 0.1 | 100% | 100% |
 
-We note that the relevant threat model for deployment is not unlimited white-box access to activations (which implies the attacker can already modify model behavior arbitrarily), but rather token-level optimization with a fixed suffix budget — a setting where representation-level defenses retain practical value.
+The ensemble provides modest improvement at small ε (6% vs 26.6% evasion at ε=0.001) but both break at ε≈0.05. The dual-signal architecture does not provide substantial additional adaptive robustness because both feature sets (HPS trajectory and RTV fingerprint) are computed from the same activation tensor — a perturbation that fools one simultaneously affects the other.
+
+An attacker with full white-box access to the projection weights W, refusal directions r_l, classifier coefficients, and detection threshold can minimize the ensemble score via gradient descent. This is a shared limitation of all representation-level defenses operating in continuous activation space (Bailey et al., 2026). True robustness would require features computed from independent sources (e.g., different model components, multiple forward passes, or token-level analysis).
+
+We note that the relevant deployment threat model is not unlimited white-box access to activations (which implies the attacker can already modify model behavior arbitrarily), but rather token-level optimization with a fixed suffix budget — a setting where representation-level defenses retain practical value because the mapping from token perturbations to activation perturbations is constrained and non-trivial to optimize.
 
 ### 6.5 Limitations
 
@@ -559,9 +575,61 @@ Limitations remain: PAIR achieves only 30.6% cross-attack TPR (the hardest attac
 
 - **RQ2 (Cross-attack generalization):** Yes, with caveats. HPS generalizes to 7/9 unseen attack types at >46% TPR on Llama-3-8B (mean 68.2%). The ensemble with RTV reaches 86.1% mean cross-attack TPR. PAIR (semantic rewrites) remains the hardest case at 30.6%.
 
-- **RQ3 (Adaptive robustness):** Limited. Under PGD on activations, HPS-Adv breaks at ε≈0.05. Adversarial training provides modest improvement (breaking ε shifts from <0.01 to ≈0.01). The ensemble's dual-signal architecture should increase the breaking ε (attacker must fool both signals simultaneously), but this requires further evaluation.
+- **RQ3 (Adaptive robustness):** Limited. Under PGD on activations, both HPS alone and the HPS+RTV ensemble break at ε≈0.05. The ensemble provides modest improvement at small ε (6% evasion vs 26.6% at ε=0.001) but does not fundamentally change the breaking point. The dual-signal architecture does not provide additional robustness because both feature sets are computed from the same perturbed activations.
 
 - **RQ4 (Multi-model generalization):** Yes. Validated on Vicuna-13B (40 layers) and Llama-3-8B (32 layers) with consistent results. HPS outperforms RTV on both models. The ensemble achieves 96.9% TPR on Llama-3-8B and 89.1% on Vicuna-13B in same-distribution evaluation.
+
+---
+
+## 8. Figures
+
+### Figure 1: Poincaré Disk — HPS Projection (Final Layer)
+
+[results/viz_poincare_disk.png]
+
+The trained Lorentz projection maps LLM activations onto the hyperbolic hyperboloid, visualized here via Poincaré disk projection. Benign prompts (green) form a compact cluster on the right side of the disk, while jailbreak attacks (purple) cluster on the left — clearly separated with minimal overlap. This demonstrates that the contrastive training successfully learns a hyperbolic embedding where the two classes occupy geometrically distinct regions. The separation is angular (different directions from center) rather than purely radial, indicating the projection exploits the full hyperbolic structure, not just distance from origin.
+
+### Figure 2: Geometric Orthogonality of Jailbreak Activations (Vicuna-13B)
+
+[results/hps_zeroshot_clusters.png]
+
+PCA projection of HPS trajectory features reveals a fundamental geometric property: jailbreak activations are displaced along PC2 (8.4% variance, vertical axis) while harmful and harmless prompts separate along PC1 (88.9% variance, horizontal axis). This means jailbreaks don't simply move along the harmful-harmless continuum — they create activations in a geometrically orthogonal subspace. The annotated axes show: PC1 corresponds to the refusal axis (what RTV monitors), while PC2 captures an attack-specific signal invisible to single-direction defenses. This explains why RTV achieves only 9.5% TPR on JBC attacks — it monitors only the horizontal axis and misses the vertical displacement entirely.
+
+### Figure 3: Feature Space Comparison — HPS vs RTV vs Ensemble (Llama-3-8B)
+
+[results/hps_llama3_clusters.png]
+
+Three-panel comparison of detection feature spaces on the same test data (1300 benign + 1304 attacks across 9 attack types):
+
+- **Left (HPS, 12D, AUROC=0.956):** PC1 captures 96.8% of variance. Benign (green) clusters at positive PC1, attacks scatter at negative PC1. Clear separation along one dominant axis — the learned hyperbolic trajectory direction.
+
+- **Middle (RTV, 15D, AUROC=0.856):** PC1 captures only 60.5% of variance. All classes are heavily tangled — harmless, harmful, and attacks overlap substantially. The refusal-direction fingerprint provides weaker separation because many attacks (PAIR, IJP) don't suppress the refusal direction.
+
+- **Right (Ensemble, 27D, AUROC=0.992):** Combining both feature sets, PC1 captures 90.4% of variance with improved separation. The logistic regression learns to weight HPS features for most attacks while leveraging RTV features for encoding-based attacks (Base64, SAA) where refusal suppression is the dominant signal.
+
+### Figure 4: Activation Trajectory Through Layers
+
+[results/viz_trajectory.png]
+
+Shows how the radial position (x₀, time coordinate on the Lorentz hyperboloid) evolves as activations pass through model layers. Both benign and attack trajectories start at x₀≈1.0 in early layers (0, 1, 2) — where activations are dominated by token embeddings and carry little semantic information. As activations reach late layers (28–31), radial position increases dramatically as the model commits to its response strategy. The key observation: benign and attack trajectories diverge at the final layer (31), with benign reaching slightly higher x₀ on average. The large variance (shaded regions) at late layers explains why multi-layer trajectory features (displacement, range, curvature) are needed rather than single-layer radial thresholding.
+
+### Figure 5: HPS Feature Importance
+
+[results/viz_feature_importance.png]
+
+Logistic regression coefficient magnitudes reveal which of the 12 trajectory features drive detection on Llama-3-8B. The top features are:
+1. **Displacement** (geodesic distance from first to last layer) — the strongest signal, measuring how far the activation "travels" through hyperbolic space across layers.
+2. **Max radial position** and **radial range** — capturing the peak extremity and variability of the trajectory.
+3. **Mean radial position** — overall depth in hyperbolic space.
+4. **Max curvature** — trajectory bending, indicating abrupt directional changes between layers.
+
+Notably, on Llama-3-8B, curvature features contribute meaningfully (unlike Vicuna-13B where they were negligible). This suggests the trajectory shape signal is model-dependent — the projection adapts to each architecture's internal dynamics. Path length is the least important feature, indicating that total distance traveled matters less than the endpoints and shape of the trajectory.
+
+### Figure 6: RTV Fingerprint Space (Llama-3-8B)
+
+[results/rtv_llama3_results_clusters.png]
+
+RTV's 15-dimensional refusal-direction fingerprint projected to 2D. Harmless prompts (green, left) and harmful prompts (red, right) are well-separated — confirming the refusal direction is correctly computed. However, attacks (purple) form a massive diffuse cloud that overlaps heavily with both legitimate clusters. This explains RTV's 53.1% TPR: many attacks produce fingerprints indistinguishable from legitimate prompts. The overlap is particularly severe in the center, where PAIR and IJP attacks reside — these attacks don't suppress the refusal direction and thus appear "normal" to RTV's Mahalanobis detector.
 
 ---
 
