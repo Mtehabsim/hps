@@ -218,10 +218,105 @@ def main():
     # Save
     results = {
         "model": args.model,
-        "hps": {"auroc": float(hps_auroc), "tpr": float(hps_tpr), "layers": HPS_LAYERS},
-        "rtv": {"auroc": float(rtv_auroc), "tpr": float(rtv_tpr), "layers": RTV_LAYERS},
+        "same_dist": {
+            "hps": {"auroc": float(hps_auroc), "tpr": float(hps_tpr), "layers": HPS_LAYERS},
+            "rtv": {"auroc": float(rtv_auroc), "tpr": float(rtv_tpr), "layers": RTV_LAYERS},
+        },
         "n_test_ben": len(test_ben), "n_test_atk": len(test_atk),
     }
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  CROSS-ATTACK: Train HPS on 8 methods, test on held-out 9th
+    # ══════════════════════════════════════════════════════════════════════
+    print(f"\n{'═'*60}")
+    print(f"  CROSS-ATTACK (train on 8, test on held-out 1)")
+    print(f"{'═'*60}")
+
+    methods_unique = sorted(set(attack_methods))
+    # Group hidden states by method
+    hs_by_method = {m: [] for m in methods_unique}
+    # We need to re-extract per method from the full attack list
+    # Use the already-extracted train+test hidden states mapped back
+    all_atk_hs = hs_train_atk + hs_test_atk
+    all_atk_methods = [attack_methods[i] for i in atk_idx]
+    for hs, m in zip(all_atk_hs, all_atk_methods):
+        hs_by_method[m].append(hs)
+
+    # All benign (train+test combined for cross-attack, then split)
+    all_ben_hs = hs_train_ben + hs_test_ben
+    ben_split = int(0.8 * len(all_ben_hs))
+    cv_ben_train_hs = all_ben_hs[:ben_split]
+    cv_ben_test_hs = all_ben_hs[ben_split:]
+
+    print(f"\n  {'Held-out':<15} | {'N':>5} | {'HPS':>6} | {'RTV':>6}")
+    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}")
+
+    cross_results = {}
+    for held_out in methods_unique:
+        # Train on all methods except held_out
+        train_hs = []
+        for m in methods_unique:
+            if m != held_out:
+                train_hs.extend(hs_by_method[m])
+        test_hs = hs_by_method[held_out]
+
+        if len(test_hs) < 5:
+            continue
+
+        # HPS: train projection
+        X_cv_ben = to_hps_array(cv_ben_train_hs)
+        X_cv_atk = to_hps_array(train_hs)
+        X_cv_train = np.concatenate([X_cv_ben, X_cv_atk])
+        y_cv_train = np.array([0]*len(X_cv_ben) + [1]*len(X_cv_atk))
+
+        X_cv_te_ben = to_hps_array(cv_ben_test_hs)
+        X_cv_te_atk = to_hps_array(test_hs)
+
+        torch.manual_seed(42)
+        proj_cv = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
+        opt_cv = optim.Adam(proj_cv.parameters(), lr=1e-3, weight_decay=1e-5)
+        X_cv_t = torch.tensor(X_cv_train, dtype=torch.float32, device=device)
+        y_cv_t = torch.tensor(y_cv_train, dtype=torch.long, device=device)
+        for _ in range(120):
+            l = torch.tensor(0.0, device=device)
+            for li in range(n_layers):
+                h = proj_cv(X_cv_t[:, li, :])
+                l = l + contrastive_loss(h, y_cv_t, k=proj_cv.k, tau=proj_cv.tau(li))
+            l = l / n_layers
+            opt_cv.zero_grad(); l.backward(); opt_cv.step()
+        proj_cv.eval()
+
+        f_tr = extract_trajectory_features(proj_cv, X_cv_train)
+        f_te_ben = extract_trajectory_features(proj_cv, X_cv_te_ben)
+        f_te_atk = extract_trajectory_features(proj_cv, X_cv_te_atk)
+
+        sc_cv = StandardScaler()
+        clf_cv = LogisticRegression(max_iter=2000, random_state=42)
+        clf_cv.fit(sc_cv.fit_transform(f_tr), y_cv_train)
+        s_ben = clf_cv.predict_proba(sc_cv.transform(f_te_ben))[:, 1]
+        s_atk = clf_cv.predict_proba(sc_cv.transform(f_te_atk))[:, 1]
+        thr_cv = float(np.quantile(s_ben, 1.0 - FPR_TARGET))
+        hps_cv_tpr = float((s_atk > thr_cv).mean())
+
+        # RTV on same held-out test
+        rtv_s_ben = np.array([rtv_score(compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS))
+                              for hs in cv_ben_test_hs])
+        rtv_s_atk = np.array([rtv_score(compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS))
+                              for hs in test_hs])
+        rtv_thr_cv = float(np.quantile(rtv_s_ben, 1.0 - FPR_TARGET))
+        rtv_cv_tpr = float((rtv_s_atk > rtv_thr_cv).mean())
+
+        print(f"  {held_out:<15} | {len(test_hs):>5} | {hps_cv_tpr:>6.3f} | {rtv_cv_tpr:>6.3f}")
+        cross_results[held_out] = {"hps": hps_cv_tpr, "rtv": rtv_cv_tpr, "n": len(test_hs)}
+
+    mean_hps_cv = np.mean([v["hps"] for v in cross_results.values()])
+    mean_rtv_cv = np.mean([v["rtv"] for v in cross_results.values()])
+    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}")
+    print(f"  {'MEAN':<15} | {'':>5} | {mean_hps_cv:>6.3f} | {mean_rtv_cv:>6.3f}")
+
+    results["cross_attack"] = cross_results
+    results["cross_attack_mean"] = {"hps": float(mean_hps_cv), "rtv": float(mean_rtv_cv)}
+
     out = "results/hps_vs_rtv_llama3.json"
     with open(out, "w") as f:
         json.dump(results, f, indent=2)
