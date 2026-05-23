@@ -27,36 +27,75 @@ from rtv_standalone import FPR_TARGET
 HPS_LAYERS = [0, 1, 2, 28, 29, 30, 31]
 
 
-def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, geometry="hyperbolic"):
+def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=False):
     """Train projection + classifier, return AUROC and TPR@5%."""
     n_layers = X_train.shape[1]
     d_hidden = X_train.shape[2]
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     torch.manual_seed(seed)
-    if geometry == "hyperbolic":
-        proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-    else:
-        # Euclidean: linear projection + L2 contrastive
-        proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-        # We'll use same architecture but measure Euclidean features
-
+    proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
     opt = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
     X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
     y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 
-    for _ in range(120):
-        loss = torch.tensor(0.0, device=device)
-        for l in range(n_layers):
-            h = proj(X_t[:, l, :])
-            loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
-        loss = loss / n_layers
-        opt.zero_grad(); loss.backward(); opt.step()
-    proj.eval()
-
-    feats_train = extract_trajectory_features(proj, X_train)
-    feats_te_ben = extract_trajectory_features(proj, X_te_ben)
-    feats_te_atk = extract_trajectory_features(proj, X_te_atk)
+    if euclidean:
+        # Euclidean: use L2 contrastive loss instead of Lorentz geodesic
+        proj_e = nn.Linear(d_hidden, 64, bias=False).to(device)
+        nn.init.xavier_uniform_(proj_e.weight)
+        scale_e = nn.Parameter(torch.tensor(1.0/8.0, device=device))
+        opt = optim.Adam(list(proj_e.parameters()) + [scale_e], lr=1e-3, weight_decay=1e-5)
+        for _ in range(120):
+            loss = torch.tensor(0.0, device=device)
+            for l in range(n_layers):
+                h = proj_e(X_t[:, l, :]) * scale_e
+                dists = torch.cdist(h, h)
+                sm = (y_t.unsqueeze(0) == y_t.unsqueeze(1)).float()
+                dm = 1.0 - sm
+                tr = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
+                ns = (sm * tr).sum().clamp(min=1)
+                nd = (dm * tr).sum().clamp(min=1)
+                loss = loss + ((dists**2 * sm * tr).sum()/ns + (torch.clamp(2-dists,min=0)**2 * dm * tr).sum()/nd) / 2
+            loss = loss / n_layers
+            opt.zero_grad(); loss.backward(); opt.step()
+        # Extract Euclidean features (norms + distances, analogous to HPS trajectory)
+        proj_e.eval()
+        def euc_feats(X):
+            feats = []
+            with torch.no_grad():
+                for i in range(len(X)):
+                    x = torch.tensor(X[i], dtype=torch.float32, device=device)
+                    h = proj_e(x) * scale_e
+                    norms = torch.norm(h, dim=1).cpu().numpy()
+                    h_np = h.cpu().numpy()
+                    d_total = np.linalg.norm(h_np[-1] - h_np[0])
+                    path_len = sum(np.linalg.norm(h_np[j+1]-h_np[j]) for j in range(n_layers-1))
+                    curvs = []
+                    for j in range(1, n_layers-1):
+                        dp = np.linalg.norm(h_np[j]-h_np[j-1])
+                        dn = np.linalg.norm(h_np[j+1]-h_np[j])
+                        ds = np.linalg.norm(h_np[j+1]-h_np[j-1])
+                        curvs.append(abs(dp+dn-ds)/(dp+dn+1e-8))
+                    curvs = np.array(curvs) if curvs else np.array([0.0])
+                    feats.append([norms.mean(), norms.max(), norms.min(), norms.std(), norms.max()-norms.min(),
+                                  curvs.max(), curvs.mean(), curvs.std() if len(curvs)>1 else 0,
+                                  np.argmax(curvs)/max(len(curvs),1), d_total, path_len, d_total/(path_len+1e-8)])
+            return np.array(feats)
+        feats_train = euc_feats(X_train)
+        feats_te_ben = euc_feats(X_te_ben)
+        feats_te_atk = euc_feats(X_te_atk)
+    else:
+        for _ in range(120):
+            loss = torch.tensor(0.0, device=device)
+            for l in range(n_layers):
+                h = proj(X_t[:, l, :])
+                loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
+            loss = loss / n_layers
+            opt.zero_grad(); loss.backward(); opt.step()
+        proj.eval()
+        feats_train = extract_trajectory_features(proj, X_train)
+        feats_te_ben = extract_trajectory_features(proj, X_te_ben)
+        feats_te_atk = extract_trajectory_features(proj, X_te_atk)
 
     sc = StandardScaler()
     clf = LogisticRegression(max_iter=2000, random_state=seed)
@@ -133,13 +172,24 @@ def main():
     y_train = np.array([0]*len(X_tr_ben) + [1]*len(X_tr_atk))
 
     aurocs, tprs = [], []
+    euc_aurocs, euc_tprs = [], []
     for seed in range(5):
         a, t = train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=seed)
         aurocs.append(a); tprs.append(t)
-        print(f"    Seed {seed}: AUROC={a:.3f}  TPR@5%={t:.3f}")
+        print(f"    Seed {seed} (HPS): AUROC={a:.3f}  TPR@5%={t:.3f}")
 
-    print(f"\n  Mean AUROC: {np.mean(aurocs):.3f} ± {np.std(aurocs):.3f}")
-    print(f"  Mean TPR:   {np.mean(tprs):.3f} ± {np.std(tprs):.3f}")
+    print(f"\n  HPS Mean AUROC: {np.mean(aurocs):.3f} ± {np.std(aurocs):.3f}")
+    print(f"  HPS Mean TPR:   {np.mean(tprs):.3f} ± {np.std(tprs):.3f}")
+
+    print(f"\n  Euclidean baseline (5 seeds):")
+    for seed in range(5):
+        a, t = train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=seed, euclidean=True)
+        euc_aurocs.append(a); euc_tprs.append(t)
+        print(f"    Seed {seed} (Euc): AUROC={a:.3f}  TPR@5%={t:.3f}")
+
+    print(f"\n  Euc Mean AUROC: {np.mean(euc_aurocs):.3f} ± {np.std(euc_aurocs):.3f}")
+    print(f"  Euc Mean TPR:   {np.mean(euc_tprs):.3f} ± {np.std(euc_tprs):.3f}")
+    print(f"\n  Δ AUROC (HPS - Euc): {np.mean(aurocs) - np.mean(euc_aurocs):.3f}")
 
     # ══════════════════════════════════════════════════════════════════════
     #  EXPERIMENT 2: Learning curve (AUROC vs N training attacks)

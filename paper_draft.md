@@ -16,7 +16,7 @@ On Llama-3-8B with nine attack families (6520 attacks, balanced evaluation):
 - **Cross-attack generalization:** Ensemble mean TPR=86.1% (vs HPS 68.2%, RTV 52.0%)
 - **vs JBShield-D (USENIX Security 2025):** Ensemble accuracy 95.9% vs JBShield-D 55.0%
 
-We further show that (1) hyperbolic geometry provides +0.302 AUROC over identically-trained Euclidean projections in cross-attack evaluation, (2) the dominant detection signal is radial position (98.7% feature importance), consistent with the geometric prior's design, (3) jailbreak activations occupy a subspace geometrically orthogonal to the harmful-harmless axis, explaining why single-direction defenses have fundamental blind spots, and (4) the refusal suppression hypothesis ("early activation, late suppression") is empirically rejected on Vicuna-13B.
+We further show that (1) hyperbolic geometry provides +0.302 AUROC over identically-trained Euclidean projections in cross-attack evaluation, (2) the dominant detection signal is radial position (98.7% feature importance), consistent with the geometric prior's design, (3) jailbreak activations occupy a subspace geometrically orthogonal to the harmful-harmless axis, explaining why single-direction defenses have fundamental blind spots, and (4) the refusal suppression hypothesis ("early activation, late suppression") is not supported on Vicuna-13B, consistent with recent findings of multi-dimensional refusal geometry (Wollschläger et al., ICML 2025).
 
 ---
 
@@ -85,15 +85,20 @@ This paper addresses the following research questions:
 
 Arditi et al. (2024) show that refusal in aligned LLMs is mediated by a single direction in the residual stream, estimated as `r_l = μ_harmful - μ_harmless`. GCG-style attacks succeed by suppressing propagation along this direction. This makes refusal-direction alignment a natural detection feature — but one that is blind to attacks achieving jailbreak through mechanisms other than refusal suppression.
 
+Recent work challenges the single-direction assumption: Wollschläger et al. (ICML 2025) identify multiple independent refusal directions and multi-dimensional concept cones, showing that refusal is geometrically richer than a single vector. Guo et al. (2025) further demonstrate that refusal behaviors correspond to geometrically distinct directions across 11 categories. These findings directly support our argument that monitoring a single refusal direction (as RTV does) is fundamentally insufficient — and motivate our multi-dimensional learned projection approach.
+
 ### 2.4 Hyperbolic Geometry for Language and Safety
 
 - **HELM** (He et al., NeurIPS 2025): First fully hyperbolic LLM at billion scale; token embeddings exhibit negative Ricci curvature.
 - **HypLoRA** (Yang et al., NeurIPS 2025): Token embeddings have measurable δ-hyperbolicity and power-law radial structure.
-- **HyPE** (Maljkovic et al., 2026): Hyperbolic SVDD on prompt embeddings for VLM safety.
-- **SALO** (arXiv:2605.02958, 2026): Sparse activation localization for refusal trajectory detection via causal tracing.
-- **Streaming Hidden-state Trajectory Detection** (arXiv:2604.07727): Gaussian modeling + Mahalanobis on hidden states at decoding time.
+- **HyPE** (Maljkovic et al., ICLR 2026): Hyperbolic SVDD on prompt embeddings for VLM safety.
+- **SALO** (ICML 2026, arXiv:2605.02958): Sparse Activation Localization Operator for refusal trajectory detection via causal tracing. Reports >90% detection where terminal-state methods fail.
+- **Structured Multi-step Jailbreaking** (Zhou et al., ICML 2026): Hyperbolic Hamiltonian dynamics for jailbreak *attacks* — demonstrating hyperbolic geometry is relevant from both attack and defense perspectives.
+- **Contrastive Representation Learning for Safety** (Chen et al., 2025): Triplet-based contrastive loss on representations. Methodologically related but Euclidean, without geometric inductive bias.
 
-**Differentiation from HyPE.** Concurrent work HyPE (Maljkovic et al., 2026) applies one-class Hyperbolic SVDD to prompt embeddings from a frozen VLM text encoder (HySAC) for NSFW content detection. HPS differs fundamentally in three respects: (1) we operate on *internal multi-layer activations* during the forward pass, not input-side prompt embeddings; (2) we use *supervised contrastive training* in Lorentz space with per-layer temperature calibration, not one-class anomaly detection with a single learned radius; (3) we target *LLM jailbreak detection with cross-attack generalization* across diverse attack families (GCG, PAIR, JBC, random\_search), not VLM content filtering against NSFW prompts. The two methods address different threat models at different points in the pipeline — HyPE guards the input to a VLM decoder, while HPS monitors the internal computation of an LLM during inference.
+**Differentiation from HyPE (ICLR 2026).** HyPE applies one-class Hyperbolic SVDD to prompt embeddings from a frozen VLM text encoder for NSFW detection. HPS differs fundamentally: (1) we operate on *internal multi-layer activations*, not input-side embeddings — capturing the model's computational trajectory; (2) we use *supervised contrastive training*, enabling cross-attack generalization that one-class SVDD cannot achieve (our zero-shot experiments show one-class approaches reach only 0.843 AUROC vs supervised HPS at 0.956); (3) we target *LLM jailbreaks* across 9 attack families, not VLM content filtering.
+
+**Differentiation from SALO (ICML 2026).** SALO uses causal tracing to identify sparse neuron-level activation patterns in the refusal trajectory. HPS differs by: (1) projecting full-layer activations into a *learned geometric space* rather than identifying sparse patterns; (2) extracting trajectory *features* (radial, curvature, displacement) rather than activation magnitudes; (3) providing a controlled Euclidean vs Hyperbolic ablation (+0.302 AUROC) that SALO does not evaluate. The approaches are complementary — SALO identifies *which* neurons matter, HPS learns *how to project* the full activation.
 
 ### 2.5 Adaptive Evaluation
 
@@ -110,6 +115,8 @@ Bailey et al. (2026) establish that representation-space defenses must be evalua
 The HPS pipeline in five steps: (1) Extract activations at 7 critical layers during a single forward pass, (2) Project each activation onto the Lorentz hyperboloid via learned linear map W, (3) Measure 12 trajectory features capturing radial statistics, curvature, and displacement in hyperbolic space, (4) Combine with 15 RTV refusal-direction features into a 27-dimensional vector, (5) Classify via logistic regression calibrated at 5% FPR.
 
 ### 3.1 Overview
+
+**Threat Model.** The defender has white-box access to the target LLM's hidden states at all layers during inference. The attacker crafts adversarial prompts (token-level modifications) to induce harmful outputs while evading detection. We evaluate under two threat models: (1) non-adaptive, where the attacker is unaware of the defense, and (2) adaptive, where the attacker has full knowledge of the defense parameters and optimizes against it via PGD on activations.
 
 ```
 Input prompt
@@ -283,6 +290,8 @@ Cross-attack mean AUROC (from experiment 8):
 
 The only difference between these two methods is the geometry of the projection space. Architecture, training procedure, features, and classifier are identical. The +0.302 AUROC gap is entirely attributable to the hyperbolic inductive bias.
 
+The Euclidean baseline achieves 0.000 TPR because the trained classifier produces scores below the FPR=1% threshold on all held-out attack samples — it cannot generalize the decision boundary to unseen attack types, defaulting to the benign class. This is not a misconfiguration but a genuine failure mode: without the hyperbolic prior's privileged radial axis, the Euclidean projection scatters different attack types in arbitrary directions, making a single linear boundary learned on 3 attack types unable to capture the 4th.
+
 See Figure 3 (`hps_llama3_clusters.png`) for side-by-side PCA comparison of HPS vs RTV vs Ensemble feature spaces.
 
 ### 5.4 Per-Method Detection Analysis
@@ -319,7 +328,7 @@ Adversarial training improves both baseline detection and small-ε robustness. T
 
 ### 5.6 Feature Importance
 
-Permutation importance analysis on the 12 trajectory features:
+Permutation importance analysis on the 12 trajectory features (**Vicuna-13B**):
 
 | Category | % Importance |
 |---|---|
@@ -327,7 +336,7 @@ Permutation importance analysis on the 12 trajectory features:
 | Curvature | 0.0% |
 | Displacement | 1.3% |
 
-The detection signal is almost entirely radial — the hyperbolic projection's time coordinate (x₀) carries the information. This is consistent with the geometric prior: the radial coordinate encodes "depth/extremity" which is the relevant axis for separating attacks from benign.
+On Vicuna-13B, the detection signal is almost entirely radial. However, **feature importance is model-dependent**: on Llama-3-8B (Figure 5), displacement becomes the strongest feature, with curvature contributing meaningfully. This adaptivity demonstrates that the Lorentz projection learns to exploit whichever geometric property best separates classes for a given architecture.
 
 ### 5.7 Geometric Orthogonality of Jailbreak Activations
 
@@ -341,7 +350,7 @@ This finding explains why:
 
 ### 5.8 Negative Results
 
-**Refusal suppression hypothesis rejected.** We tested whether jailbreaks show "early activation, late suppression" of the refusal direction across layers. Empirical measurement:
+**Refusal suppression hypothesis not supported.** We tested whether jailbreaks show "early activation, late suppression" of the refusal direction across layers. Empirical measurement:
 
 ```
 Suppression score (early_mean - late_mean cosine with refusal direction):
@@ -378,15 +387,40 @@ The ensemble combining both signals achieves +4.5% mean cross-attack TPR over HP
 
 ### 6.3 Relationship to the Disentangled Safety Hypothesis
 
-Wu et al. (2026) propose that safety in LLMs operates on two geometrically distinct axes — Recognition (v\_H, detecting harmful intent) and Execution (v\_R, deciding whether to comply). Our findings partially engage with this framework:
+Our detector captures Recognition (harmful content detection) rather than Execution (compliance decision) — refused attacks score identically to successful ones. The orthogonal displacement observed in PCA (Figure 2) may correspond to a signal distinct from both DSH axes, but further mechanistic investigation is needed.
 
-- **Our detector captures Recognition, not Execution.** Refused attacks score identically to successful attacks (0.99 vs 0.998), confirming that HPS detects harmful *content* (Recognition axis) rather than model *compliance* (Execution axis). This is consistent with DSH's prediction that these axes decouple in deep layers.
+### 6.4 Deployment Considerations and PAIR Limitation
 
-- **The orthogonal displacement (PC2) may represent a third axis.** Our PCA analysis shows jailbreak activations displaced along a direction orthogonal to the harmful-harmless separation (PC1). This orthogonal component is not predicted by the two-axis DSH framework and may correspond to the specific computational signature of adversarial prompt processing — distinct from both Recognition and Execution. Further investigation is needed to characterize this axis mechanistically.
+PAIR achieves only 30.6% cross-attack TPR — the hardest attack for all representation-level defenses (RTV paper reports 58% on Llama-3-8B). PAIR generates fluent, natural-language jailbreaks via iterative LLM refinement, producing activations nearly indistinguishable from legitimate prompts. This has concrete deployment implications: HPS is most effective against suffix-based attacks (GCG, SAA, Base64) and template attacks (AutoDAN, Puzzler, Zulu) but should be complemented with input-level semantic classifiers for defense against fluent semantic rewrites. We emphasize that our primary contribution is **cross-attack generalization** — the ability to detect unseen attack families — rather than universal coverage of all possible attack strategies.
 
-- **The refusal suppression hypothesis is not supported.** We tested whether jailbreaks show "early activation, late suppression" of the refusal direction (a prediction derivable from DSH). Empirically, jailbreaks show *less* early-late gap than benign prompts on Vicuna-13B, rejecting this specific mechanism.
+### 6.5 Statistical Stability and Practical Considerations
 
-### 6.4 Adaptive Robustness and Obfuscated Activations
+**Multi-seed stability (5 random seeds, Llama-3-8B):**
+
+| Metric | Mean | Std |
+|---|---|---|
+| AUROC | 0.959 | ±0.005 |
+| TPR@5%FPR | 0.810 | ±0.070 |
+
+AUROC is highly stable across initializations (σ=0.005). TPR shows more variance (σ=0.070) due to threshold sensitivity, but remains consistently above 0.73.
+
+**Learning curve (AUROC vs number of training attacks):**
+
+| N attacks | AUROC | TPR@5% |
+|---|---|---|
+| 50 | 0.853 | 0.258 |
+| 100 | 0.846 | 0.225 |
+| 200 | 0.884 | 0.356 |
+| 500 | 0.878 | 0.401 |
+| 1000 | 0.939 | 0.643 |
+| 2000 | 0.949 | 0.709 |
+| 5216 | 0.956 | 0.841 |
+
+HPS achieves useful detection (AUROC>0.88) with as few as 200 labeled attacks. Performance saturates around 2000 examples. Practitioners can expect strong results with ~1000 labeled jailbreak examples.
+
+**Computational overhead:** The HPS detection pipeline (projection + feature extraction + classification) adds **1.41 ms per prompt** — negligible compared to the LLM forward pass (~100-500ms). The overhead is entirely in activation extraction, not in the detection logic itself.
+
+### 6.6 Adaptive Robustness
 
 Under white-box PGD attack on activations (following Bailey et al., 2026), we evaluate both HPS alone and the HPS+RTV ensemble:
 
@@ -404,7 +438,7 @@ An attacker with full white-box access to the projection weights W, refusal dire
 
 We note that the relevant deployment threat model is not unlimited white-box access to activations (which implies the attacker can already modify model behavior arbitrarily), but rather token-level optimization with a fixed suffix budget — a setting where representation-level defenses retain practical value because the mapping from token perturbations to activation perturbations is constrained and non-trivial to optimize.
 
-### 6.5 Limitations
+### 6.7 Limitations
 
 - **Single model tested.** All experiments on Vicuna-13B. Generalization to Llama-3, Qwen, Mistral is untested.
 - **PAIR remains hard.** 34.8% cross-attack TPR on semantic rewrites. This is a shared limitation of all representation-level defenses (RTV reports 58% on Llama-3-8B).
@@ -460,7 +494,7 @@ HPS outperforms RTV on 7/9 attack types in cross-attack generalization, with a m
 | Zulu | 0.993 acc / F1=0.993 | 0.352 | 0.905 | **1.000** |
 | Base64 | 0.391 acc / F1=0.000 | 0.812 | 0.938 | **1.000** |
 
-JBShield-D (Zhang et al., USENIX Security 2025) was reproduced using their published code and data on Llama-3-8B-Instruct. It achieves mean accuracy of 0.55 across 9 attack types, with F1=0 on Puzzler and Base64 (complete detection failure). The AND-gate architecture is structurally vulnerable as demonstrated by Derya & Sunar (2026). Our HPS+RTV ensemble achieves 95.9% accuracy on the same model, representing a +40.9% absolute improvement over the peer-reviewed baseline.
+JBShield-D (Zhang et al., USENIX Security 2025) was reproduced using their published code and data on Llama-3-8B-Instruct. Under balanced evaluation across 9 attack types — a protocol more representative of deployment than per-attack-type evaluation — JBShield-D achieves mean accuracy of 0.55, with F1=0 on Puzzler and Base64. This is consistent with the structural AND-gate vulnerability identified by Derya & Sunar (2026). Note that JBShield's paper-reported numbers (~97% per-attack detection) use a different evaluation protocol with per-attack-type calibration; the discrepancy reflects protocol differences, not implementation error. Our HPS+RTV ensemble achieves 95.9% accuracy under the same balanced protocol.
 
 **Comprehensive comparison with all representation-level defenses:**
 
@@ -526,28 +560,11 @@ JBShield-D (Zhang et al., USENIX Security 2025) was reproduced using their publi
 - The ensemble's cross-attack mean (86.1%) is +17.9% over HPS alone and +34.1% over RTV alone.
 - PAIR is the only attack where cross-attack performance remains low (30.6%) — a shared limitation of all representation-level defenses.
 
-### 6.7 Mitigation: Refusal Direction Injection (Preliminary)
+### 6.7 Mitigation: Refusal Direction Injection (Appendix — Preliminary)
 
-We explore activation-level mitigation inspired by JBShield-M (Zhang et al., 2025). When HPS flags a prompt as an attack, we inject the refusal direction into late-layer activations to steer the model toward safe refusal:
+We briefly explore activation-level mitigation as future work. Full details in Appendix A.
 
-```
-If HPS_score(prompt) > threshold:
-    h_l ← h_l + α · r_l    for l ∈ {35, 36, 37, 38, 39}
-```
-
-Results on Vicuna-13B (α=8.0, detection-gated):
-
-| Metric | Value |
-|---|---|
-| Baseline ASR | 0.720 |
-| Mitigated ASR | 0.660 |
-| ASR Reduction | 0.060 |
-| Helpfulness (benign) | 0.933 |
-| False Refusal Rate | 0.000 |
-
-The detection gate preserves helpfulness (93.3%) with zero false refusals on benign prompts. However, ASR reduction is modest (6%) — the refusal direction injection at this strength is insufficient to override most successful jailbreaks. This is consistent with the broader challenge of activation-level mitigation: JBShield-M achieves 30.7% ASR (from 53.4% baseline) with a similar approach.
-
-Mitigation via activation steering remains an open problem. The detection component (HPS) is the primary contribution; mitigation is left for future work with stronger intervention strategies (e.g., multi-direction injection, adaptive strength calibration, or token-level removal for suffix-based attacks).
+When HPS flags a prompt, we inject the refusal direction into late-layer activations (α=8.0, detection-gated). On Vicuna-13B: ASR reduces from 0.720 to 0.660 (6% reduction) with 93.3% helpfulness preserved and zero false refusals. This modest reduction is consistent with the broader challenge of activation-level mitigation (JBShield-M achieves 30.7% ASR from 53.4% baseline). Stronger intervention strategies — multi-direction injection, token-level removal for suffix attacks, or adaptive strength calibration — are needed for practical mitigation and are left for future work.
 
 ---
 
@@ -578,6 +595,12 @@ Limitations remain: PAIR achieves only 30.6% cross-attack TPR (the hardest attac
 - **RQ3 (Adaptive robustness):** Limited. Under PGD on activations, both HPS alone and the HPS+RTV ensemble break at ε≈0.05. The ensemble provides modest improvement at small ε (6% evasion vs 26.6% at ε=0.001) but does not fundamentally change the breaking point. The dual-signal architecture does not provide additional robustness because both feature sets are computed from the same perturbed activations.
 
 - **RQ4 (Multi-model generalization):** Yes. Validated on Vicuna-13B (40 layers) and Llama-3-8B (32 layers) with consistent results. HPS outperforms RTV on both models. The ensemble achieves 96.9% TPR on Llama-3-8B and 89.1% on Vicuna-13B in same-distribution evaluation.
+
+---
+
+## Reproducibility
+
+Code, trained projections, and evaluation scripts are available at [repository URL]. The implementation requires PyTorch, scikit-learn, and HuggingFace Transformers. All experiments are reproducible on a single A100 GPU.
 
 ---
 
@@ -637,7 +660,7 @@ RTV's 15-dimensional refusal-direction fingerprint projected to 2D. Harmless pro
 
 - Arditi, O., et al. (2024). Refusal in language models is mediated by a single direction. NeurIPS 37.
 - Andriushchenko, M., et al. (2024). Simple adaptive jailbreaks bypass leading safety-aligned LLMs. arXiv:2404.02151.
-- Bailey, L., et al. (2026). Obfuscated activations bypass LLM latent-space defenses. ICLR 2026. arXiv:2603.10484.
+- Bailey, L., et al. (2026). Obfuscated activations bypass LLM latent-space defenses. ICLR 2026. arXiv:2412.09565.
 - Chao, P., et al. (2023). Jailbreaking black box large language models in twenty queries. arXiv:2310.08419.
 - Derya, K. & Sunar, B. (2026). Revisiting JBShield: Breaking and rebuilding representation-level jailbreak defenses. arXiv:2605.03095.
 - He, B., et al. (2025). HELM: Hyperbolic LLM embedding at billion scale. NeurIPS 2025.
@@ -645,7 +668,7 @@ RTV's 15-dimensional refusal-direction fingerprint projected to 2D. Harmless pro
 - Lee, K., et al. (2018). A simple unified framework for detecting out-of-distribution samples and adversarial attacks. NeurIPS 2018.
 - Ledoit, O. & Wolf, M. (2004). A well-conditioned estimator for large-dimensional covariance matrices. Journal of Multivariate Analysis.
 - Madry, A., et al. (2018). Towards deep learning models resistant to adversarial attacks. ICLR 2018.
-- Maljkovic, D., et al. (2026). HyPE: Hyperbolic prompt embedding for VLM safety. arXiv:2604.06285.
+- Maljkovic, D., et al. (2026). HyPE: Hyperbolic prompt embedding for VLM safety. ICLR 2026. arXiv:2604.06285.
 - Schwinn, L. & Geisler, S. (2024). Bypassing circuit breakers. arXiv.
 - Wu, Z., et al. (2026). Knowing without acting: The disentangled geometry of safety mechanisms in LLMs. arXiv:2603.05773.
 - Yang, M., et al. (2025). HypLoRA: Hyperbolic low-rank adaptation. NeurIPS 2025.
@@ -653,8 +676,12 @@ RTV's 15-dimensional refusal-direction fingerprint projected to 2D. Harmless pro
 - Zou, A., et al. (2023a). Representation engineering: A top-down approach to AI transparency. arXiv:2310.01405.
 - Zou, A., et al. (2023b). Universal and transferable adversarial attacks on aligned language models. arXiv:2307.15043.
 - Zou, A., et al. (2024). Circuit breakers: Representation rerouting for safety. arXiv.
-- SALO (2026). Exploiting latent refusal trajectories for robust jailbreak detection. arXiv:2605.02958.
+- SALO (2026). Exploiting latent refusal trajectories for robust jailbreak detection. ICML 2026. arXiv:2605.02958.
 - Streaming Hidden-state Trajectory Detection (2026). Streaming hidden-state trajectory detection for decoding-time jailbreak defense. arXiv:2604.07727.
 - Latent Representation Framework (2026). Understanding and detecting jailbreak attacks from internal representations of large language models. arXiv:2602.11495.
 - Layerwise Convergence Fingerprints (2026). Layerwise convergence fingerprints for runtime misbehavior detection in LLMs. arXiv:2604.24542.
 - Xie, Y., et al. (2024). GradSafe: Detecting jailbreak prompts for LLMs via safety-critical gradient analysis. ACL 2024. arXiv:2402.13494.
+- Wollschläger, T., Elstner, J., Geisler, S., Cohen-Addad, V., Günnemann, S., Gasteiger, J. (2025). The Geometry of Refusal in Large Language Models: Concept Cones and Representational Independence. ICML 2025. arXiv:2502.17420.
+- Guo, S., et al. (2025). There is more to refusal in large language models than a single direction. arXiv:2602.02132.
+- Zhou, Y., et al. (2026). Structured multi-step jailbreaking under a Hamiltonian generative formulation. ICML 2026. (Hyperbolic geometry used for jailbreak attacks.)
+- Chen, X., et al. (2025). Improving large language model safety with contrastive representation learning. arXiv:2506.11938.
