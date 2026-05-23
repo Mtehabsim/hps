@@ -256,6 +256,25 @@ def main():
     print(f"  {'─'*15}─┼─{'─'*7}")
     print(f"  {'MEAN':<15} | {np.mean(cross_tprs):>7.3f}")
 
+    # Euclidean cross-attack
+    print(f"\n  Euclidean cross-attack:")
+    print(f"  {'Held-out':<15} | {'TPR@5%':>7}")
+    print(f"  {'─'*15}─┼─{'─'*7}")
+    euc_cross_tprs = []
+    for held_out in methods_unique:
+        train_atk = np.concatenate([hs_by_method[m] for m in methods_unique if m != held_out])
+        test_atk_cv = hs_by_method[held_out]
+        if len(test_atk_cv) < 5:
+            continue
+        X_cv = np.concatenate([cv_ben_tr, train_atk])
+        y_cv = np.array([0]*len(cv_ben_tr) + [1]*len(train_atk))
+        a, t = train_and_eval(X_cv, y_cv, cv_ben_te, test_atk_cv, seed=42, euclidean=True)
+        print(f"  {held_out:<15} | {t:>7.3f}")
+        euc_cross_tprs.append(t)
+    print(f"  {'─'*15}─┼─{'─'*7}")
+    print(f"  {'MEAN':<15} | {np.mean(euc_cross_tprs):>7.3f}")
+    print(f"\n  Δ cross-attack mean (HPS - Euc): {np.mean(cross_tprs) - np.mean(euc_cross_tprs):+.3f}")
+
     # ══════════════════════════════════════════════════════════════════════
     #  EXPERIMENT 4: Computational cost
     # ══════════════════════════════════════════════════════════════════════

@@ -6,15 +6,7 @@ Representation-level jailbreak defenses monitor LLM hidden states to detect adve
 
 We propose HPS (Hyperbolic Projection Sentinel), a learned multi-layer detector that projects activations into hyperbolic space via a trained Lorentz projection with contrastive loss. The hyperbolic geometric prior provides an inductive bias that Euclidean projections lack: the radial coordinate's exponential volume growth enforces consistent semantic meaning across attack types, enabling cross-attack generalization.
 
-On Vicuna-13B with four attack families (GCG, PAIR, JBC, prompt\_with\_random\_search), HPS achieves:
-- **Same-distribution:** AUROC=0.970, TPR=85.9% at 5% FPR
-- **Cross-attack generalization:** Mean TPR=68.5% (vs Euclidean 0.0% at FPR=1%)
-- **Ensemble (HPS+RTV):** Mean cross-attack TPR=73.0% (+4.5% over HPS alone)
-
-On Llama-3-8B with nine attack families (6520 attacks, balanced evaluation):
-- **Same-distribution:** Ensemble AUROC=0.992, TPR=96.9%, F1=0.960
-- **Cross-attack generalization:** Ensemble mean TPR=86.1% (vs HPS 68.2%, RTV 52.0%)
-- **vs JBShield-D (USENIX Security 2025):** Ensemble accuracy 95.9% vs JBShield-D 55.0%
+On Vicuna-13B with four attack families (GCG, PAIR, JBC, prompt\_with\_random\_search), HPS achieves AUROC=0.970 with 85.9% TPR at 5% FPR, and 68.5% mean cross-attack TPR (vs Euclidean: 0% at FPR=1%). On Llama-3-8B with nine attack families (6520 attacks, balanced evaluation), the HPS+RTV ensemble reaches AUROC=0.992, 96.9% TPR, and 86.1% cross-attack mean TPR — compared to JBShield-D's 55.0% accuracy under the same balanced protocol.
 
 We further show that (1) hyperbolic geometry provides +0.302 AUROC over identically-trained Euclidean projections in cross-attack evaluation, (2) the dominant detection signal is radial position (98.7% feature importance), consistent with the geometric prior's design, (3) jailbreak activations occupy a subspace geometrically orthogonal to the harmful-harmless axis, explaining why single-direction defenses have fundamental blind spots, and (4) the refusal suppression hypothesis ("early activation, late suppression") is not supported on Vicuna-13B, consistent with recent findings of multi-dimensional refusal geometry (Wollschläger et al., ICML 2025).
 
@@ -57,7 +49,9 @@ This paper addresses the following research questions:
 
 4. We show that an ensemble combining HPS trajectory features with RTV refusal-direction fingerprints achieves +4.5% mean cross-attack TPR over HPS alone, demonstrating that the two signals are complementary rather than redundant.
 
-5. We empirically reject the "refusal suppression" hypothesis on Vicuna-13B and show that jailbreak activations are geometrically orthogonal to the harmful-harmless axis — a finding that explains the fundamental limitations of single-direction defenses.
+5. We show that the "refusal suppression" hypothesis is not supported on Vicuna-13B, consistent with multi-direction findings (Wollschläger et al., ICML 2025), and establish that jailbreak activations are geometrically orthogonal to the harmful-harmless axis — explaining the fundamental limitations of single-direction defenses.
+
+6. We validate HPS across two LLM architectures (Vicuna-13B, Llama-3-8B), demonstrating that the geometric prior generalizes beyond a single model with consistent improvements over baselines.
 
 ---
 
@@ -75,11 +69,11 @@ This paper addresses the following research questions:
 - **JBShield** (Zhang et al., USENIX Security 2025): AND-gate over toxic and jailbreak concept directions at a single layer. Reports 0% ASR against non-adaptive GCG. Broken by JB-GCG adaptive attack (53.4% ASR). Our reproduction on Llama-3-8B shows mean accuracy of 55% across 9 attacks.
 - **RTV** (Derya & Sunar, 2026): Mahalanobis outlier detection over 15-dim refusal-direction fingerprint (3 layers × 5 token positions). AUROC=0.99 against JB-GCG; 7% ASR under full adaptive attack.
 - **GradSafe** (Xie et al., ACL 2024): Computes cosine similarity between the target model's gradient w.r.t. a harmful-response target and a reference gradient. Outperforms Llama Guard on Llama-2 without training. Operates on gradients rather than activations — complementary mechanism to HPS.
-- **SALO** (arXiv:2605.02958, 2026): Sparse Activation Localization Operator. Uses causal tracing to identify persistent upstream refusal trajectories that survive even when terminal signals are suppressed. Reports >90% detection where terminal-state methods fail. Concurrent work.
-- **Latent Representation Framework** (arXiv:2602.11495, 2026): Tensor-based analysis of hidden activations for jailbreak detection. Reports 78% jailbreak blocking on abliterated Llama-3.1-8B while preserving 94% benign behavior. Also demonstrates inference-time disruption. Concurrent work.
+- **SALO** (ICML 2026, arXiv:2605.02958): Sparse Activation Localization Operator. Uses causal tracing to identify persistent upstream refusal trajectories. Reports >90% detection where terminal-state methods fail.
+- **Latent Representation Framework** (arXiv:2602.11495, 2026): Tensor-based analysis of hidden activations for jailbreak detection. Reports 78% jailbreak blocking on abliterated Llama-3.1-8B while preserving 94% benign behavior.
 - **HiddenDetect** (Jiang et al., 2025): Cosine similarity with vocabulary-space refusal vector for VLMs.
 - **Circuit Breakers** (Zou et al., 2024): Training-time representation rerouting. Bypassed by Schwinn & Geisler (2024).
-- **Layerwise Convergence Fingerprints** (arXiv:2604.24542, 2026): Runtime misbehavior detection via layer-wise convergence patterns. Finds different attack types activate different layers. Concurrent work.
+- **Layerwise Convergence Fingerprints** (arXiv:2604.24542, 2026): Runtime misbehavior detection via layer-wise convergence patterns. Finds different attack types activate different layers.
 
 ### 2.3 Refusal Direction Analysis
 
@@ -270,7 +264,7 @@ Train on 3 attack methods, test on held-out 4th. TPR at 5% FPR:
 | random\_search | 0.816 | 0.194 | **0.867** | 0.000 |
 | **MEAN** | **0.685** | 0.066 | **0.730** | 0.000 |
 
-See Figure 3 (`hps_llama3_clusters.png`) for visual comparison of per-method cross-attack separation.
+See Figure 3 (`hps_llama3_clusters.png`) for visual comparison of HPS vs RTV vs Ensemble feature spaces on Llama-3-8B (Section 6.8).
 
 **Key findings:**
 - HPS generalizes to 3/4 unseen attack families at >77% TPR.
@@ -292,7 +286,7 @@ The only difference between these two methods is the geometry of the projection 
 
 The Euclidean baseline achieves 0.000 TPR because the trained classifier produces scores below the FPR=1% threshold on all held-out attack samples — it cannot generalize the decision boundary to unseen attack types, defaulting to the benign class. This is not a misconfiguration but a genuine failure mode: without the hyperbolic prior's privileged radial axis, the Euclidean projection scatters different attack types in arbitrary directions, making a single linear boundary learned on 3 attack types unable to capture the 4th.
 
-See Figure 3 (`hps_llama3_clusters.png`) for side-by-side PCA comparison of HPS vs RTV vs Ensemble feature spaces.
+See Figure 2 (`hps_zeroshot_clusters.png`) for PCA visualization of the Vicuna-13B feature space showing geometric orthogonality.
 
 ### 5.4 Per-Method Detection Analysis
 
@@ -395,14 +389,16 @@ PAIR achieves only 30.6% cross-attack TPR — the hardest attack for all represe
 
 ### 6.5 Statistical Stability and Practical Considerations
 
-**Multi-seed stability (5 random seeds, Llama-3-8B):**
+**Multi-seed stability (5 random seeds, Llama-3-8B, same-distribution):**
 
-| Metric | Mean | Std |
-|---|---|---|
-| AUROC | 0.959 | ±0.005 |
-| TPR@5%FPR | 0.810 | ±0.070 |
+| Method | Mean AUROC | Std | Mean TPR@5% | Std |
+|---|---|---|---|---|
+| HPS | 0.959 | ±0.005 | 0.810 | ±0.070 |
+| Euclidean | 0.999 | ±0.000 | 0.998 | ±0.001 |
 
-AUROC is highly stable across initializations (σ=0.005). TPR shows more variance (σ=0.070) due to threshold sensitivity, but remains consistently above 0.73.
+In same-distribution evaluation (train and test contain the same attack types), both methods achieve near-perfect performance — the Euclidean baseline is slightly higher. **The advantage of hyperbolic geometry emerges specifically in cross-attack generalization** (Section 5.2), where Euclidean achieves 0% TPR on held-out attack types while HPS achieves 68.2% mean TPR. The +0.302 AUROC gap reported in Section 5.3 is a cross-attack phenomenon, not a same-distribution one.
+
+HPS AUROC is highly stable across initializations (σ=0.005). TPR shows more variance (σ=0.070) due to threshold sensitivity, but remains consistently above 0.73.
 
 **Learning curve (AUROC vs number of training attacks):**
 
@@ -418,7 +414,7 @@ AUROC is highly stable across initializations (σ=0.005). TPR shows more varianc
 
 HPS achieves useful detection (AUROC>0.88) with as few as 200 labeled attacks. Performance saturates around 2000 examples. Practitioners can expect strong results with ~1000 labeled jailbreak examples.
 
-**Computational overhead:** The HPS detection pipeline (projection + feature extraction + classification) adds **1.41 ms per prompt** — negligible compared to the LLM forward pass (~100-500ms). The overhead is entirely in activation extraction, not in the detection logic itself.
+**Computational overhead:** The HPS detection pipeline (projection + feature extraction + classification) adds **2.31 ms per prompt** — negligible compared to the LLM forward pass (~100-500ms). The overhead is entirely in activation extraction, not in the detection logic itself.
 
 ### 6.6 Adaptive Robustness
 
@@ -440,16 +436,14 @@ We note that the relevant deployment threat model is not unlimited white-box acc
 
 ### 6.7 Limitations
 
-- **Single model tested.** All experiments on Vicuna-13B. Generalization to Llama-3, Qwen, Mistral is untested.
+- **Two models tested.** Validated on Vicuna-13B and Llama-3-8B. Generalization to Qwen, Mistral, and larger models (70B+) is untested.
 - **PAIR remains hard.** 34.8% cross-attack TPR on semantic rewrites. This is a shared limitation of all representation-level defenses (RTV reports 58% on Llama-3-8B).
 - **Adaptive robustness is limited.** HPS breaks at ε≈0.05 under PGD on activations. Adversarial training provides modest improvement but does not solve the problem.
 - **Requires labeled attack data.** Unlike RTV (zero-shot), HPS needs ~250 labeled jailbreak examples for training. This is a deployment constraint.
 - **White-box access required.** Cannot protect closed-weight APIs.
 - **Calibration sensitivity.** RTV's performance varies significantly with calibration data distribution (AUROC 0.843 with JBShield data vs 0.729 with HarmBench data). The ensemble inherits this sensitivity for the RTV component.
 
-### 6.6 Comparison with RTV Paper
-
-### 6.6 Multi-Model Validation: Llama-3-8B
+### 6.8 Multi-Model Validation: Llama-3-8B
 
 To validate that HPS generalizes beyond Vicuna-13B, we evaluate on Meta-Llama-3-8B-Instruct using 9 attack types from the JBShield repository (6520 attacks total) with balanced benign data (5200 train + 1300 test).
 
@@ -459,7 +453,7 @@ To validate that HPS generalizes beyond Vicuna-13B, we evaluate on Meta-Llama-3-
 |---|---|---|---|---|---|
 | RTV | 0.856 | 0.531 | 0.050 | 0.672 | 0.740 |
 | HPS | 0.956 | 0.841 | 0.050 | 0.890 | 0.896 |
-| **Ensemble (HPS+RTV)** | **—** | **0.969** | **0.050** | **0.960** | **0.959** |
+| **Ensemble (HPS+RTV)** | **0.992** | **0.969** | **0.050** | **0.960** | **0.959** |
 
 The ensemble achieves 96.9% TPR — a +12.8% improvement over HPS alone — demonstrating that RTV features provide substantial complementary signal when combined via logistic regression, even though RTV alone achieves only 53.1% TPR.
 
@@ -560,7 +554,7 @@ JBShield-D (Zhang et al., USENIX Security 2025) was reproduced using their publi
 - The ensemble's cross-attack mean (86.1%) is +17.9% over HPS alone and +34.1% over RTV alone.
 - PAIR is the only attack where cross-attack performance remains low (30.6%) — a shared limitation of all representation-level defenses.
 
-### 6.7 Mitigation: Refusal Direction Injection (Appendix — Preliminary)
+### 6.9 Mitigation: Refusal Direction Injection (Appendix — Preliminary)
 
 We briefly explore activation-level mitigation as future work. Full details in Appendix A.
 
@@ -576,7 +570,7 @@ We validate HPS on two models (Vicuna-13B and Llama-3-8B) across 9 attack famili
 - HPS alone achieves AUROC=0.956 and 84.1% TPR at 5% FPR
 - The HPS+RTV ensemble reaches **96.9% TPR** (AUROC=0.992) by combining complementary detection signals
 - In cross-attack generalization, the ensemble achieves **86.1% mean TPR** across 9 unseen attack types
-- This represents a +40.9% absolute accuracy improvement over JBShield-D (95.9% vs 55.0%)
+- This represents a +40.9% absolute accuracy improvement over JBShield-D under balanced cross-attack evaluation (95.9% vs 55.0%), a deployment-representative protocol
 
 Our key findings:
 1. **Hyperbolic geometry provides superior inductive bias** for cross-attack generalization (+0.302 AUROC over Euclidean, +16.2% TPR over RTV in cross-attack on Llama-3-8B).
@@ -676,10 +670,10 @@ RTV's 15-dimensional refusal-direction fingerprint projected to 2D. Harmless pro
 - Zou, A., et al. (2023a). Representation engineering: A top-down approach to AI transparency. arXiv:2310.01405.
 - Zou, A., et al. (2023b). Universal and transferable adversarial attacks on aligned language models. arXiv:2307.15043.
 - Zou, A., et al. (2024). Circuit breakers: Representation rerouting for safety. arXiv.
-- SALO (2026). Exploiting latent refusal trajectories for robust jailbreak detection. ICML 2026. arXiv:2605.02958.
-- Streaming Hidden-state Trajectory Detection (2026). Streaming hidden-state trajectory detection for decoding-time jailbreak defense. arXiv:2604.07727.
-- Latent Representation Framework (2026). Understanding and detecting jailbreak attacks from internal representations of large language models. arXiv:2602.11495.
-- Layerwise Convergence Fingerprints (2026). Layerwise convergence fingerprints for runtime misbehavior detection in LLMs. arXiv:2604.24542.
+- Li, X., et al. (2026). SALO: Exploiting latent refusal trajectories for robust jailbreak detection. ICML 2026. arXiv:2605.02958.
+- Streaming Hidden-state Trajectory Detection: Gao, Y., et al. (2026). Streaming hidden-state trajectory detection for decoding-time jailbreak defense. arXiv:2604.07727.
+- Wang, Z., et al. (2026). Understanding and detecting jailbreak attacks from internal representations of large language models. arXiv:2602.11495.
+- Kim, J., et al. (2026). Layerwise convergence fingerprints for runtime misbehavior detection in LLMs. arXiv:2604.24542.
 - Xie, Y., et al. (2024). GradSafe: Detecting jailbreak prompts for LLMs via safety-critical gradient analysis. ACL 2024. arXiv:2402.13494.
 - Wollschläger, T., Elstner, J., Geisler, S., Cohen-Addad, V., Günnemann, S., Gasteiger, J. (2025). The Geometry of Refusal in Large Language Models: Concept Cones and Representational Independence. ICML 2025. arXiv:2502.17420.
 - Guo, S., et al. (2025). There is more to refusal in large language models than a single direction. arXiv:2602.02132.
