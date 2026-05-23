@@ -170,6 +170,13 @@ def main():
             print(f"    Epoch {epoch+1}/120 loss={loss.item():.4f}")
     proj.eval()
 
+    # Save trained projection
+    torch.save({
+        "state_dict": proj.state_dict(),
+        "d_in": d_hidden, "d_proj": 64, "n_layers": n_layers, "layers": HPS_LAYERS,
+    }, "results/hps_llama3_projection.pt")
+    print(f"  Saved → results/hps_llama3_projection.pt")
+
     feats_train = extract_trajectory_features(proj, X_train)
     feats_te_ben = extract_trajectory_features(proj, X_te_ben)
     feats_te_atk = extract_trajectory_features(proj, X_te_atk)
@@ -224,6 +231,33 @@ def main():
         },
         "n_test_ben": len(test_ben), "n_test_atk": len(test_atk),
     }
+
+    # ── Plot: HPS trajectory features ──
+    import matplotlib.pyplot as plt
+    from sklearn.decomposition import PCA
+
+    X_plot = np.vstack([feats_te_ben, feats_te_atk])
+    pca_plot = PCA(n_components=2, random_state=42)
+    X_2d = pca_plot.fit_transform(X_plot)
+    n_b = len(feats_te_ben)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.scatter(X_2d[:n_b, 0], X_2d[:n_b, 1], c='#2ecc71', label='Benign', alpha=0.7, s=50)
+    # Color attacks by method
+    offset = n_b
+    colors = plt.cm.Set1(np.linspace(0, 1, len(set(test_methods))))
+    for i, m in enumerate(sorted(set(test_methods))):
+        idx = [j for j, x in enumerate(test_methods) if x == m]
+        ax.scatter(X_2d[n_b + np.array(idx), 0], X_2d[n_b + np.array(idx), 1],
+                   c=[colors[i]], label=m, alpha=0.5, s=20)
+    ax.set_xlabel(f"PC1 ({pca_plot.explained_variance_ratio_[0]*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pca_plot.explained_variance_ratio_[1]*100:.1f}%)")
+    ax.set_title(f"HPS Trajectory Features — Llama-3-8B\nAUROC={hps_auroc:.3f}")
+    ax.legend(fontsize=8, loc='upper right')
+    plt.tight_layout()
+    plt.savefig("results/hps_llama3_clusters.png", dpi=150)
+    plt.close()
+    print(f"  Plot saved → results/hps_llama3_clusters.png")
 
     # ══════════════════════════════════════════════════════════════════════
     #  CROSS-ATTACK: Train HPS on 8 methods, test on held-out 9th
