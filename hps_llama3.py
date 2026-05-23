@@ -196,31 +196,77 @@ def main():
                                for hs in hs_test_atk])
     rtv_thr = float(np.quantile(rtv_scores_ben, 1.0 - FPR_TARGET))
 
-    # ── Results ──
-    hps_tpr = float((hps_scores_atk > hps_thr).mean())
-    rtv_tpr = float((rtv_scores_atk > rtv_thr).mean())
-    hps_auroc = roc_auc_score(np.array([0]*len(hps_scores_ben)+[1]*len(hps_scores_atk)),
-                              np.concatenate([hps_scores_ben, hps_scores_atk]))
-    rtv_auroc = roc_auc_score(np.array([0]*len(rtv_scores_ben)+[1]*len(rtv_scores_atk)),
-                              np.concatenate([rtv_scores_ben, rtv_scores_atk]))
+    # ── Ensemble (HPS features + RTV fingerprints) ──
+    print(f"  Computing Ensemble (12 HPS + 15 RTV = 27 features)...")
+    rtv_feats_train = np.array([compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS)
+                                for hs in hs_train_ben + hs_train_atk])
+    rtv_feats_te_ben = np.array([compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS)
+                                 for hs in hs_test_ben])
+    rtv_feats_te_atk = np.array([compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS)
+                                 for hs in hs_test_atk])
 
+    ens_train = np.concatenate([feats_train, rtv_feats_train], axis=1)
+    ens_te_ben = np.concatenate([feats_te_ben, rtv_feats_te_ben], axis=1)
+    ens_te_atk = np.concatenate([feats_te_atk, rtv_feats_te_atk], axis=1)
+
+    sc_ens = StandardScaler()
+    clf_ens = LogisticRegression(max_iter=2000, random_state=42)
+    clf_ens.fit(sc_ens.fit_transform(ens_train), y_train)
+    ens_scores_ben = clf_ens.predict_proba(sc_ens.transform(ens_te_ben))[:, 1]
+    ens_scores_atk = clf_ens.predict_proba(sc_ens.transform(ens_te_atk))[:, 1]
+    ens_thr = float(np.quantile(ens_scores_ben, 1.0 - FPR_TARGET))
+    ens_tpr = float((ens_scores_atk > ens_thr).mean())
+    ens_auroc = roc_auc_score(np.array([0]*len(ens_scores_ben)+[1]*len(ens_scores_atk)),
+                              np.concatenate([ens_scores_ben, ens_scores_atk]))
+
+    # ── Results ──
     print(f"\n{'═'*60}")
     print(f"  RESULTS — Llama-3-8B (same test set)")
     print(f"{'═'*60}")
-    print(f"  {'Method':<20} | {'AUROC':>6} | {'TPR@5%':>7}")
-    print(f"  {'─'*20}─┼─{'─'*6}─┼─{'─'*7}")
-    print(f"  {'RTV':<20} | {rtv_auroc:>6.3f} | {rtv_tpr:>7.3f}")
-    print(f"  {'HPS':<20} | {hps_auroc:>6.3f} | {hps_tpr:>7.3f}")
+    hps_fpr = float((hps_scores_ben > hps_thr).mean())
+    rtv_fpr = float((rtv_scores_ben > rtv_thr).mean())
+    ens_fpr = float((ens_scores_ben > ens_thr).mean())
+
+    # Full metrics
+    def full_metrics(scores_ben, scores_atk, thr, name):
+        tp = int((scores_atk > thr).sum())
+        fn = int((scores_atk <= thr).sum())
+        fp = int((scores_ben > thr).sum())
+        tn = int((scores_ben <= thr).sum())
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+        print(f"\n  {name}:")
+        print(f"    TP={tp}  FN={fn}  FP={fp}  TN={tn}")
+        print(f"    Precision={precision:.3f}  Recall(TPR)={recall:.3f}  F1={f1:.3f}")
+        print(f"    FPR={fpr:.3f}  Accuracy={accuracy:.3f}")
+        return {"tp": tp, "fn": fn, "fp": fp, "tn": tn,
+                "precision": precision, "recall": recall, "f1": f1,
+                "fpr": fpr, "accuracy": accuracy}
+
+    print(f"\n  Test set: {len(hps_scores_ben)} benign + {len(hps_scores_atk)} attacks")
+    hps_metrics = full_metrics(hps_scores_ben, hps_scores_atk, hps_thr, "HPS")
+    rtv_metrics = full_metrics(rtv_scores_ben, rtv_scores_atk, rtv_thr, "RTV")
+    ens_metrics = full_metrics(ens_scores_ben, ens_scores_atk, ens_thr, "Ensemble")
+
+    print(f"\n  {'Method':<20} | {'AUROC':>6} | {'TPR':>6} | {'FPR':>6} | {'F1':>6} | {'Acc':>6}")
+    print(f"  {'─'*20}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}")
+    print(f"  {'RTV':<20} | {rtv_auroc:>6.3f} | {rtv_tpr:>6.3f} | {rtv_fpr:>6.3f} | {rtv_metrics['f1']:>6.3f} | {rtv_metrics['accuracy']:>6.3f}")
+    print(f"  {'HPS':<20} | {hps_auroc:>6.3f} | {hps_tpr:>6.3f} | {hps_fpr:>6.3f} | {hps_metrics['f1']:>6.3f} | {hps_metrics['accuracy']:>6.3f}")
+    print(f"  {'Ensemble':<20} | {ens_auroc:>6.3f} | {ens_tpr:>6.3f} | {ens_fpr:>6.3f} | {ens_metrics['f1']:>6.3f} | {ens_metrics['accuracy']:>6.3f}")
 
     # Per-method
     print(f"\n  Per-attack-type:")
-    print(f"  {'Method':<15} | {'N':>5} | {'HPS':>6} | {'RTV':>6}")
-    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}")
+    print(f"  {'Method':<15} | {'N':>5} | {'HPS':>6} | {'RTV':>6} | {'Ens':>6}")
+    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}")
     for m in sorted(set(test_methods)):
         idx = [i for i, x in enumerate(test_methods) if x == m]
         ht = float((hps_scores_atk[idx] > hps_thr).mean())
         rt = float((rtv_scores_atk[idx] > rtv_thr).mean())
-        print(f"  {m:<15} | {len(idx):>5} | {ht:>6.3f} | {rt:>6.3f}")
+        et = float((ens_scores_atk[idx] > ens_thr).mean())
+        print(f"  {m:<15} | {len(idx):>5} | {ht:>6.3f} | {rt:>6.3f} | {et:>6.3f}")
 
     # Save
     results = {
@@ -228,6 +274,7 @@ def main():
         "same_dist": {
             "hps": {"auroc": float(hps_auroc), "tpr": float(hps_tpr), "layers": HPS_LAYERS},
             "rtv": {"auroc": float(rtv_auroc), "tpr": float(rtv_tpr), "layers": RTV_LAYERS},
+            "ensemble": {"auroc": float(ens_auroc), "tpr": float(ens_tpr)},
         },
         "n_test_ben": len(test_ben), "n_test_atk": len(test_atk),
     }
@@ -282,8 +329,8 @@ def main():
     cv_ben_train_hs = all_ben_hs[:ben_split]
     cv_ben_test_hs = all_ben_hs[ben_split:]
 
-    print(f"\n  {'Held-out':<15} | {'N':>5} | {'HPS':>6} | {'RTV':>6}")
-    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}")
+    print(f"\n  {'Held-out':<15} | {'N':>5} | {'HPS':>6} | {'RTV':>6} | {'Ens':>6}")
+    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}")
 
     cross_results = {}
     for held_out in methods_unique:
@@ -340,13 +387,32 @@ def main():
         rtv_thr_cv = float(np.quantile(rtv_s_ben, 1.0 - FPR_TARGET))
         rtv_cv_tpr = float((rtv_s_atk > rtv_thr_cv).mean())
 
-        print(f"  {held_out:<15} | {len(test_hs):>5} | {hps_cv_tpr:>6.3f} | {rtv_cv_tpr:>6.3f}")
-        cross_results[held_out] = {"hps": hps_cv_tpr, "rtv": rtv_cv_tpr, "n": len(test_hs)}
+        # Ensemble on same held-out test
+        rtv_f_tr = np.array([compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS)
+                             for hs in cv_ben_train_hs + train_hs])
+        rtv_f_te_ben = np.array([compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS)
+                                 for hs in cv_ben_test_hs])
+        rtv_f_te_atk = np.array([compute_fingerprint(hs, refusal_dirs, RTV_LAYERS, TOKEN_POSITIONS)
+                                 for hs in test_hs])
+        ens_f_tr = np.concatenate([f_tr, rtv_f_tr], axis=1)
+        ens_f_te_ben = np.concatenate([f_te_ben, rtv_f_te_ben], axis=1)
+        ens_f_te_atk = np.concatenate([f_te_atk, rtv_f_te_atk], axis=1)
+        sc_ens_cv = StandardScaler()
+        clf_ens_cv = LogisticRegression(max_iter=2000, random_state=42)
+        clf_ens_cv.fit(sc_ens_cv.fit_transform(ens_f_tr), y_cv_train)
+        es_ben = clf_ens_cv.predict_proba(sc_ens_cv.transform(ens_f_te_ben))[:, 1]
+        es_atk = clf_ens_cv.predict_proba(sc_ens_cv.transform(ens_f_te_atk))[:, 1]
+        ens_thr_cv = float(np.quantile(es_ben, 1.0 - FPR_TARGET))
+        ens_cv_tpr = float((es_atk > ens_thr_cv).mean())
+
+        print(f"  {held_out:<15} | {len(test_hs):>5} | {hps_cv_tpr:>6.3f} | {rtv_cv_tpr:>6.3f} | {ens_cv_tpr:>6.3f}")
+        cross_results[held_out] = {"hps": hps_cv_tpr, "rtv": rtv_cv_tpr, "ens": ens_cv_tpr, "n": len(test_hs)}
 
     mean_hps_cv = np.mean([v["hps"] for v in cross_results.values()])
     mean_rtv_cv = np.mean([v["rtv"] for v in cross_results.values()])
-    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}")
-    print(f"  {'MEAN':<15} | {'':>5} | {mean_hps_cv:>6.3f} | {mean_rtv_cv:>6.3f}")
+    mean_ens_cv = np.mean([v["ens"] for v in cross_results.values()])
+    print(f"  {'─'*15}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}")
+    print(f"  {'MEAN':<15} | {'':>5} | {mean_hps_cv:>6.3f} | {mean_rtv_cv:>6.3f} | {mean_ens_cv:>6.3f}")
 
     results["cross_attack"] = cross_results
     results["cross_attack_mean"] = {"hps": float(mean_hps_cv), "rtv": float(mean_rtv_cv)}
