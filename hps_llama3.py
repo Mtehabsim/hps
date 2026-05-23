@@ -89,7 +89,8 @@ def main():
     model, tokenizer = load_model(args.model)
 
     # ── Extract ALL activations (HPS + RTV layers) in one pass ──
-    print(f"\n  Extracting activations (all layers: {ALL_LAYERS})...")
+    # Cache to disk to avoid re-extraction
+    cache_path = "results/llama3_activations_cache.npz"
 
     def extract_all(prompts, label):
         results = []
@@ -130,15 +131,31 @@ def main():
         dn = np.sqrt(max(0, (fp - lw_neg.location_) @ lw_neg.precision_ @ (fp - lw_neg.location_)))
         return min(dp, dn)
 
-    # Extract train + test
-    print("  Train benign...")
-    hs_train_ben = extract_all(train_ben, "train benign")
-    print("  Train attacks...")
-    hs_train_atk = extract_all(train_atk, "train attacks")
-    print("  Test benign...")
-    hs_test_ben = extract_all(test_ben, "test benign")
-    print("  Test attacks...")
-    hs_test_atk = extract_all(test_atk, "test attacks")
+    if os.path.exists(cache_path):
+        print(f"  Loading cached activations from {cache_path}")
+        cache = np.load(cache_path, allow_pickle=True)
+        hs_train_ben = cache["hs_train_ben"].tolist()
+        hs_train_atk = cache["hs_train_atk"].tolist()
+        hs_test_ben = cache["hs_test_ben"].tolist()
+        hs_test_atk = cache["hs_test_atk"].tolist()
+    else:
+        print(f"\n  Extracting activations (all layers: {ALL_LAYERS})...")
+        print("  Train benign...")
+        hs_train_ben = extract_all(train_ben, "train benign")
+        print("  Train attacks...")
+        hs_train_atk = extract_all(train_atk, "train attacks")
+        print("  Test benign...")
+        hs_test_ben = extract_all(test_ben, "test benign")
+        print("  Test attacks...")
+        hs_test_atk = extract_all(test_atk, "test attacks")
+
+        # Save cache
+        np.savez(cache_path,
+                 hs_train_ben=np.array(hs_train_ben, dtype=object),
+                 hs_train_atk=np.array(hs_train_atk, dtype=object),
+                 hs_test_ben=np.array(hs_test_ben, dtype=object),
+                 hs_test_atk=np.array(hs_test_atk, dtype=object))
+        print(f"  Cached activations → {cache_path}")
 
     # ── HPS ──
     print(f"\n  Training HPS Lorentz projection...")
@@ -300,30 +317,38 @@ def main():
         "n_test_ben": len(test_ben), "n_test_atk": len(test_atk),
     }
 
-    # ── Plot: HPS trajectory features ──
+    # ── Plot: 3-panel comparison (HPS / RTV / Ensemble) ──
     import matplotlib.pyplot as plt
     from sklearn.decomposition import PCA
 
-    X_plot = np.vstack([feats_te_ben, feats_te_atk])
-    pca_plot = PCA(n_components=2, random_state=42)
-    X_2d = pca_plot.fit_transform(X_plot)
     n_b = len(feats_te_ben)
+    methods_sorted = sorted(set(test_methods))
+    colors = plt.cm.Set1(np.linspace(0, 1, len(methods_sorted)))
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.scatter(X_2d[:n_b, 0], X_2d[:n_b, 1], c='#2ecc71', label='Benign', alpha=0.7, s=50)
-    # Color attacks by method
-    offset = n_b
-    colors = plt.cm.Set1(np.linspace(0, 1, len(set(test_methods))))
-    for i, m in enumerate(sorted(set(test_methods))):
-        idx = [j for j, x in enumerate(test_methods) if x == m]
-        ax.scatter(X_2d[n_b + np.array(idx), 0], X_2d[n_b + np.array(idx), 1],
-                   c=[colors[i]], label=m, alpha=0.5, s=20)
-    ax.set_xlabel(f"PC1 ({pca_plot.explained_variance_ratio_[0]*100:.1f}%)")
-    ax.set_ylabel(f"PC2 ({pca_plot.explained_variance_ratio_[1]*100:.1f}%)")
-    ax.set_title(f"HPS Trajectory Features — Llama-3-8B\nAUROC={hps_auroc:.3f}")
-    ax.legend(fontsize=8, loc='upper right')
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+
+    panels = [
+        ("HPS Features (12D)", np.vstack([feats_te_ben, feats_te_atk]), hps_auroc),
+        ("RTV Features (15D)", np.vstack([rtv_feats_te_ben, rtv_feats_te_atk]), rtv_auroc),
+        ("Ensemble (27D)", np.vstack([ens_te_ben, ens_te_atk]), ens_auroc),
+    ]
+
+    for ax, (title, X_feat, auroc) in zip(axes, panels):
+        pca_p = PCA(n_components=2, random_state=42)
+        X_2d = pca_p.fit_transform(X_feat)
+        ax.scatter(X_2d[:n_b, 0], X_2d[:n_b, 1], c='#2ecc71', label='Benign', alpha=0.7, s=40)
+        for i, m in enumerate(methods_sorted):
+            idx = [j for j, x in enumerate(test_methods) if x == m]
+            ax.scatter(X_2d[n_b + np.array(idx), 0], X_2d[n_b + np.array(idx), 1],
+                       c=[colors[i]], label=m, alpha=0.4, s=15)
+        ax.set_xlabel(f"PC1 ({pca_p.explained_variance_ratio_[0]*100:.1f}%)")
+        ax.set_ylabel(f"PC2 ({pca_p.explained_variance_ratio_[1]*100:.1f}%)")
+        ax.set_title(f"{title}\nAUROC={auroc:.3f}", fontsize=11)
+        ax.legend(fontsize=6, loc='upper right')
+
+    plt.suptitle("Feature Space Comparison — Llama-3-8B", fontsize=13, fontweight='bold')
     plt.tight_layout()
-    plt.savefig("results/hps_llama3_clusters.png", dpi=150)
+    plt.savefig("results/hps_llama3_clusters.png", dpi=150, bbox_inches='tight')
     plt.close()
     print(f"  Plot saved → results/hps_llama3_clusters.png")
 
