@@ -40,24 +40,33 @@ def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=Fals
     y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 
     if euclidean:
-        # Euclidean: use L2 contrastive loss instead of Lorentz geodesic
+        # Euclidean: L2 contrastive with per-layer scale (matches HPS parameter count)
         proj_e = nn.Linear(d_hidden, 64, bias=False).to(device)
         nn.init.xavier_uniform_(proj_e.weight)
-        scale_e = nn.Parameter(torch.tensor(1.0/8.0, device=device))
-        opt = optim.Adam(list(proj_e.parameters()) + [scale_e], lr=1e-3, weight_decay=1e-5)
-        for _ in range(120):
+        scale_per_layer = nn.Parameter(torch.ones(n_layers, device=device) / 8.0)
+        log_margin = nn.Parameter(torch.tensor(np.log(2.0), device=device))  # learnable margin (analog to κ)
+        opt = optim.Adam(list(proj_e.parameters()) + [scale_per_layer, log_margin], lr=1e-3, weight_decay=1e-5)
+        best_loss = float('inf'); patience = 0
+        for _ in range(200):
             loss = torch.tensor(0.0, device=device)
             for l in range(n_layers):
-                h = proj_e(X_t[:, l, :]) * scale_e
+                h = proj_e(X_t[:, l, :]) * scale_per_layer[l]
                 dists = torch.cdist(h, h)
+                margin = torch.exp(log_margin).clamp(0.5, 5.0)
                 sm = (y_t.unsqueeze(0) == y_t.unsqueeze(1)).float()
                 dm = 1.0 - sm
                 tr = torch.triu(torch.ones(h.shape[0], h.shape[0], device=device), diagonal=1)
                 ns = (sm * tr).sum().clamp(min=1)
                 nd = (dm * tr).sum().clamp(min=1)
-                loss = loss + ((dists**2 * sm * tr).sum()/ns + (torch.clamp(2-dists,min=0)**2 * dm * tr).sum()/nd) / 2
+                loss = loss + ((dists**2 * sm * tr).sum()/ns + (torch.clamp(margin-dists,min=0)**2 * dm * tr).sum()/nd) / 2
             loss = loss / n_layers
             opt.zero_grad(); loss.backward(); opt.step()
+            if loss.item() < best_loss - 1e-4:
+                best_loss = loss.item(); patience = 0
+            else:
+                patience += 1
+            if patience >= 20:
+                break
         # Extract Euclidean features (norms + distances, analogous to HPS trajectory)
         proj_e.eval()
         def euc_feats(X):
@@ -65,9 +74,11 @@ def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=Fals
             with torch.no_grad():
                 for i in range(len(X)):
                     x = torch.tensor(X[i], dtype=torch.float32, device=device)
-                    h = proj_e(x) * scale_e
-                    norms = torch.norm(h, dim=1).cpu().numpy()
-                    h_np = h.cpu().numpy()
+                    layer_pts = []
+                    for l in range(n_layers):
+                        layer_pts.append((proj_e(x[l:l+1]) * scale_per_layer[l]).squeeze(0).cpu().numpy())
+                    h_np = np.array(layer_pts)
+                    norms = np.linalg.norm(h_np, axis=1)
                     d_total = np.linalg.norm(h_np[-1] - h_np[0])
                     path_len = sum(np.linalg.norm(h_np[j+1]-h_np[j]) for j in range(n_layers-1))
                     curvs = []
@@ -85,13 +96,20 @@ def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=Fals
         feats_te_ben = euc_feats(X_te_ben)
         feats_te_atk = euc_feats(X_te_atk)
     else:
-        for _ in range(120):
+        best_loss = float('inf'); patience = 0
+        for _ in range(200):
             loss = torch.tensor(0.0, device=device)
             for l in range(n_layers):
                 h = proj(X_t[:, l, :])
                 loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
             loss = loss / n_layers
             opt.zero_grad(); loss.backward(); opt.step()
+            if loss.item() < best_loss - 1e-4:
+                best_loss = loss.item(); patience = 0
+            else:
+                patience += 1
+            if patience >= 20:
+                break
         proj.eval()
         feats_train = extract_trajectory_features(proj, X_train)
         feats_te_ben = extract_trajectory_features(proj, X_te_ben)
@@ -101,16 +119,23 @@ def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=Fals
     clf = LogisticRegression(max_iter=2000, random_state=seed)
     clf.fit(sc.fit_transform(feats_train), y_train)
 
-    scores_ben = clf.predict_proba(sc.transform(feats_te_ben))[:, 1]
+    # Split test benign into calibration (threshold) + held-out (FPR verification)
+    n_calib = len(feats_te_ben) // 2
+    feats_calib = feats_te_ben[:n_calib]
+    feats_test_ben = feats_te_ben[n_calib:]
+
+    scores_calib = clf.predict_proba(sc.transform(feats_calib))[:, 1]
+    scores_test_ben = clf.predict_proba(sc.transform(feats_test_ben))[:, 1]
     scores_atk = clf.predict_proba(sc.transform(feats_te_atk))[:, 1]
 
-    thr = float(np.quantile(scores_ben, 1.0 - FPR_TARGET))
+    thr = float(np.quantile(scores_calib, 1.0 - FPR_TARGET))
     tpr = float((scores_atk > thr).mean())
+    fpr_actual = float((scores_test_ben > thr).mean())
     auroc = roc_auc_score(
-        np.array([0]*len(scores_ben) + [1]*len(scores_atk)),
-        np.concatenate([scores_ben, scores_atk])
+        np.array([0]*len(scores_test_ben) + [1]*len(scores_atk)),
+        np.concatenate([scores_test_ben, scores_atk])
     )
-    return auroc, tpr
+    return auroc, tpr, fpr_actual
 
 
 def main():
@@ -174,18 +199,18 @@ def main():
     aurocs, tprs = [], []
     euc_aurocs, euc_tprs = [], []
     for seed in range(5):
-        a, t = train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=seed)
+        a, t, fpr = train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=seed)
         aurocs.append(a); tprs.append(t)
-        print(f"    Seed {seed} (HPS): AUROC={a:.3f}  TPR@5%={t:.3f}")
+        print(f"    Seed {seed} (HPS): AUROC={a:.3f}  TPR@5%={t:.3f}  (FPR={fpr:.3f})")
 
     print(f"\n  HPS Mean AUROC: {np.mean(aurocs):.3f} ± {np.std(aurocs):.3f}")
     print(f"  HPS Mean TPR:   {np.mean(tprs):.3f} ± {np.std(tprs):.3f}")
 
     print(f"\n  Euclidean baseline (5 seeds):")
     for seed in range(5):
-        a, t = train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=seed, euclidean=True)
+        a, t, fpr = train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=seed, euclidean=True)
         euc_aurocs.append(a); euc_tprs.append(t)
-        print(f"    Seed {seed} (Euc): AUROC={a:.3f}  TPR@5%={t:.3f}")
+        print(f"    Seed {seed} (Euc): AUROC={a:.3f}  TPR@5%={t:.3f}  (FPR={fpr:.3f})")
 
     print(f"\n  Euc Mean AUROC: {np.mean(euc_aurocs):.3f} ± {np.std(euc_aurocs):.3f}")
     print(f"  Euc Mean TPR:   {np.mean(euc_tprs):.3f} ± {np.std(euc_tprs):.3f}")
@@ -211,7 +236,7 @@ def main():
         n_ben = min(n, len(X_tr_ben))
         X_sub = np.concatenate([X_tr_ben[:n_ben], X_tr_atk[:n]])
         y_sub = np.array([0]*n_ben + [1]*n)
-        a, t = train_and_eval(X_sub, y_sub, X_te_ben, X_te_atk, seed=42)
+        a, t, _ = train_and_eval(X_sub, y_sub, X_te_ben, X_te_atk, seed=42)
         print(f"  {n:<10} | {a:>6.3f} | {t:>7.3f}")
 
     # ══════════════════════════════════════════════════════════════════════
@@ -237,8 +262,8 @@ def main():
     cv_ben_tr = all_ben[:ben_split]
     cv_ben_te = all_ben[ben_split:]
 
-    print(f"\n  {'Held-out':<15} | {'TPR@5%':>7}")
-    print(f"  {'─'*15}─┼─{'─'*7}")
+    print(f"\n  {'Held-out':<15} | {'TPR@5% (mean±std)':>20}")
+    print(f"  {'─'*15}─┼─{'─'*20}")
 
     cross_tprs = []
     for held_out in methods_unique:
@@ -249,17 +274,21 @@ def main():
 
         X_cv = np.concatenate([cv_ben_tr, train_atk])
         y_cv = np.array([0]*len(cv_ben_tr) + [1]*len(train_atk))
-        a, t = train_and_eval(X_cv, y_cv, cv_ben_te, test_atk, seed=42)
-        print(f"  {held_out:<15} | {t:>7.3f}")
-        cross_tprs.append(t)
+        seed_tprs = []
+        for s in range(3):
+            _, t, _ = train_and_eval(X_cv, y_cv, cv_ben_te, test_atk, seed=s)
+            seed_tprs.append(t)
+        mean_t = np.mean(seed_tprs)
+        print(f"  {held_out:<15} | {mean_t:>7.3f} ± {np.std(seed_tprs):.3f}")
+        cross_tprs.append(mean_t)
 
-    print(f"  {'─'*15}─┼─{'─'*7}")
+    print(f"  {'─'*15}─┼─{'─'*20}")
     print(f"  {'MEAN':<15} | {np.mean(cross_tprs):>7.3f}")
 
-    # Euclidean cross-attack
+    # Euclidean cross-attack (3 seeds)
     print(f"\n  Euclidean cross-attack:")
-    print(f"  {'Held-out':<15} | {'TPR@5%':>7}")
-    print(f"  {'─'*15}─┼─{'─'*7}")
+    print(f"  {'Held-out':<15} | {'TPR@5% (mean±std)':>20}")
+    print(f"  {'─'*15}─┼─{'─'*20}")
     euc_cross_tprs = []
     for held_out in methods_unique:
         train_atk = np.concatenate([hs_by_method[m] for m in methods_unique if m != held_out])
@@ -268,10 +297,14 @@ def main():
             continue
         X_cv = np.concatenate([cv_ben_tr, train_atk])
         y_cv = np.array([0]*len(cv_ben_tr) + [1]*len(train_atk))
-        a, t = train_and_eval(X_cv, y_cv, cv_ben_te, test_atk_cv, seed=42, euclidean=True)
-        print(f"  {held_out:<15} | {t:>7.3f}")
-        euc_cross_tprs.append(t)
-    print(f"  {'─'*15}─┼─{'─'*7}")
+        seed_tprs = []
+        for s in range(3):
+            _, t, _ = train_and_eval(X_cv, y_cv, cv_ben_te, test_atk_cv, seed=s, euclidean=True)
+            seed_tprs.append(t)
+        mean_t = np.mean(seed_tprs)
+        print(f"  {held_out:<15} | {mean_t:>7.3f} ± {np.std(seed_tprs):.3f}")
+        euc_cross_tprs.append(mean_t)
+    print(f"  {'─'*15}─┼─{'─'*20}")
     print(f"  {'MEAN':<15} | {np.mean(euc_cross_tprs):>7.3f}")
     print(f"\n  Δ cross-attack mean (HPS - Euc): {np.mean(cross_tprs) - np.mean(euc_cross_tprs):+.3f}")
 

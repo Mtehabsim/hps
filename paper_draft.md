@@ -74,6 +74,8 @@ This paper addresses the following research questions:
 - **HiddenDetect** (Jiang et al., 2025): Cosine similarity with vocabulary-space refusal vector for VLMs.
 - **Circuit Breakers** (Zou et al., 2024): Training-time representation rerouting. Bypassed by Schwinn & Geisler (2024).
 - **Layerwise Convergence Fingerprints** (arXiv:2604.24542, 2026): Runtime misbehavior detection via layer-wise convergence patterns. Finds different attack types activate different layers.
+- **Representational Contrastive Scoring** (Wang et al., arXiv:2512.12069, 2025): Learned projection with contrastive scoring for VLM jailbreak detection. Closest methodological predecessor to our Euclidean baseline — we extend to LLMs with multi-layer trajectory features and show hyperbolic geometry provides additional cross-attack generalization.
+- **What Features in Prompts Jailbreak LLMs?** (arXiv:2411.03343, 2024): Shows linear probes on LLM activations fail to generalize to unseen attack methods — different jailbreaking strategies exploit non-universal features. Provides empirical motivation for our geometric inductive bias investigation.
 
 ### 2.3 Refusal Direction Analysis
 
@@ -679,3 +681,5 @@ RTV's 15-dimensional refusal-direction fingerprint projected to 2D. Harmless pro
 - Guo, S., et al. (2025). There is more to refusal in large language models than a single direction. arXiv:2602.02132.
 - Zhou, Y., et al. (2026). Structured multi-step jailbreaking under a Hamiltonian generative formulation. ICML 2026. (Hyperbolic geometry used for jailbreak attacks.)
 - Chen, X., et al. (2025). Improving large language model safety with contrastive representation learning. arXiv:2506.11938.
+- Wang, H., et al. (2025). Rethinking jailbreak detection of large vision language models with representational contrastive scoring. arXiv:2512.12069.
+- Author et al. (2024). What features in prompts jailbreak LLMs? Finding universal and transferable features. arXiv:2411.03343.
