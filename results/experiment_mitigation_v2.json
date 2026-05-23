@@ -1,0 +1,17 @@
+{
+  "config": {
+    "alpha": 8.0,
+    "mitigation_layers": [
+      35,
+      36,
+      37,
+      38,
+      39
+    ]
+  },
+  "baseline_asr": 0.72,
+  "mitigated_asr": 0.66,
+  "asr_reduction": 0.05999999999999994,
+  "helpfulness": 0.9333333333333333,
+  "false_refusal_rate": 0.0
+}
