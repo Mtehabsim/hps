@@ -105,11 +105,14 @@ def main():
             if not mitigation_active[0]:
                 return outputs
             h = outputs[0] if isinstance(outputs, tuple) else outputs
+            orig_dtype = h.dtype
+            h_f = h.float()
             # Project onto attack direction and subtract
-            proj_coeff = (h * attack_dir_tensor).sum(dim=-1, keepdim=True)
+            proj_coeff = (h_f * attack_dir_tensor).sum(dim=-1, keepdim=True)
             # Only subtract positive projections (attack-aligned components)
             mask = (proj_coeff > 0).float()
-            h_clean = h - ALPHA * mask * proj_coeff * attack_dir_tensor
+            h_clean = h_f - ALPHA * mask * proj_coeff * attack_dir_tensor
+            h_clean = h_clean.to(orig_dtype)
             if isinstance(outputs, tuple):
                 return (h_clean,) + outputs[1:]
             return h_clean

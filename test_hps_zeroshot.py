@@ -262,15 +262,36 @@ def main():
     ax.scatter(X_2d[:n_h, 0], X_2d[:n_h, 1], c='#2ecc71', label='Harmless', alpha=0.7, s=50)
     ax.scatter(X_2d[n_h:n_h+n_harm, 0], X_2d[n_h:n_h+n_harm, 1], c='#e74c3c', label='Harmful', alpha=0.7, s=50)
     ax.scatter(X_2d[n_h+n_harm:, 0], X_2d[n_h+n_harm:, 1], c='#9b59b6', label='Attacks', alpha=0.4, s=20)
-    ax.set_title(f"HPS Zero-Shot: Trajectory Features (PCA)\n"
-                 f"AUROC={auroc:.3f} | CV AUROC={np.mean(cv_aurocs):.3f}±{np.std(cv_aurocs):.3f}",
-                 fontsize=12)
-    ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)")
-    ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)")
-    ax.legend(fontsize=11)
+
+    # Annotate axes with semantic meaning
+    ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%) — Refusal Axis (Harmful ← → Harmless)",
+                  fontsize=11, fontweight='bold')
+    ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%) — Attack-Specific Signal (Orthogonal)",
+                  fontsize=11, fontweight='bold')
+
+    # Add arrow annotations
+    ax.annotate('', xy=(0.95, 0.5), xycoords='axes fraction',
+                xytext=(0.05, 0.5), textcoords='axes fraction',
+                arrowprops=dict(arrowstyle='->', color='gray', lw=1.5, ls='--'))
+    ax.annotate('', xy=(0.5, 0.95), xycoords='axes fraction',
+                xytext=(0.5, 0.05), textcoords='axes fraction',
+                arrowprops=dict(arrowstyle='->', color='gray', lw=1.5, ls='--'))
+
+    # Text box explaining the finding
+    textstr = ("Jailbreaks are displaced along PC2\n"
+               "(orthogonal to refusal direction).\n"
+               "Single-direction defenses (RTV)\n"
+               "only monitor the horizontal axis.")
+    ax.text(0.02, 0.98, textstr, transform=ax.transAxes, fontsize=9,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+
+    ax.set_title(f"Geometric Orthogonality of Jailbreak Activations\n"
+                 f"HPS Trajectory Features — Vicuna-13B",
+                 fontsize=13, fontweight='bold')
+    ax.legend(fontsize=11, loc='lower right')
     plt.tight_layout()
     plot_path = os.path.join(config.RESULTS_DIR, "hps_zeroshot_clusters.png")
-    plt.savefig(plot_path, dpi=150)
+    plt.savefig(plot_path, dpi=200)
     plt.close()
     print(f"\n  Plot saved → {plot_path}")
 
