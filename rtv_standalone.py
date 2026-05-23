@@ -44,7 +44,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 MODEL_LAYERS = {
     "lmsys/vicuna-13b-v1.5": [12, 16, 26],      # empirically discovered (uniform high separation)
-    "meta-llama/Meta-Llama-3-8B-Instruct": [18, 25, 32],  # paper's exact layers
+    "meta-llama/Meta-Llama-3-8B-Instruct": [17, 24, 31],  # paper's 1-indexed {18,25,32} → 0-indexed
     "lmsys/vicuna-7b-v1.5": [14, 19, 25],       # 32 layers, same proportions
 }
 
