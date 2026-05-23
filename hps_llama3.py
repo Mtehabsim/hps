@@ -154,28 +154,35 @@ def main():
 
     torch.manual_seed(42)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-    opt = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
-    X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
-    y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 
-    for epoch in range(120):
-        loss = torch.tensor(0.0, device=device)
-        for l in range(n_layers):
-            h = proj(X_t[:, l, :])
-            loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
-        loss = loss / n_layers
-        opt.zero_grad(); loss.backward(); opt.step()
-        if (epoch+1) % 40 == 0:
-            print(f"    Epoch {epoch+1}/120 loss={loss.item():.4f}")
+    proj_path = "results/hps_llama3_projection.pt"
+    if os.path.exists(proj_path):
+        print(f"  Loading saved projection from {proj_path}")
+        ckpt = torch.load(proj_path, map_location=device, weights_only=False)
+        proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
+        proj.load_state_dict(ckpt["state_dict"])
+    else:
+        proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
+        opt = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
+        X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
+        y_t = torch.tensor(y_train, dtype=torch.long, device=device)
+
+        for epoch in range(120):
+            loss = torch.tensor(0.0, device=device)
+            for l in range(n_layers):
+                h = proj(X_t[:, l, :])
+                loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
+            loss = loss / n_layers
+            opt.zero_grad(); loss.backward(); opt.step()
+            if (epoch+1) % 40 == 0:
+                print(f"    Epoch {epoch+1}/120 loss={loss.item():.4f}")
+
+        torch.save({
+            "state_dict": proj.state_dict(),
+            "d_in": d_hidden, "d_proj": 64, "n_layers": n_layers, "layers": HPS_LAYERS,
+        }, proj_path)
+        print(f"  Saved → {proj_path}")
     proj.eval()
-
-    # Save trained projection
-    torch.save({
-        "state_dict": proj.state_dict(),
-        "d_in": d_hidden, "d_proj": 64, "n_layers": n_layers, "layers": HPS_LAYERS,
-    }, "results/hps_llama3_projection.pt")
-    print(f"  Saved → results/hps_llama3_projection.pt")
 
     feats_train = extract_trajectory_features(proj, X_train)
     feats_te_ben = extract_trajectory_features(proj, X_te_ben)
@@ -253,6 +260,20 @@ def main():
 
     print(f"\n  {'Method':<20} | {'AUROC':>6} | {'TPR':>6} | {'FPR':>6} | {'F1':>6} | {'Acc':>6}")
     print(f"  {'─'*20}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*6}")
+
+    hps_auroc = roc_auc_score(np.array([0]*len(hps_scores_ben)+[1]*len(hps_scores_atk)),
+                              np.concatenate([hps_scores_ben, hps_scores_atk]))
+    rtv_auroc = roc_auc_score(np.array([0]*len(rtv_scores_ben)+[1]*len(rtv_scores_atk)),
+                              np.concatenate([rtv_scores_ben, rtv_scores_atk]))
+    ens_auroc = roc_auc_score(np.array([0]*len(ens_scores_ben)+[1]*len(ens_scores_atk)),
+                              np.concatenate([ens_scores_ben, ens_scores_atk]))
+    hps_tpr = hps_metrics['recall']
+    rtv_tpr = rtv_metrics['recall']
+    ens_tpr = ens_metrics['recall']
+    hps_fpr = hps_metrics['fpr']
+    rtv_fpr = rtv_metrics['fpr']
+    ens_fpr = ens_metrics['fpr']
+
     print(f"  {'RTV':<20} | {rtv_auroc:>6.3f} | {rtv_tpr:>6.3f} | {rtv_fpr:>6.3f} | {rtv_metrics['f1']:>6.3f} | {rtv_metrics['accuracy']:>6.3f}")
     print(f"  {'HPS':<20} | {hps_auroc:>6.3f} | {hps_tpr:>6.3f} | {hps_fpr:>6.3f} | {hps_metrics['f1']:>6.3f} | {hps_metrics['accuracy']:>6.3f}")
     print(f"  {'Ensemble':<20} | {ens_auroc:>6.3f} | {ens_tpr:>6.3f} | {ens_fpr:>6.3f} | {ens_metrics['f1']:>6.3f} | {ens_metrics['accuracy']:>6.3f}")

@@ -112,11 +112,34 @@ def main():
     proj.eval().to(device)
     print(f"  Loaded HPS projection")
 
-    # Compute refusal direction from REFUSED prompts (where refusal is active)
-    # Use harmful queries (from HarmBench-style) vs harmless (Alpaca)
-    # Per Arditi et al.: r_l = mean(harmful) - mean(harmless)
+    # Train HPS classifier for detection gate
     from dataset import BENIGN as benign_all
-    harmful_for_dir = [p for p in ADVERSARIAL[:50]]  # use attack prompts as "harmful"
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+
+    print(f"  Training HPS classifier for detection gate...")
+    n_cls = min(200, len(benign_all), len(ADVERSARIAL))
+    X_cls_ben, X_cls_atk = [], []
+    for i in range(n_cls):
+        d = extract_all_layers(model, tokenizer, benign_all[i], device, "last")
+        X_cls_ben.append(np.array([d[l] for l in HPS_LAYERS if l in d]))
+    for i in range(n_cls):
+        d = extract_all_layers(model, tokenizer, ADVERSARIAL[i], device, "last")
+        X_cls_atk.append(np.array([d[l] for l in HPS_LAYERS if l in d]))
+        if (i+1) % 50 == 0: print(f"    classifier data: {i+1}/{n_cls}")
+    X_cls = np.array(X_cls_ben + X_cls_atk)
+    y_cls = np.array([0]*len(X_cls_ben) + [1]*len(X_cls_atk))
+    feats_cls = extract_trajectory_features(proj, X_cls)
+    sc = StandardScaler()
+    clf = LogisticRegression(max_iter=2000, random_state=42)
+    clf.fit(sc.fit_transform(feats_cls), y_cls)
+    # Threshold at 95th percentile of benign scores
+    ben_scores = clf.predict_proba(sc.transform(feats_cls[:n_cls]))[:, 1]
+    threshold = float(np.quantile(ben_scores, 0.95))
+    print(f"  Classifier trained. Threshold: {threshold:.4f}")
+
+    # Compute refusal direction
+    harmful_for_dir = [p for p in ADVERSARIAL[:50]]
     harmless_for_dir = [p for p in benign_all[:50]]
     refusal_dirs = compute_refusal_direction(
         model, tokenizer, harmful_for_dir, harmless_for_dir, MITIGATION_LAYERS, device, n=50
@@ -184,30 +207,62 @@ def main():
     # ── With adaptive mitigation ──
     print(f"\n{'─'*60}")
     print(f"  WITH MITIGATION (inject refusal direction, α={ALPHA})")
+    print(f"  (Only when HPS classifier flags the prompt)")
     print(f"{'─'*60}")
-    mitigation_active[0] = True
     mitigated_results = []
+    n_flagged = 0
     for i, p in enumerate(test_attacks):
+        # Score with HPS classifier
+        d = extract_all_layers(model, tokenizer, p, device, "last")
+        X = np.zeros((1, len(HPS_LAYERS), list(d.values())[0].shape[0]))
+        for j, l in enumerate(HPS_LAYERS):
+            if l in d: X[0, j] = d[l]
+        feats = extract_trajectory_features(proj, X)
+        score = clf.predict_proba(sc.transform(feats))[:, 1][0]
+
+        # Only mitigate if flagged
+        if score > threshold:
+            mitigation_active[0] = True
+            n_flagged += 1
+        else:
+            mitigation_active[0] = False
+
         inputs = tokenizer(p, return_tensors="pt", truncation=True, max_length=512).to(device)
         with torch.no_grad():
             out = model.generate(**inputs, max_new_tokens=60, do_sample=False)
         response = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         mitigated_results.append(judge_response(response))
         if (i+1) % 10 == 0:
-            print(f"    {i+1}/{n_test_atk}")
+            print(f"    {i+1}/{n_test_atk} (flagged: {n_flagged})")
 
+    mitigation_active[0] = False
     mitigated_asr = sum(1 for v in mitigated_results if v == "complied") / len(mitigated_results)
     print(f"  Mitigated ASR: {mitigated_asr:.3f} ({sum(1 for v in mitigated_results if v == 'complied')}/{n_test_atk})")
+    print(f"  Attacks flagged by HPS: {n_flagged}/{n_test_atk}")
 
     mitigated_asr = sum(1 for v in mitigated_results if v == "complied") / len(mitigated_results)
     print(f"  Mitigated ASR: {mitigated_asr:.3f} ({sum(1 for v in mitigated_results if v == 'complied')}/{n_test_atk})")
 
     # ── Helpfulness (benign with mitigation) ──
     print(f"\n{'─'*60}")
-    print(f"  HELPFULNESS (benign with mitigation ON)")
+    print(f"  HELPFULNESS (benign with detection-gated mitigation)")
     print(f"{'─'*60}")
     benign_results = []
+    n_ben_flagged = 0
     for i, p in enumerate(test_benign):
+        d = extract_all_layers(model, tokenizer, p, device, "last")
+        X = np.zeros((1, len(HPS_LAYERS), list(d.values())[0].shape[0]))
+        for j, l in enumerate(HPS_LAYERS):
+            if l in d: X[0, j] = d[l]
+        feats = extract_trajectory_features(proj, X)
+        score = clf.predict_proba(sc.transform(feats))[:, 1][0]
+
+        if score > threshold:
+            mitigation_active[0] = True
+            n_ben_flagged += 1
+        else:
+            mitigation_active[0] = False
+
         inputs = tokenizer(p, return_tensors="pt", truncation=True, max_length=512).to(device)
         with torch.no_grad():
             out = model.generate(**inputs, max_new_tokens=60, do_sample=False)
@@ -215,6 +270,9 @@ def main():
         benign_results.append(judge_response(response))
         if (i+1) % 10 == 0:
             print(f"    {i+1}/{n_test_ben}")
+
+    mitigation_active[0] = False
+    print(f"  Benign flagged (false positives): {n_ben_flagged}/{n_test_ben}")
 
     helpfulness = sum(1 for v in benign_results if v == "complied") / len(benign_results)
     false_refusal = sum(1 for v in benign_results if v == "refused") / len(benign_results)
