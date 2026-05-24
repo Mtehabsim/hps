@@ -294,8 +294,16 @@ def main():
     parser.add_argument("--cache", default="results/llama3_activations_cache.npz",
                         help="Path to activation cache")
     parser.add_argument("--vicuna-cache", default=None,
-                        help="Optional Vicuna activation cache (run TEST 9 if provided)")
+                        help="Optional Vicuna activation cache (run TEST 10 if provided)")
+    parser.add_argument("--tests", default="all",
+                        help="Comma-separated test numbers to run (e.g. '9' or '4,7,9'). Default 'all'.")
     args = parser.parse_args()
+
+    # Parse which tests to run
+    if args.tests.lower() == "all":
+        tests_to_run = set(range(1, 11))
+    else:
+        tests_to_run = set(int(t.strip()) for t in args.tests.split(",") if t.strip())
 
     print(f"\n{'═'*60}")
     print(f"  DIAGNOSTIC: Why does Euclidean beat HPS on Llama-3?")
@@ -350,317 +358,345 @@ def main():
     # ══════════════════════════════════════════════════════════════
     #  TEST 1: Data size effect on SAME-DISTRIBUTION
     # ══════════════════════════════════════════════════════════════
-    print(f"{'─'*60}")
-    print(f"  TEST 1: Effect of training set size (same-dist)")
-    print(f"  (All 9 methods, vary N attacks)")
-    print(f"{'─'*60}\n")
+    if 1 in tests_to_run:
+        print(f"{'─'*60}")
+        print(f"  TEST 1: Effect of training set size (same-dist)")
+        print(f"  (All 9 methods, vary N attacks)")
+        print(f"{'─'*60}\n")
 
-    sizes = [100, 250, 500, 1000, 2000, 5216]
-    print(f"  {'N':<6} | {'HPS AUROC':>9} | {'Euc AUROC':>9} | {'Δ':>7}")
-    print(f"  {'─'*6}─┼─{'─'*9}─┼─{'─'*9}─┼─{'─'*7}")
+        sizes = [100, 250, 500, 1000, 2000, 5216]
+        print(f"  {'N':<6} | {'HPS AUROC':>9} | {'Euc AUROC':>9} | {'Δ':>7}")
+        print(f"  {'─'*6}─┼─{'─'*9}─┼─{'─'*9}─┼─{'─'*7}")
 
-    for n in sizes:
-        if n > len(X_tr_atk):
-            continue
-        n_ben = min(n, len(X_tr_ben))
-        X_sub = np.concatenate([X_tr_ben[:n_ben], X_tr_atk[:n]])
-        y_sub = np.array([0]*n_ben + [1]*n)
-        a_hps, _, _ = train_and_eval(X_sub, y_sub, X_te_ben, X_te_atk, seed=42, euclidean=False)
-        a_euc, _, _ = train_and_eval(X_sub, y_sub, X_te_ben, X_te_atk, seed=42, euclidean=True)
-        print(f"  {n:<6} | {a_hps:>9.3f} | {a_euc:>9.3f} | {a_hps-a_euc:>+7.3f}")
+        for n in sizes:
+            if n > len(X_tr_atk):
+                continue
+            n_ben = min(n, len(X_tr_ben))
+            X_sub = np.concatenate([X_tr_ben[:n_ben], X_tr_atk[:n]])
+            y_sub = np.array([0]*n_ben + [1]*n)
+            a_hps, _, _ = train_and_eval(X_sub, y_sub, X_te_ben, X_te_atk, seed=42, euclidean=False)
+            a_euc, _, _ = train_and_eval(X_sub, y_sub, X_te_ben, X_te_atk, seed=42, euclidean=True)
+            print(f"  {n:<6} | {a_hps:>9.3f} | {a_euc:>9.3f} | {a_hps-a_euc:>+7.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 2: Data size effect on CROSS-ATTACK
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 2: Effect of training set size (cross-attack)")
-    print(f"  (All 9 methods, vary N per method, leave-one-out)")
-    print(f"{'─'*60}\n")
+    if 2 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 2: Effect of training set size (cross-attack)")
+        print(f"  (All 9 methods, vary N per method, leave-one-out)")
+        print(f"{'─'*60}\n")
 
-    per_method_sizes = [25, 50, 100, 250, 500]
-    print(f"  {'N/method':<9} | {'HPS TPR':>7} | {'Euc TPR':>7} | {'Δ':>7}")
-    print(f"  {'─'*9}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*7}")
+        per_method_sizes = [25, 50, 100, 250, 500]
+        print(f"  {'N/method':<9} | {'HPS TPR':>7} | {'Euc TPR':>7} | {'Δ':>7}")
+        print(f"  {'─'*9}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*7}")
 
-    for n_per in per_method_sizes:
-        sub_atk = []
-        sub_methods = []
-        for m in methods_unique:
-            available = hs_by_method_arr[m]
-            take = min(n_per, len(available))
-            sub_atk.append(available[:take])
-            sub_methods.extend([m] * take)
-        sub_atk = np.concatenate(sub_atk)
+        for n_per in per_method_sizes:
+            sub_atk = []
+            sub_methods = []
+            for m in methods_unique:
+                available = hs_by_method_arr[m]
+                take = min(n_per, len(available))
+                sub_atk.append(available[:take])
+                sub_methods.extend([m] * take)
+            sub_atk = np.concatenate(sub_atk)
 
-        hps_tpr = cross_attack_eval(sub_atk, sub_methods, X_all_ben, methods_unique, euclidean=False)
-        euc_tpr = cross_attack_eval(sub_atk, sub_methods, X_all_ben, methods_unique, euclidean=True)
-        print(f"  {n_per:<9} | {hps_tpr:>7.3f} | {euc_tpr:>7.3f} | {hps_tpr-euc_tpr:>+7.3f}")
+            hps_tpr = cross_attack_eval(sub_atk, sub_methods, X_all_ben, methods_unique, euclidean=False)
+            euc_tpr = cross_attack_eval(sub_atk, sub_methods, X_all_ben, methods_unique, euclidean=True)
+            print(f"  {n_per:<9} | {hps_tpr:>7.3f} | {euc_tpr:>7.3f} | {hps_tpr-euc_tpr:>+7.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 3: Number of methods (cross-attack)
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 3: Effect of method diversity (cross-attack)")
-    print(f"  (Fix ~250 attacks/method, vary number of methods)")
-    print(f"{'─'*60}\n")
+    if 3 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 3: Effect of method diversity (cross-attack)")
+        print(f"  (Fix ~250 attacks/method, vary number of methods)")
+        print(f"{'─'*60}\n")
 
-    method_counts = [3, 4, 5, 7, 9]
-    print(f"  {'#methods':<9} | {'HPS TPR':>7} | {'Euc TPR':>7} | {'Δ':>7}")
-    print(f"  {'─'*9}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*7}")
+        method_counts = [3, 4, 5, 7, 9]
+        print(f"  {'#methods':<9} | {'HPS TPR':>7} | {'Euc TPR':>7} | {'Δ':>7}")
+        print(f"  {'─'*9}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*7}")
 
-    for n_methods in method_counts:
-        if n_methods > len(methods_unique):
-            continue
-        subset_methods = methods_unique[:n_methods]
-        sub_atk = []
-        sub_meth = []
-        for m in subset_methods:
-            available = hs_by_method_arr[m]
-            take = min(250, len(available))
-            sub_atk.append(available[:take])
-            sub_meth.extend([m] * take)
-        sub_atk = np.concatenate(sub_atk)
+        for n_methods in method_counts:
+            if n_methods > len(methods_unique):
+                continue
+            subset_methods = methods_unique[:n_methods]
+            sub_atk = []
+            sub_meth = []
+            for m in subset_methods:
+                available = hs_by_method_arr[m]
+                take = min(250, len(available))
+                sub_atk.append(available[:take])
+                sub_meth.extend([m] * take)
+            sub_atk = np.concatenate(sub_atk)
 
-        hps_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, subset_methods, euclidean=False)
-        euc_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, subset_methods, euclidean=True)
-        print(f"  {n_methods:<9} | {hps_tpr:>7.3f} | {euc_tpr:>7.3f} | {hps_tpr-euc_tpr:>+7.3f}")
+            hps_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, subset_methods, euclidean=False)
+            euc_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, subset_methods, euclidean=True)
+            print(f"  {n_methods:<9} | {hps_tpr:>7.3f} | {euc_tpr:>7.3f} | {hps_tpr-euc_tpr:>+7.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 4: Vicuna-like conditions on Llama-3 data
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 4: Vicuna-like conditions on Llama-3 data")
-    print(f"  (4 methods, ~60 attacks each = ~240 total)")
-    print(f"{'─'*60}\n")
+    if 4 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 4: Vicuna-like conditions on Llama-3 data")
+        print(f"  (4 methods, ~60 attacks each = ~240 total)")
+        print(f"{'─'*60}\n")
 
-    # Pick 4 methods that are most analogous to Vicuna's original 4
-    # Vicuna had: GCG (suffix), PAIR (semantic), JBC (role-play), prompt_with_random_search (suffix)
-    # Closest Llama-3 equivalents: gcg, pair, autodan (template), saa (suffix-search-style)
-    vicuna_like = ["gcg", "pair", "autodan", "saa"]
-    available_methods = [m for m in vicuna_like if m in hs_by_method_arr]
-    print(f"  Using methods: {available_methods}")
+        # Pick 4 methods that are most analogous to Vicuna's original 4
+        # Vicuna had: GCG (suffix), PAIR (semantic), JBC (role-play), prompt_with_random_search (suffix)
+        # Closest Llama-3 equivalents: gcg, pair, autodan (template), saa (suffix-search-style)
+        vicuna_like = ["gcg", "pair", "autodan", "saa"]
+        available_methods = [m for m in vicuna_like if m in hs_by_method_arr]
+        print(f"  Using methods: {available_methods}")
 
-    sub_atk = []
-    sub_meth = []
-    for m in available_methods:
-        available = hs_by_method_arr[m]
-        take = min(60, len(available))
-        sub_atk.append(available[:take])
-        sub_meth.extend([m] * take)
-    sub_atk = np.concatenate(sub_atk)
-    print(f"  Total attacks: {len(sub_atk)} across {len(available_methods)} methods")
+        sub_atk = []
+        sub_meth = []
+        for m in available_methods:
+            available = hs_by_method_arr[m]
+            take = min(60, len(available))
+            sub_atk.append(available[:take])
+            sub_meth.extend([m] * take)
+        sub_atk = np.concatenate(sub_atk)
+        print(f"  Total attacks: {len(sub_atk)} across {len(available_methods)} methods")
 
-    hps_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, available_methods, euclidean=False)
-    euc_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, available_methods, euclidean=True)
-    print(f"\n  HPS cross-attack TPR:  {hps_tpr:.3f}")
-    print(f"  Euc cross-attack TPR:  {euc_tpr:.3f}")
-    print(f"  Δ (HPS - Euc):         {hps_tpr - euc_tpr:+.3f}")
+        hps_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, available_methods, euclidean=False)
+        euc_tpr = cross_attack_eval(sub_atk, sub_meth, X_all_ben, available_methods, euclidean=True)
+        print(f"\n  HPS cross-attack TPR:  {hps_tpr:.3f}")
+        print(f"  Euc cross-attack TPR:  {euc_tpr:.3f}")
+        print(f"  Δ (HPS - Euc):         {hps_tpr - euc_tpr:+.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 5: Early stopping effect on HPS
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 5: Early stopping effect on HPS")
-    print(f"  (Full data, vary max epochs, NO early stopping)")
-    print(f"{'─'*60}\n")
+    # X_train_full / y_train_full are needed by TEST 5, 6, 9 — build once if any of these run
+    need_full_train = bool({5, 6, 9} & tests_to_run)
+    if need_full_train:
+        X_train_full = np.concatenate([X_tr_ben, X_tr_atk])
+        y_train_full = np.array([0]*len(X_tr_ben) + [1]*len(X_tr_atk))
 
-    X_train_full = np.concatenate([X_tr_ben, X_tr_atk])
-    y_train_full = np.array([0]*len(X_tr_ben) + [1]*len(X_tr_atk))
+    if 5 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 5: Early stopping effect on HPS")
+        print(f"  (Full data, vary max epochs, NO early stopping)")
+        print(f"{'─'*60}\n")
 
-    epoch_counts = [50, 100, 200, 400, 800]
-    print(f"  {'Epochs':<7} | {'AUROC':>6} | {'TPR@5%':>7} | {'FPR':>5}")
-    print(f"  {'─'*7}─┼─{'─'*6}─┼─{'─'*7}─┼─{'─'*5}")
+        epoch_counts = [50, 100, 200, 400, 800]
+        print(f"  {'Epochs':<7} | {'AUROC':>6} | {'TPR@5%':>7} | {'FPR':>5}")
+        print(f"  {'─'*7}─┼─{'─'*6}─┼─{'─'*7}─┼─{'─'*5}")
 
-    for max_ep in epoch_counts:
-        # patience > max_epochs disables early stopping
-        a, t, fpr = train_and_eval(X_train_full, y_train_full, X_te_ben, X_te_atk,
-                                    seed=42, euclidean=False,
-                                    max_epochs=max_ep, patience=max_ep + 1)
-        print(f"  {max_ep:<7} | {a:>6.3f} | {t:>7.3f} | {fpr:>5.3f}")
+        for max_ep in epoch_counts:
+            # patience > max_epochs disables early stopping
+            a, t, fpr = train_and_eval(X_train_full, y_train_full, X_te_ben, X_te_atk,
+                                        seed=42, euclidean=False,
+                                        max_epochs=max_ep, patience=max_ep + 1)
+            print(f"  {max_ep:<7} | {a:>6.3f} | {t:>7.3f} | {fpr:>5.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 6: SAA feature investigation
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 6: SAA attack investigation")
-    print(f"  (Why does HPS score SAA as benign?)")
-    print(f"{'─'*60}\n")
+    if 6 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 6: SAA attack investigation")
+        print(f"  (Why does HPS score SAA as benign?)")
+        print(f"{'─'*60}\n")
 
-    torch.manual_seed(42)
-    n_layers_full = X_train_full.shape[1]
-    proj_diag = LorentzProjection(X_train_full.shape[2], 64, k_init=1.0,
-                                   n_layers=n_layers_full).to(device)
-    opt = optim.Adam(proj_diag.parameters(), lr=1e-3, weight_decay=1e-5)
-    X_t = torch.tensor(X_train_full, dtype=torch.float32, device=device)
-    y_t = torch.tensor(y_train_full, dtype=torch.long, device=device)
-    best_loss = float('inf'); pat = 0
-    for _ in range(200):
-        loss = torch.tensor(0.0, device=device)
-        for l in range(n_layers_full):
-            h = proj_diag(X_t[:, l, :])
-            loss = loss + contrastive_loss(h, y_t, k=proj_diag.k, tau=proj_diag.tau(l))
-        loss = loss / n_layers_full
-        opt.zero_grad(); loss.backward(); opt.step()
-        if loss.item() < best_loss - 1e-4: best_loss = loss.item(); pat = 0
-        else: pat += 1
-        if pat >= 20: break
-    proj_diag.eval()
+        torch.manual_seed(42)
+        n_layers_full = X_train_full.shape[1]
+        proj_diag = LorentzProjection(X_train_full.shape[2], 64, k_init=1.0,
+                                       n_layers=n_layers_full).to(device)
+        opt = optim.Adam(proj_diag.parameters(), lr=1e-3, weight_decay=1e-5)
+        X_t = torch.tensor(X_train_full, dtype=torch.float32, device=device)
+        y_t = torch.tensor(y_train_full, dtype=torch.long, device=device)
+        best_loss = float('inf'); pat = 0
+        for _ in range(200):
+            loss = torch.tensor(0.0, device=device)
+            for l in range(n_layers_full):
+                h = proj_diag(X_t[:, l, :])
+                loss = loss + contrastive_loss(h, y_t, k=proj_diag.k, tau=proj_diag.tau(l))
+            loss = loss / n_layers_full
+            opt.zero_grad(); loss.backward(); opt.step()
+            if loss.item() < best_loss - 1e-4: best_loss = loss.item(); pat = 0
+            else: pat += 1
+            if pat >= 20: break
+        proj_diag.eval()
 
-    saa_acts = hs_by_method_arr.get("saa", np.array([]))
-    gcg_acts = hs_by_method_arr.get("gcg", np.array([]))
-    pair_acts = hs_by_method_arr.get("pair", np.array([]))
+        saa_acts = hs_by_method_arr.get("saa", np.array([]))
+        gcg_acts = hs_by_method_arr.get("gcg", np.array([]))
+        pair_acts = hs_by_method_arr.get("pair", np.array([]))
 
-    if len(saa_acts) > 0 and len(gcg_acts) > 0:
-        feats_saa = extract_trajectory_features(proj_diag, saa_acts[:100])
-        feats_gcg = extract_trajectory_features(proj_diag, gcg_acts[:100])
-        feats_pair = extract_trajectory_features(proj_diag, pair_acts[:100]) if len(pair_acts) >= 100 else None
-        feats_ben_sample = extract_trajectory_features(proj_diag, X_all_ben[:100])
+        if len(saa_acts) > 0 and len(gcg_acts) > 0:
+            feats_saa = extract_trajectory_features(proj_diag, saa_acts[:100])
+            feats_gcg = extract_trajectory_features(proj_diag, gcg_acts[:100])
+            feats_pair = extract_trajectory_features(proj_diag, pair_acts[:100]) if len(pair_acts) >= 100 else None
+            feats_ben_sample = extract_trajectory_features(proj_diag, X_all_ben[:100])
 
-        feat_names = ["mean_r", "max_r", "min_r", "std_r", "range_r",
-                      "max_κ", "mean_κ", "std_κ", "spike_loc",
-                      "displacement", "path_len", "progress"]
+            feat_names = ["mean_r", "max_r", "min_r", "std_r", "range_r",
+                          "max_κ", "mean_κ", "std_κ", "spike_loc",
+                          "displacement", "path_len", "progress"]
 
-        print(f"  {'Feature':<12} | {'Benign':>8} | {'SAA':>8} | {'GCG':>8} | {'PAIR':>8} | SAA close to ben?")
-        print(f"  {'─'*12}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*15}")
-        for i, name in enumerate(feat_names):
-            b = feats_ben_sample[:, i].mean()
-            s = feats_saa[:, i].mean()
-            g = feats_gcg[:, i].mean()
-            p = feats_pair[:, i].mean() if feats_pair is not None else float('nan')
-            close = "YES" if abs(s - b) < abs(g - b) * 0.5 else "no"
-            print(f"  {name:<12} | {b:>8.3f} | {s:>8.3f} | {g:>8.3f} | {p:>8.3f} | {close}")
+            print(f"  {'Feature':<12} | {'Benign':>8} | {'SAA':>8} | {'GCG':>8} | {'PAIR':>8} | SAA close to ben?")
+            print(f"  {'─'*12}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*15}")
+            for i, name in enumerate(feat_names):
+                b = feats_ben_sample[:, i].mean()
+                s = feats_saa[:, i].mean()
+                g = feats_gcg[:, i].mean()
+                p = feats_pair[:, i].mean() if feats_pair is not None else float('nan')
+                close = "YES" if abs(s - b) < abs(g - b) * 0.5 else "no"
+                print(f"  {name:<12} | {b:>8.3f} | {s:>8.3f} | {g:>8.3f} | {p:>8.3f} | {close}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 7: Layer selection effect (only cached layers)
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 7: Layer selection effect on HPS")
-    print(f"  (Only configurations within cached layers: {CACHED_LAYERS})")
-    print(f"{'─'*60}\n")
+    if 7 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 7: Layer selection effect — HPS vs Euclidean")
+        print(f"  (Only configurations within cached layers: {CACHED_LAYERS})")
+        print(f"{'─'*60}\n")
 
-    layer_configs = {
-        "current [0,1,2,28-31]":    [0, 1, 2, 28, 29, 30, 31],
-        "shallow only [0,1,2]":     [0, 1, 2],
-        "late only [28,29,30,31]":  [28, 29, 30, 31],
-        "RTV layers [17,24,31]":    [17, 24, 31],
-        "spread [0,2,17,24,28,31]": [0, 2, 17, 24, 28, 31],
-        "all cached":               list(CACHED_LAYERS),
-    }
+        layer_configs = {
+            "current [0,1,2,28-31]":    [0, 1, 2, 28, 29, 30, 31],
+            "shallow only [0,1,2]":     [0, 1, 2],
+            "late only [28,29,30,31]":  [28, 29, 30, 31],
+            "RTV layers [17,24,31]":    [17, 24, 31],
+            "spread [0,2,17,24,28,31]": [0, 2, 17, 24, 28, 31],
+            "all cached":               list(CACHED_LAYERS),
+        }
 
-    print(f"  {'Config':<28} | {'AUROC':>6} | {'TPR@5%':>7}")
-    print(f"  {'─'*28}─┼─{'─'*6}─┼─{'─'*7}")
+        print(f"  {'Config':<28} | {'HPS AUROC':>9} | {'HPS TPR':>7} | {'Euc AUROC':>9} | {'Euc TPR':>7} | {'Δ AUROC':>8}")
+        print(f"  {'─'*28}─┼─{'─'*9}─┼─{'─'*7}─┼─{'─'*9}─┼─{'─'*7}─┼─{'─'*8}")
 
-    for name, layers in layer_configs.items():
-        # Validate layers are in cache
-        if not all(l in CACHED_LAYERS for l in layers):
-            print(f"  {name:<28} | {'(skip)':>6} | (layer not cached)")
-            continue
-        try:
-            X_tr_b2 = to_hps_array(hs_train_ben, layers)
-            X_tr_a2 = to_hps_array(hs_train_atk, layers)
-            X_te_b2 = to_hps_array(hs_test_ben, layers)
-            X_te_a2 = to_hps_array(hs_test_atk, layers)
-        except KeyError as e:
-            print(f"  {name:<28} | (cache miss: layer {e})")
-            continue
-        X_sub = np.concatenate([X_tr_b2, X_tr_a2])
-        y_sub = np.array([0]*len(X_tr_b2) + [1]*len(X_tr_a2))
-        a, t, _ = train_and_eval(X_sub, y_sub, X_te_b2, X_te_a2, seed=42, euclidean=False)
-        print(f"  {name:<28} | {a:>6.3f} | {t:>7.3f}")
+        for name, layers in layer_configs.items():
+            if not all(l in CACHED_LAYERS for l in layers):
+                print(f"  {name:<28} | (layer not cached)")
+                continue
+            try:
+                X_tr_b2 = to_hps_array(hs_train_ben, layers)
+                X_tr_a2 = to_hps_array(hs_train_atk, layers)
+                X_te_b2 = to_hps_array(hs_test_ben, layers)
+                X_te_a2 = to_hps_array(hs_test_atk, layers)
+            except KeyError as e:
+                print(f"  {name:<28} | (cache miss: layer {e})")
+                continue
+            X_sub = np.concatenate([X_tr_b2, X_tr_a2])
+            y_sub = np.array([0]*len(X_tr_b2) + [1]*len(X_tr_a2))
+            a_h, t_h, _ = train_and_eval(X_sub, y_sub, X_te_b2, X_te_a2, seed=42, euclidean=False)
+            a_e, t_e, _ = train_and_eval(X_sub, y_sub, X_te_b2, X_te_a2, seed=42, euclidean=True)
+            print(f"  {name:<28} | {a_h:>9.3f} | {t_h:>7.3f} | {a_e:>9.3f} | {t_e:>7.3f} | {a_h-a_e:>+8.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 8: Generalization stress test (4-method train, 5 unseen)
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 8: Euclidean generalization stress test")
-    print(f"  (Train on 4 methods only, test on 5 unseen methods)")
-    print(f"{'─'*60}\n")
+    if 8 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 8: Euclidean generalization stress test")
+        print(f"  (Train on 4 methods only, test on 5 unseen methods)")
+        print(f"{'─'*60}\n")
 
-    train_methods = ["gcg", "autodan", "pair", "drattack"]
-    train_methods = [m for m in train_methods if m in hs_by_method_arr]
-    test_methods_ood = [m for m in methods_unique if m not in train_methods]
+        train_methods = ["gcg", "autodan", "pair", "drattack"]
+        train_methods = [m for m in train_methods if m in hs_by_method_arr]
+        test_methods_ood = [m for m in methods_unique if m not in train_methods]
 
-    train_atk_stress = np.concatenate([hs_by_method_arr[m] for m in train_methods]) if train_methods else np.array([])
-    test_atk_stress = np.concatenate([hs_by_method_arr[m] for m in test_methods_ood]) if test_methods_ood else np.array([])
+        train_atk_stress = np.concatenate([hs_by_method_arr[m] for m in train_methods]) if train_methods else np.array([])
+        test_atk_stress = np.concatenate([hs_by_method_arr[m] for m in test_methods_ood]) if test_methods_ood else np.array([])
 
-    if len(train_atk_stress) == 0 or len(test_atk_stress) == 0:
-        print("  Skip: not enough data")
-    else:
-        n_train_ben = min(4000, len(X_all_ben) - 200)   # leave at least 200 for held-out
-        X_tr_stress = np.concatenate([X_all_ben[:n_train_ben], train_atk_stress])
-        y_tr_stress = np.array([0]*n_train_ben + [1]*len(train_atk_stress))
-        X_te_ben_stress = X_all_ben[n_train_ben:]
+        if len(train_atk_stress) == 0 or len(test_atk_stress) == 0:
+            print("  Skip: not enough data")
+        else:
+            n_train_ben = min(4000, len(X_all_ben) - 200)
+            X_tr_stress = np.concatenate([X_all_ben[:n_train_ben], train_atk_stress])
+            y_tr_stress = np.array([0]*n_train_ben + [1]*len(train_atk_stress))
+            X_te_ben_stress = X_all_ben[n_train_ben:]
 
-        print(f"  Train: {n_train_ben} benign + {len(train_atk_stress)} attacks ({train_methods})")
-        print(f"  Test:  {len(X_te_ben_stress)} benign + {len(test_atk_stress)} attacks ({test_methods_ood})")
+            print(f"  Train: {n_train_ben} benign + {len(train_atk_stress)} attacks ({train_methods})")
+            print(f"  Test:  {len(X_te_ben_stress)} benign + {len(test_atk_stress)} attacks ({test_methods_ood})")
 
-        a_hps, t_hps, _ = train_and_eval(X_tr_stress, y_tr_stress, X_te_ben_stress, test_atk_stress,
-                                          seed=42, euclidean=False)
-        a_euc, t_euc, _ = train_and_eval(X_tr_stress, y_tr_stress, X_te_ben_stress, test_atk_stress,
-                                          seed=42, euclidean=True)
+            a_hps, t_hps, _ = train_and_eval(X_tr_stress, y_tr_stress, X_te_ben_stress, test_atk_stress,
+                                              seed=42, euclidean=False)
+            a_euc, t_euc, _ = train_and_eval(X_tr_stress, y_tr_stress, X_te_ben_stress, test_atk_stress,
+                                              seed=42, euclidean=True)
 
-        print(f"\n  {'Method':<10} | {'AUROC':>6} | {'TPR@5%':>7}")
-        print(f"  {'─'*10}─┼─{'─'*6}─┼─{'─'*7}")
-        print(f"  {'HPS':<10} | {a_hps:>6.3f} | {t_hps:>7.3f}")
-        print(f"  {'Euclidean':<10} | {a_euc:>6.3f} | {t_euc:>7.3f}")
-        print(f"  {'Δ':<10} | {a_hps-a_euc:>+6.3f} | {t_hps-t_euc:>+7.3f}")
+            print(f"\n  {'Method':<10} | {'AUROC':>6} | {'TPR@5%':>7}")
+            print(f"  {'─'*10}─┼─{'─'*6}─┼─{'─'*7}")
+            print(f"  {'HPS':<10} | {a_hps:>6.3f} | {t_hps:>7.3f}")
+            print(f"  {'Euclidean':<10} | {a_euc:>6.3f} | {t_euc:>7.3f}")
+            print(f"  {'Δ':<10} | {a_hps-a_euc:>+6.3f} | {t_hps-t_euc:>+7.3f}")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 9: Curvature κ ablation
     # ══════════════════════════════════════════════════════════════
-    print(f"\n{'─'*60}")
-    print(f"  TEST 9: Curvature κ effect (HPS only)")
-    print(f"  (Vary k_init and freeze status)")
-    print(f"{'─'*60}\n")
+    if 9 in tests_to_run:
+        print(f"\n{'─'*60}")
+        print(f"  TEST 9: Curvature κ effect (HPS only)")
+        print(f"  (Vary k_init and freeze status)")
+        print(f"{'─'*60}\n")
 
-    print(f"  {'κ_init':<8} | {'frozen?':<8} | {'AUROC':>6} | {'TPR@5%':>7} | {'final κ':>8}")
-    print(f"  {'─'*8}─┼─{'─'*8}─┼─{'─'*6}─┼─{'─'*7}─┼─{'─'*8}")
+        print(f"  {'κ_init':<8} | {'frozen?':<8} | {'AUROC':>6} | {'TPR@5%':>7} | {'final κ':>8}")
+        print(f"  {'─'*8}─┼─{'─'*8}─┼─{'─'*6}─┼─{'─'*7}─┼─{'─'*8}")
 
-    for k_init in [0.1, 0.5, 1.0, 2.0, 10.0]:
-        for frozen in [False, True]:
-            torch.manual_seed(42)
-            np.random.seed(42)
-            n_layers_kab = X_train_full.shape[1]
-            proj_kab = LorentzProjection(X_train_full.shape[2], 64, k_init=k_init,
-                                          n_layers=n_layers_kab).to(device)
-            if frozen:
-                proj_kab.log_k.requires_grad = False
-            opt_kab = optim.Adam([p for p in proj_kab.parameters() if p.requires_grad],
-                                  lr=1e-3, weight_decay=1e-5)
-            X_t = torch.tensor(X_train_full, dtype=torch.float32, device=device)
-            y_t = torch.tensor(y_train_full, dtype=torch.long, device=device)
-            bl = float('inf'); pc = 0
-            for _ in range(200):
-                loss = torch.tensor(0.0, device=device)
-                for l in range(n_layers_kab):
-                    h = proj_kab(X_t[:, l, :])
-                    loss = loss + contrastive_loss(h, y_t, k=proj_kab.k, tau=proj_kab.tau(l))
-                loss = loss / n_layers_kab
-                opt_kab.zero_grad(); loss.backward(); opt_kab.step()
-                if loss.item() < bl - 1e-4: bl = loss.item(); pc = 0
-                else: pc += 1
-                if pc >= 20: break
-            proj_kab.eval()
-            f_tr = extract_trajectory_features(proj_kab, X_train_full)
-            f_ben = extract_trajectory_features(proj_kab, X_te_ben)
-            f_atk = extract_trajectory_features(proj_kab, X_te_atk)
-            sc_kab = StandardScaler()
-            clf_kab = LogisticRegression(max_iter=2000, random_state=42)
-            clf_kab.fit(sc_kab.fit_transform(f_tr), y_train_full)
-            n_cal = len(f_ben) // 2
-            s_cal = clf_kab.predict_proba(sc_kab.transform(f_ben[:n_cal]))[:, 1]
-            s_ben_eval = clf_kab.predict_proba(sc_kab.transform(f_ben[n_cal:]))[:, 1]
-            s_atk = clf_kab.predict_proba(sc_kab.transform(f_atk))[:, 1]
-            thr = float(np.quantile(s_cal, 1.0 - FPR_TARGET))
-            tpr = float((s_atk > thr).mean())
-            auroc = roc_auc_score(np.array([0]*len(s_ben_eval) + [1]*len(s_atk)),
-                                  np.concatenate([s_ben_eval, s_atk]))
-            final_k = float(proj_kab.k.item())
-            print(f"  {k_init:<8.2f} | {str(frozen):<8} | {auroc:>6.3f} | {tpr:>7.3f} | {final_k:>8.3f}")
+        def sanitize(X):
+            """Replace NaN/Inf and add tiny noise to zero-variance columns."""
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+            col_std = X.std(axis=0)
+            zero_cols = col_std < 1e-12
+            if zero_cols.any():
+                X = X.copy()
+                X[:, zero_cols] += np.random.RandomState(0).normal(
+                    scale=1e-6, size=(X.shape[0], int(zero_cols.sum())))
+            return X
+
+        for k_init in [0.1, 0.5, 1.0, 2.0, 10.0]:
+            for frozen in [False, True]:
+                try:
+                    torch.manual_seed(42)
+                    np.random.seed(42)
+                    n_layers_kab = X_train_full.shape[1]
+                    proj_kab = LorentzProjection(X_train_full.shape[2], 64, k_init=k_init,
+                                                  n_layers=n_layers_kab).to(device)
+                    if frozen:
+                        proj_kab.log_k.requires_grad = False
+                    opt_kab = optim.Adam([p for p in proj_kab.parameters() if p.requires_grad],
+                                          lr=1e-3, weight_decay=1e-5)
+                    X_t = torch.tensor(X_train_full, dtype=torch.float32, device=device)
+                    y_t = torch.tensor(y_train_full, dtype=torch.long, device=device)
+                    bl = float('inf'); pc = 0
+                    for _ in range(200):
+                        loss = torch.tensor(0.0, device=device)
+                        for l in range(n_layers_kab):
+                            h = proj_kab(X_t[:, l, :])
+                            loss = loss + contrastive_loss(h, y_t, k=proj_kab.k, tau=proj_kab.tau(l))
+                        loss = loss / n_layers_kab
+                        opt_kab.zero_grad(); loss.backward(); opt_kab.step()
+                        if not torch.isfinite(loss):
+                            raise ValueError(f"Non-finite loss at k_init={k_init}, frozen={frozen}")
+                        if loss.item() < bl - 1e-4: bl = loss.item(); pc = 0
+                        else: pc += 1
+                        if pc >= 20: break
+                    proj_kab.eval()
+                    f_tr = sanitize(extract_trajectory_features(proj_kab, X_train_full))
+                    f_ben = sanitize(extract_trajectory_features(proj_kab, X_te_ben))
+                    f_atk = sanitize(extract_trajectory_features(proj_kab, X_te_atk))
+                    sc_kab = StandardScaler()
+                    clf_kab = LogisticRegression(max_iter=2000, random_state=42)
+                    clf_kab.fit(sc_kab.fit_transform(f_tr), y_train_full)
+                    n_cal = len(f_ben) // 2
+                    s_cal = clf_kab.predict_proba(sc_kab.transform(f_ben[:n_cal]))[:, 1]
+                    s_ben_eval = clf_kab.predict_proba(sc_kab.transform(f_ben[n_cal:]))[:, 1]
+                    s_atk = clf_kab.predict_proba(sc_kab.transform(f_atk))[:, 1]
+                    thr = float(np.quantile(s_cal, 1.0 - FPR_TARGET))
+                    tpr = float((s_atk > thr).mean())
+                    auroc = roc_auc_score(np.array([0]*len(s_ben_eval) + [1]*len(s_atk)),
+                                          np.concatenate([s_ben_eval, s_atk]))
+                    final_k = float(proj_kab.k.item())
+                    print(f"  {k_init:<8.2f} | {str(frozen):<8} | {auroc:>6.3f} | {tpr:>7.3f} | {final_k:>8.3f}")
+                except Exception as e:
+                    print(f"  {k_init:<8.2f} | {str(frozen):<8} | (failed: {type(e).__name__})")
 
     # ══════════════════════════════════════════════════════════════
     #  TEST 10: Vicuna activations (optional, if cache provided)
     # ══════════════════════════════════════════════════════════════
-    if args.vicuna_cache and os.path.exists(args.vicuna_cache):
+    if 10 in tests_to_run and args.vicuna_cache and os.path.exists(args.vicuna_cache):
         print(f"\n{'─'*60}")
         print(f"  TEST 10: Diagnostic on Vicuna activations")
         print(f"  (Cache: {args.vicuna_cache})")
@@ -691,7 +727,7 @@ def main():
             print(f"  {'Δ':<10} | {a_h-a_e:>+6.3f} | {t_h-t_e:>+7.3f}")
         except Exception as e:
             print(f"  Failed to load/run Vicuna cache: {e}")
-    else:
+    elif 10 in tests_to_run:
         print(f"\n  (TEST 10 skipped — pass --vicuna-cache to run on Vicuna data)")
 
     # ══════════════════════════════════════════════════════════════

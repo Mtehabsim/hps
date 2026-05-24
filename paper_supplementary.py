@@ -24,7 +24,7 @@ from sklearn.metrics import roc_auc_score
 from experiment7 import LorentzProjection, contrastive_loss, extract_trajectory_features
 from rtv_standalone import FPR_TARGET
 
-HPS_LAYERS = [0, 1, 2, 28, 29, 30, 31]
+HPS_LAYERS = [0, 2, 17, 24, 28, 31]  # spread layers (diagnostic TEST 7)
 
 
 def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=False):
@@ -96,20 +96,13 @@ def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=Fals
         feats_te_ben = euc_feats(X_te_ben)
         feats_te_atk = euc_feats(X_te_atk)
     else:
-        best_loss = float('inf'); patience = 0
-        for _ in range(200):
+        for _ in range(50):
             loss = torch.tensor(0.0, device=device)
             for l in range(n_layers):
                 h = proj(X_t[:, l, :])
                 loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
             loss = loss / n_layers
             opt.zero_grad(); loss.backward(); opt.step()
-            if loss.item() < best_loss - 1e-4:
-                best_loss = loss.item(); patience = 0
-            else:
-                patience += 1
-            if patience >= 20:
-                break
         proj.eval()
         feats_train = extract_trajectory_features(proj, X_train)
         feats_te_ben = extract_trajectory_features(proj, X_te_ben)

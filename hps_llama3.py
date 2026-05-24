@@ -24,7 +24,7 @@ from rtv_standalone import (
 )
 from experiment7 import LorentzProjection, contrastive_loss, extract_trajectory_features
 
-HPS_LAYERS = [0, 1, 2, 28, 29, 30, 31]
+HPS_LAYERS = [0, 2, 17, 24, 28, 31]  # spread layers (diagnostic TEST 7)
 RTV_LAYERS = [17, 24, 31]
 ALL_LAYERS = sorted(set(HPS_LAYERS + RTV_LAYERS))
 
@@ -196,22 +196,15 @@ def main():
         y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 
         best_loss = float('inf'); patience_ctr = 0
-        for epoch in range(200):
+        for epoch in range(50):
             loss = torch.tensor(0.0, device=device)
             for l in range(n_layers):
                 h = proj(X_t[:, l, :])
                 loss = loss + contrastive_loss(h, y_t, k=proj.k, tau=proj.tau(l))
             loss = loss / n_layers
             opt.zero_grad(); loss.backward(); opt.step()
-            if loss.item() < best_loss - 1e-4:
-                best_loss = loss.item(); patience_ctr = 0
-            else:
-                patience_ctr += 1
-            if patience_ctr >= 20:
-                print(f"    Early stop at epoch {epoch+1}")
-                break
-            if (epoch+1) % 50 == 0:
-                print(f"    Epoch {epoch+1}/200 loss={loss.item():.4f}")
+            if (epoch+1) % 25 == 0:
+                print(f"    Epoch {epoch+1}/50 loss={loss.item():.4f}")
 
         torch.save({
             "state_dict": proj.state_dict(),
@@ -436,16 +429,13 @@ def main():
             proj_cv = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
             opt_cv = optim.Adam(proj_cv.parameters(), lr=1e-3, weight_decay=1e-5)
             _bl = float('inf'); _pc = 0
-            for _ep in range(200):
+            for _ep in range(50):
                 l = torch.tensor(0.0, device=device)
                 for li in range(n_layers):
                     h = proj_cv(X_cv_t[:, li, :])
                     l = l + contrastive_loss(h, y_cv_t, k=proj_cv.k, tau=proj_cv.tau(li))
                 l = l / n_layers
                 opt_cv.zero_grad(); l.backward(); opt_cv.step()
-                if l.item() < _bl - 1e-4: _bl = l.item(); _pc = 0
-                else: _pc += 1
-                if _pc >= 20: break
             proj_cv.eval()
             f_tr = extract_trajectory_features(proj_cv, X_cv_train)
             f_te_ben = extract_trajectory_features(proj_cv, X_cv_te_ben)
