@@ -313,6 +313,98 @@ def main():
         cold_start_results.append({"n": n, "hps": h_t, "euc": e_t, "delta": h_t - e_t})
 
     # ══════════════════════════════════════════════════════════════
+    #  PART C: Push N per method even lower (5, 10, 15, 20)
+    # ══════════════════════════════════════════════════════════════
+    print(f"\n{'─'*60}")
+    print(f"  PART C: Extreme low-data — N per method = 5..20")
+    print(f"  (All 9 methods, leave-one-out cross-attack)")
+    print(f"{'─'*60}\n")
+
+    extreme_sizes = [5, 10, 15, 20]
+    print(f"  {'N/method':<9} | {'HPS TPR':>7} | {'Euc TPR':>7} | {'Δ':>7}")
+    print(f"  {'─'*9}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*7}")
+    extreme_results = []
+    for n in extreme_sizes:
+        h_t = cross_attack_eval(n, euclidean=False)
+        e_t = cross_attack_eval(n, euclidean=True)
+        print(f"  {n:<9} | {h_t:>7.3f} | {e_t:>7.3f} | {h_t-e_t:>+7.3f}")
+        extreme_results.append({"n": n, "hps": h_t, "euc": e_t, "delta": h_t - e_t})
+
+    # ══════════════════════════════════════════════════════════════
+    #  PART D: Few-method low-data (Vicuna-like extreme)
+    # ══════════════════════════════════════════════════════════════
+    print(f"\n{'─'*60}")
+    print(f"  PART D: Method diversity at fixed low N=25")
+    print(f"  (Vary #methods, leave-one-out)")
+    print(f"{'─'*60}\n")
+
+    def cross_attack_subset(method_subset, per_method_n, euclidean=False):
+        """Cross-attack restricted to a subset of methods."""
+        sub_atk_by_m = {}
+        for m in method_subset:
+            avail = hs_by_method[m]
+            take = min(per_method_n, len(avail))
+            sub_atk_by_m[m] = avail[:take]
+
+        tprs = []
+        for held_out in method_subset:
+            others = [m for m in method_subset if m != held_out]
+            if not others:
+                continue
+            train_atk = np.concatenate([sub_atk_by_m[m] for m in others])
+            test_atk = sub_atk_by_m[held_out]
+            if len(test_atk) < 5:
+                continue
+            X_tr = np.concatenate([cv_ben_tr, train_atk])
+            y_tr = np.array([0]*len(cv_ben_tr) + [1]*len(train_atk))
+            if euclidean:
+                proj_x, scale_x = train_euclidean(X_tr, y_tr, seed=42)
+                f_tr = euc_feats(proj_x, scale_x, X_tr)
+                f_be = euc_feats(proj_x, scale_x, cv_ben_te)
+                f_at = euc_feats(proj_x, scale_x, test_atk)
+            else:
+                proj_x = train_hps(X_tr, y_tr, seed=42)
+                f_tr = extract_trajectory_features(proj_x, X_tr)
+                f_be = extract_trajectory_features(proj_x, cv_ben_te)
+                f_at = extract_trajectory_features(proj_x, test_atk)
+            _, t, _, _, _ = evaluate(f_tr, y_tr, f_be, f_at)
+            tprs.append(t)
+        return float(np.mean(tprs)) if tprs else 0.0
+
+    method_counts_to_try = [2, 3, 4, 5, 6, 7, 9]
+    print(f"  {'#methods':<9} | {'HPS TPR':>7} | {'Euc TPR':>7} | {'Δ':>7}")
+    print(f"  {'─'*9}─┼─{'─'*7}─┼─{'─'*7}─┼─{'─'*7}")
+    diversity_results = []
+    for k in method_counts_to_try:
+        if k > len(methods_unique):
+            continue
+        subset = methods_unique[:k]
+        h_t = cross_attack_subset(subset, 25, euclidean=False)
+        e_t = cross_attack_subset(subset, 25, euclidean=True)
+        print(f"  {k:<9} | {h_t:>7.3f} | {e_t:>7.3f} | {h_t-e_t:>+7.3f}")
+        diversity_results.append({"k": k, "hps": h_t, "euc": e_t, "delta": h_t - e_t,
+                                  "methods": subset})
+
+    # ══════════════════════════════════════════════════════════════
+    #  PART E: Combined extreme — few methods × very low N
+    # ══════════════════════════════════════════════════════════════
+    print(f"\n{'─'*60}")
+    print(f"  PART E: Combined extreme — 3 methods × N=5..20")
+    print(f"  (Worst-case cross-attack regime)")
+    print(f"{'─'*60}\n")
+
+    print(f"  {'N/method':<9} | {'#methods':<9} | {'HPS':>6} | {'Euc':>6} | {'Δ':>7}")
+    print(f"  {'─'*9}─┼─{'─'*9}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*7}")
+    extreme_combined = []
+    # Use first 3 methods alphabetically for reproducibility
+    subset_3 = methods_unique[:3]
+    for n in [5, 10, 15, 20, 25, 50]:
+        h_t = cross_attack_subset(subset_3, n, euclidean=False)
+        e_t = cross_attack_subset(subset_3, n, euclidean=True)
+        print(f"  {n:<9} | {3:<9} | {h_t:>6.3f} | {e_t:>6.3f} | {h_t-e_t:>+7.3f}")
+        extreme_combined.append({"n": n, "k": 3, "hps": h_t, "euc": e_t, "delta": h_t - e_t})
+
+    # ══════════════════════════════════════════════════════════════
     #  Summary
     # ══════════════════════════════════════════════════════════════
     print(f"\n{'═'*60}")
@@ -334,6 +426,17 @@ def main():
     print(f"    HPS:       TPR={cs500['hps']:.3f}")
     print(f"    Euclidean: TPR={cs500['euc']:.3f}")
     print(f"    Δ:         {cs500['delta']:+.3f}")
+
+    # Find max Δ across all extreme tests
+    all_deltas = [(r['n'], 9, r['delta']) for r in extreme_results]
+    all_deltas += [(25, r['k'], r['delta']) for r in diversity_results]
+    all_deltas += [(r['n'], r['k'], r['delta']) for r in extreme_combined]
+    if all_deltas:
+        max_delta = max(all_deltas, key=lambda x: x[2])
+        print(f"")
+        print(f"  Maximum HPS advantage observed:")
+        print(f"    Δ = {max_delta[2]:+.3f}  at  N={max_delta[0]}, #methods={max_delta[1]}")
+
     print(f"")
     if auroc_h >= 0.99 and cs25['delta'] >= 0.3:
         print(f"  ✓ VERIFICATION PASSED")
@@ -346,6 +449,7 @@ def main():
             print(f"    - HPS AUROC {auroc_h:.3f} < expected ~0.99")
         if cs25['delta'] < 0.3:
             print(f"    - Cold-start Δ {cs25['delta']:.3f} < expected ≥ 0.3")
+            print(f"    Check Parts C, D, E to find regime where Δ is large")
         print(f"    Investigate before committing.")
     print(f"{'═'*60}\n")
 
@@ -362,11 +466,14 @@ def main():
             "euc": {"auroc": float(auroc_e), "tpr": float(tpr_e), "fpr": float(fpr_e)},
         },
         "cold_start": cold_start_results,
+        "extreme_low_n": extreme_results,
+        "method_diversity": diversity_results,
+        "extreme_combined": extreme_combined,
     }
     out_path = "results/verify_new_config.json"
     os.makedirs("results", exist_ok=True)
     with open(out_path, "w") as f:
-        json.dump(out, f, indent=2)
+        json.dump(out, f, indent=2, default=lambda o: list(o) if hasattr(o, '__iter__') else str(o))
     print(f"  Saved → {out_path}")
 
 
