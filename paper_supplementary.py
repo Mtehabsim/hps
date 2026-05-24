@@ -34,8 +34,9 @@ def train_and_eval(X_train, y_train, X_te_ben, X_te_atk, seed=42, euclidean=Fals
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     torch.manual_seed(seed)
-    proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-    opt = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
+    proj = LorentzProjection(d_hidden, 64, 0.1, n_layers=n_layers).to(device)
+    proj.log_k.requires_grad = False  # frozen κ=0.1
+    opt = optim.Adam([p for p in proj.parameters() if p.requires_grad], lr=1e-3, weight_decay=1e-5)
     X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
     y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 

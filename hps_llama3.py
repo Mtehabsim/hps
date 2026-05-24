@@ -187,11 +187,12 @@ def main():
     if os.path.exists(proj_path):
         print(f"  Loading saved projection from {proj_path}")
         ckpt = torch.load(proj_path, map_location=device, weights_only=False)
-        proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
+        proj = LorentzProjection(d_hidden, 64, 0.1, n_layers=n_layers).to(device)
         proj.load_state_dict(ckpt["state_dict"])
     else:
-        proj = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-        opt = optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
+        proj = LorentzProjection(d_hidden, 64, 0.1, n_layers=n_layers).to(device)
+        proj.log_k.requires_grad = False  # frozen κ=0.1 (TEST 9 optimal)
+        opt = optim.Adam([p for p in proj.parameters() if p.requires_grad], lr=1e-3, weight_decay=1e-5)
         X_t = torch.tensor(X_train, dtype=torch.float32, device=device)
         y_t = torch.tensor(y_train, dtype=torch.long, device=device)
 
@@ -426,8 +427,9 @@ def main():
         hps_seed_tprs = []
         for _seed in range(3):
             torch.manual_seed(_seed)
-            proj_cv = LorentzProjection(d_hidden, 64, 1.0, n_layers=n_layers).to(device)
-            opt_cv = optim.Adam(proj_cv.parameters(), lr=1e-3, weight_decay=1e-5)
+            proj_cv = LorentzProjection(d_hidden, 64, 0.1, n_layers=n_layers).to(device)
+            proj_cv.log_k.requires_grad = False
+            opt_cv = optim.Adam([p for p in proj_cv.parameters() if p.requires_grad], lr=1e-3, weight_decay=1e-5)
             _bl = float('inf'); _pc = 0
             for _ep in range(50):
                 l = torch.tensor(0.0, device=device)
