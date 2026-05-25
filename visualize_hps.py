@@ -26,7 +26,7 @@ from sklearn.linear_model import LogisticRegression
 from experiment7 import LorentzProjection, extract_trajectory_features
 from rtv_standalone import compute_fingerprint, TOKEN_POSITIONS
 
-HPS_LAYERS = [0, 1, 2, 28, 29, 30, 31]
+HPS_LAYERS = [0, 2, 17, 24, 28, 31]  # spread layers
 RTV_LAYERS = [17, 24, 31]
 
 
