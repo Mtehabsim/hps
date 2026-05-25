@@ -1,0 +1,211 @@
+/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'openai_humaneval' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'allenai/winogrande' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1779675740.329411 2662399 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1779675744.190886 2662399 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+[dataset] Loading benign prompts...
+[dataset] Loaded 130 hard benign (curated)
+[dataset] Loaded 40 short benign (chat)
+[dataset] Total benign: 520 (clean: 350, hard: 130, short: 40)
+[dataset] Loading adversarial prompts (successful attacks)...
+[dataset] Loaded 316 successful attacks (all methods)
+[dataset] Loading refused attacks (for analysis only, NOT used in training)...
+[dataset] Loaded 66 refused attacks (all methods)
+[dataset] Final: 520 benign, 316 adversarial, 20 dual-use
+
+════════════════════════════════════════════════════════════
+  Experiment 7 — Layer Discovery + Pooling Ablation
+  Model: lmsys/vicuna-13b-v1.5
+════════════════════════════════════════════════════════════
+
+[exp7] Data: 316 attacks + 520 benign
+[exp7] Calibration: 30 attacks + 30 benign
+[exp7] Training:    286 attacks + 490 benign
+[utils] Loading model: lmsys/vicuna-13b-v1.5 on cuda …
+Loading checkpoint shards:   0%|                                                                   | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███████████████████▋                                       | 1/3 [00:09<00:19,  9.81s/it]Loading checkpoint shards:  67%|███████████████████████████████████████▎                   | 2/3 [00:19<00:09,  9.87s/it]Loading checkpoint shards: 100%|███████████████████████████████████████████████████████████| 3/3 [00:25<00:00,  8.07s/it]Loading checkpoint shards: 100%|███████████████████████████████████████████████████████████| 3/3 [00:25<00:00,  8.55s/it]
+The following generation flags are not valid and may be ignored: ['temperature', 'top_p']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+/mnt/lab/Mo/hps/hps2/hps/experiment7.py:745: RuntimeWarning: invalid value encountered in scalar divide
+  print(f"    Radial:       {radial_imp/total_imp:.1%}")
+/mnt/lab/Mo/hps/hps2/hps/experiment7.py:746: RuntimeWarning: invalid value encountered in scalar divide
+  print(f"    Curvature:    {curvature_imp/total_imp:.1%}")
+/mnt/lab/Mo/hps/hps2/hps/experiment7.py:747: RuntimeWarning: invalid value encountered in scalar divide
+  print(f"    Displacement: {displacement_imp/total_imp:.1%}")
+/mnt/lab/Mo/hps/hps2/hps/experiment7.py:748: RuntimeWarning: invalid value encountered in scalar divide
+  if curvature_imp / total_imp < 0.20:
+[utils] Model loaded. Parameters: 6,671,979,520
+
+[exp7] Layer discovery: 30 benign + 30 adversarial, pool=last
+  Benign 10/30
+  Benign 20/30
+  Benign 30/30
+  Attack 10/30
+  Attack 20/30
+  Attack 30/30
+
+[exp7] Layer separation ranking (all 40 layers):
+  Layer |    Score
+  ──────┼─────────
+      0 |   1.1924
+      1 |   1.1608
+      2 |   1.1115
+     39 |   0.8208
+     38 |   0.8005
+     37 |   0.7463
+     36 |   0.7148
+     35 |   0.6853
+     34 |   0.6549
+     33 |   0.6493
+     32 |   0.6473
+     31 |   0.6430
+     30 |   0.6413
+     29 |   0.6395
+     17 |   0.6381
+
+[exp7] Selected top-8 layers: [0, 1, 2, 35, 36, 37, 38, 39]
+[exp7] Layer plot saved → /mnt/lab/Mo/hps/hps2/hps/plots/exp7_layer_separation.png
+
+[exp7] Extracting activations (all pool modes, layers=[0, 1, 2, 35, 36, 37, 38, 39])...
+  50/776
+  100/776
+  150/776
+  200/776
+  250/776
+  300/776
+  350/776
+  400/776
+  450/776
+  500/776
+  550/776
+  600/776
+  650/776
+  700/776
+  750/776
+  Extracting pool=mean...
+    100/776
+    200/776
+    300/776
+    400/776
+    500/776
+    600/776
+    700/776
+  Extracting pool=last5...
+    100/776
+    200/776
+    300/776
+    400/776
+    500/776
+    600/776
+    700/776
+    [last] Epoch 25/200 — loss: 0.7782, κ: 1.015
+    [last] Epoch 50/200 — loss: 0.6125, κ: 1.018
+    [last] Epoch 75/200 — loss: 0.5348, κ: 1.018
+    [last] Epoch 100/200 — loss: 0.4694, κ: 1.018
+    [last] Epoch 125/200 — loss: 0.4093, κ: 1.017
+    [last] Epoch 150/200 — loss: 0.3565, κ: 1.016
+    [last] Epoch 175/200 — loss: 0.3119, κ: 1.015
+    [last] Epoch 200/200 — loss: 0.2777, κ: 1.014
+  [last] AUROC=1.000  FPR@95=0.000  F1=1.000
+    [mean] Epoch 25/200 — loss: 0.6332, κ: 1.012
+    [mean] Epoch 50/200 — loss: 0.5032, κ: 1.008
+    [mean] Epoch 75/200 — loss: 0.4077, κ: 1.001
+    [mean] Epoch 100/200 — loss: 0.3414, κ: 1.002
+    [mean] Epoch 125/200 — loss: 0.2946, κ: 1.015
+    [mean] Epoch 150/200 — loss: 0.2565, κ: 1.038
+    [mean] Epoch 175/200 — loss: 0.2233, κ: 1.064
+    [mean] Epoch 200/200 — loss: 0.1943, κ: 1.090
+  [mean] AUROC=1.000  FPR@95=0.000  F1=1.000
+    [last5] Epoch 25/200 — loss: 0.6816, κ: 1.013
+    [last5] Epoch 50/200 — loss: 0.5710, κ: 1.015
+    [last5] Epoch 75/200 — loss: 0.5064, κ: 1.015
+    [last5] Epoch 100/200 — loss: 0.4428, κ: 1.017
+    [last5] Epoch 125/200 — loss: 0.3752, κ: 1.019
+    [last5] Epoch 150/200 — loss: 0.3086, κ: 1.023
+    [last5] Epoch 175/200 — loss: 0.2506, κ: 1.026
+    [last5] Epoch 200/200 — loss: 0.2050, κ: 1.028
+  [last5] AUROC=1.000  FPR@95=0.000  F1=1.000
+
+[exp7] ═══ Pooling Ablation Results ═══
+  Mode     |   AUROC |  FPR@95 |     F1
+  ─────────┼─────────┼─────────┼───────
+  last     |   1.000 |   0.000 |  1.000 ← best
+  mean     |   1.000 |   0.000 |  1.000
+  last5    |   1.000 |   0.000 |  1.000
+[exp7] Pooling plot → /mnt/lab/Mo/hps/hps2/hps/plots/exp7_pooling_ablation.png
+
+[exp7] Baseline: HPS-Lite (naive projection, no training)...
+  [HPS-Lite] AUROC=0.774  FPR@95=0.637  F1=0.561
+
+[exp7] Baseline: Fisher-8 Raw...
+  [Fisher-8 Raw] AUROC=1.000  FPR@95=0.000  F1=0.995
+
+[exp7] Baseline: Euclidean-Trained...
+  [Euclidean-Trained] AUROC=1.000  FPR@95=0.000  F1=1.000
+
+[exp7] Baseline: Nonlinear-Euclidean (LayerNorm + tanh)...
+  [Nonlinear-Euclidean] AUROC=1.000  FPR@95=0.000  F1=0.995
+
+[exp7] HPS-Full (Hyperbolic-Trained) — reusing from pooling ablation...
+
+[exp7] ═══ Critical Baseline Comparison ═══
+  Method                 |   AUROC |  FPR@95 |     F1
+  ───────────────────────┼─────────┼─────────┼───────
+  hyperbolic_naive       |   0.774 |   0.637 |  0.561
+  fisher8_raw            |   1.000 |   0.000 |  0.995
+  euclidean_trained      |   1.000 |   0.000 |  1.000
+  nonlinear_euclidean    |   1.000 |   0.000 |  0.995
+  hyperbolic_trained     |   1.000 |   0.000 |  1.000
+
+[exp7] Using HPS-Full result as final model (from pooling ablation, no retraining)...
+[exp7] Threshold (from CV): 0.9943
+
+[exp7] Feature importance (permutation, held-out split)...
+  Feature        | Importance | Category
+  ───────────────┼────────────┼───────────
+  progress       |     0.0000 | displacement
+  path_len       |     0.0000 | displacement
+  displacement   |     0.0000 | displacement
+  spike_loc      |     0.0000 | curvature
+  std_κ          |     0.0000 | curvature
+  mean_κ         |     0.0000 | curvature
+  max_κ          |     0.0000 | curvature
+  range_r        |     0.0000 | radial
+  std_r          |     0.0000 | radial
+  min_r          |     0.0000 | radial
+  max_r          |     0.0000 | radial
+  mean_r         |     0.0000 | radial
+
+  Category breakdown:
+    Radial:       nan%
+    Curvature:    nan%
+    Displacement: nan%
+  ✓ Curvature contributes ≥20% — trajectory bending is a meaningful signal
+
+[exp7] Direct classifier ablation (flattened 8×65 vs 12 features)...
+  12-feature probe AUROC:     1.000
+  Direct classifier AUROC:    1.000
+  ✓ 12 features capture all discriminative info (no bottleneck)
+
+[exp7] Dual-use FPR (20 prompts, threshold=0.994)...
+  Dual-use FPR: 0.000  95% CI: [0.000, 0.168]  (0/20 flagged)
+[exp7] ROC plot → /mnt/lab/Mo/hps/hps2/hps/plots/exp7_roc.png
+[exp7] Radii plot → /mnt/lab/Mo/hps/hps2/hps/plots/exp7_radii.png
+[exp7] Scores plot → /mnt/lab/Mo/hps/hps2/hps/plots/exp7_scores.png
+[utils] Saved → /mnt/lab/Mo/hps/hps2/hps/results/experiment7_results.json
+
+════════════════════════════════════════════════════════════
+  EXPERIMENT 7 COMPLETE
+  Best layers: [0, 1, 2, 35, 36, 37, 38, 39]
+  Best pooling: last
+  Learned κ: 1.014
+  AUROC: 1.000 | FPR@95: 0.000 | Dual-use FPR: 0.000
+  Saved. Run 'python chat.py' to test.
+════════════════════════════════════════════════════════════
+

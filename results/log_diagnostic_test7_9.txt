@@ -1,0 +1,55 @@
+
+════════════════════════════════════════════════════════════
+  DIAGNOSTIC: Why does Euclidean beat HPS on Llama-3?
+  Cache: results/llama3_activations_cache.npz
+  Cached layers: [0, 1, 2, 17, 24, 28, 29, 30, 31]
+════════════════════════════════════════════════════════════
+
+  Cache contains layers: [0, 1, 2, 17, 24, 28, 29, 30, 31]
+
+────────────────────────────────────────────────────────────
+  TEST 7: Layer selection effect — HPS vs Euclidean
+  (Only configurations within cached layers: [0, 1, 2, 17, 24, 28, 29, 30, 31])
+────────────────────────────────────────────────────────────
+
+  Config                       | HPS AUROC | HPS TPR | Euc AUROC | Euc TPR |  Δ AUROC
+  ─────────────────────────────┼───────────┼─────────┼───────────┼─────────┼─────────
+  current [0,1,2,28-31]        |     0.925 |   0.603 |     0.998 |   0.997 |   -0.073
+  shallow only [0,1,2]         |     0.942 |   0.560 |     0.992 |   0.973 |   -0.050
+  late only [28,29,30,31]      |     0.981 |   0.909 |     0.998 |   0.998 |   -0.017
+  RTV layers [17,24,31]        |     0.948 |   0.558 |     0.999 |   0.998 |   -0.052
+  spread [0,2,17,24,28,31]     |     1.000 |   0.999 |     0.999 |   0.998 |   +0.001
+  all cached                   |     0.950 |   0.674 |     0.999 |   0.998 |   -0.050
+
+────────────────────────────────────────────────────────────
+  TEST 9: Curvature κ effect (HPS only)
+  (Vary k_init and freeze status)
+────────────────────────────────────────────────────────────
+
+  κ_init   | frozen?  |  AUROC |  TPR@5% |  final κ
+  ─────────┼──────────┼────────┼─────────┼─────────
+  0.10     | False    | (failed: ValueError)
+  0.10     | True     |  0.999 |   0.998 |    0.100
+  0.50     | False    |  0.923 |   0.607 |    0.541
+  0.50     | True     |  0.922 |   0.608 |    0.500
+  1.00     | False    |  0.925 |   0.603 |    1.086
+  1.00     | True     |  0.923 |   0.590 |    1.000
+  2.00     | False    |  0.926 |   0.570 |    2.113
+  2.00     | True     |  0.922 |   0.577 |    2.000
+  10.00    | False    |  0.879 |   0.413 |   10.000
+  10.00    | True     |  0.879 |   0.413 |   10.000
+
+════════════════════════════════════════════════════════════
+  HOW TO INTERPRET RESULTS
+════════════════════════════════════════════════════════════
+  TEST 1+2: Δ should DECREASE as N grows if hyperbolic is a low-data regularizer.
+  TEST 3:   Δ should DECREASE as #methods grows if hyperbolic helps low-diversity.
+  TEST 4:   Δ > 0 here would replicate the original Vicuna 'hyperbolic wins'.
+  TEST 5:   If AUROC keeps rising past 200 epochs, early stopping is the culprit.
+  TEST 6:   SAA feature distribution — explains the per-attack failure mode.
+  TEST 7:   Best layer config may differ from the Fisher-discovered set.
+  TEST 8:   Train-on-4 / test-on-5 — extreme cross-attack stress test.
+  TEST 9:   Does learnable κ matter? Compare frozen vs learned at different inits.
+  TEST 10:  Direct test on Vicuna data (if cache supplied).
+════════════════════════════════════════════════════════════
+
