@@ -378,7 +378,10 @@ def plot_feature_importance():
     categories = ["radial"]*5 + ["curvature"]*4 + ["displacement"]*3
     cat_colors = {"radial": "#9b59b6", "curvature": "#e67e22", "displacement": "#27ae60"}
 
-    # Sort by importance
+    # Two-panel plot: per-feature + category aggregated
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+
+    # Panel 1: per-feature
     order = np.argsort(imp)[::-1]
     sorted_names = [feat_names[i] for i in order]
     sorted_imp = imp[order]
@@ -386,30 +389,114 @@ def plot_feature_importance():
     sorted_cats = [categories[i] for i in order]
     sorted_colors = [cat_colors[c] for c in sorted_cats]
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    bars = ax.barh(range(len(feat_names)), sorted_imp, xerr=sorted_std,
-                    color=sorted_colors, alpha=0.85,
-                    error_kw=dict(ecolor="black", lw=1, capsize=3))
-    ax.set_yticks(range(len(feat_names)))
-    ax.set_yticklabels(sorted_names)
-    ax.invert_yaxis()
-    ax.set_xlabel("Permutation importance (Δ AUROC when shuffled)")
-    ax.set_title("HPS Feature Importance (Llama-3-8B, same-distribution)")
+    axes[0].barh(range(len(feat_names)), sorted_imp, xerr=sorted_std,
+                  color=sorted_colors, alpha=0.85,
+                  error_kw=dict(ecolor="black", lw=1, capsize=3))
+    axes[0].set_yticks(range(len(feat_names)))
+    axes[0].set_yticklabels(sorted_names)
+    axes[0].invert_yaxis()
+    axes[0].set_xlabel("Permutation importance (Δ AUROC)")
+    axes[0].set_title("Per-Feature Importance")
+    axes[0].axvline(0, color="black", linewidth=0.5)
 
-    # Legend for categories
+    # Panel 2: category aggregated (sum)
+    cat_imp = {"radial": 0, "curvature": 0, "displacement": 0}
+    cat_std = {"radial": 0, "curvature": 0, "displacement": 0}
+    for i, c in enumerate(categories):
+        cat_imp[c] += imp[i]
+        cat_std[c] += std[i]**2  # sum of variances
+    cat_std = {k: np.sqrt(v) for k, v in cat_std.items()}
+
+    cat_order = sorted(cat_imp.keys(), key=lambda c: -cat_imp[c])
+    bars2 = axes[1].bar([f"{c}\n(n={categories.count(c)})" for c in cat_order],
+                         [cat_imp[c] for c in cat_order],
+                         yerr=[cat_std[c] for c in cat_order],
+                         color=[cat_colors[c] for c in cat_order], alpha=0.85,
+                         error_kw=dict(ecolor="black", lw=1.5, capsize=5))
+    axes[1].set_ylabel("Summed permutation importance (Δ AUROC)")
+    axes[1].set_title("Category-Aggregated Importance")
+    axes[1].axhline(0, color="black", linewidth=0.5)
+    for bar, c in zip(bars2, cat_order):
+        axes[1].text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                      f"{cat_imp[c]:.4f}", ha="center", va="bottom", fontsize=10,
+                      fontweight="bold")
+
+    # Shared legend
     handles = [plt.Rectangle((0, 0), 1, 1, color=cat_colors[c], alpha=0.85)
                for c in ["radial", "curvature", "displacement"]]
-    ax.legend(handles, ["Radial features", "Curvature features", "Displacement features"],
-              loc="lower right")
+    fig.legend(handles, ["Radial", "Curvature", "Displacement"],
+                loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.02))
 
+    plt.tight_layout()
     save(fig, "fig_feature_importance")
 
     # Print summary
-    print(f"\n  Feature importance summary:")
+    print(f"\n  Per-feature ranking:")
     print(f"  {'Rank':<5} {'Feature':<12} {'Importance':>12} {'Category'}")
     for rank, (name, val, cat) in enumerate(zip(sorted_names, sorted_imp, sorted_cats), 1):
-        flag = " ← top" if rank <= 6 else ""
-        print(f"  {rank:<5} {name:<12} {val:>12.4f}  {cat:<13}{flag}")
+        flag = " ← top6" if rank <= 6 else ""
+        print(f"  {rank:<5} {name:<12} {val:>12.5f}  {cat:<13}{flag}")
+    print(f"\n  Category aggregated:")
+    for c in cat_order:
+        print(f"  {c:<13} (n={categories.count(c)})  importance={cat_imp[c]:.5f}")
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  PLOT 6b: Feature ablation comparison (TPR + FPR per subset, per regime)
+# ═══════════════════════════════════════════════════════════════════
+def plot_feature_ablation():
+    print("\n[fig 6b] Feature ablation comparison...")
+    data = load_json(os.path.join(RESULTS, "feature_ablation.json"))
+    if data is None:
+        print("  Skip: feature_ablation.json not found (run feature_ablation.py first)")
+        return
+
+    same_dist = data.get("same_dist", {})
+    cold_start = data.get("cold_start", {})
+    vicuna = data.get("vicuna_like", {})
+
+    # Subsets to display (in display order)
+    subsets = ["all_12", "radial_disp_8", "top6_byimp", "top4_byimp",
+               "radial_5", "displacement_3", "curvature_4", "top1_byimp"]
+    # Filter to subsets actually present
+    subsets = [s for s in subsets if s in same_dist]
+
+    # TPR data
+    regimes = ["Same-dist", "Cold-start\nN=5", "Cold-start\nN=25",
+               "Cold-start\nN=100", "Vicuna-like"]
+    tpr_data = []
+    for s in subsets:
+        row = [
+            same_dist[s]["tpr"],
+            cold_start.get("5", {}).get(s, {}).get("tpr", np.nan),
+            cold_start.get("25", {}).get(s, {}).get("tpr", np.nan),
+            cold_start.get("100", {}).get(s, {}).get("tpr", np.nan),
+            vicuna.get(s, {}).get("tpr", np.nan),
+        ]
+        tpr_data.append(row)
+    tpr_arr = np.array(tpr_data)
+
+    fig, ax = plt.subplots(figsize=(11, 5))
+    n_subsets = len(subsets)
+    n_regimes = len(regimes)
+    x = np.arange(n_regimes)
+    width = 0.85 / n_subsets
+
+    cmap = plt.cm.viridis(np.linspace(0.15, 0.85, n_subsets))
+    for i, s in enumerate(subsets):
+        offset = (i - n_subsets / 2 + 0.5) * width
+        n_feat = same_dist[s].get("n_features", "?")
+        bars = ax.bar(x + offset, tpr_arr[i], width,
+                       label=f"{s} (n={n_feat})", color=cmap[i], alpha=0.9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(regimes)
+    ax.set_ylabel("TPR @ 5% FPR")
+    ax.set_title("Feature Ablation: TPR Across Regimes")
+    ax.set_ylim(0.7, 1.02)
+    ax.axhline(1.0, color="black", linestyle=":", linewidth=0.5)
+    ax.legend(ncol=2, fontsize=9, loc="lower right")
+    save(fig, "fig_feature_ablation")
 
 
 # ═══════════════════════════════════════════════════════════════════

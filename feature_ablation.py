@@ -240,11 +240,12 @@ def main():
 
     for n_per in [5, 25, 100]:
         print(f"\n  Cold-start N={n_per} per method:")
-        print(f"  {'Subset':<18} | {'#feats':>6} | {'TPR':>6}")
-        print(f"  {'─'*18}─┼─{'─'*6}─┼─{'─'*6}")
+        print(f"  {'Subset':<18} | {'#feats':>6} | {'TPR':>6} | {'FPR':>5}")
+        print(f"  {'─'*18}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*5}")
 
-        # For each subset, accumulate TPRs across leave-one-out folds
+        # For each subset, accumulate TPRs and FPRs across leave-one-out folds
         subset_tprs = {name: [] for name in SUBSETS.keys()}
+        subset_fprs = {name: [] for name in SUBSETS.keys()}
         for held_out in methods_unique:
             sub_atk = []
             for m in methods_unique:
@@ -267,15 +268,22 @@ def main():
 
             # Evaluate each subset on this fold
             for name, idx in SUBSETS.items():
-                _, t, _ = evaluate_subset(f_tr, y_tr, f_be, f_at, idx)
+                _, t, fpr_actual = evaluate_subset(f_tr, y_tr, f_be, f_at, idx)
                 subset_tprs[name].append(t)
+                subset_fprs[name].append(fpr_actual)
 
         # Average across folds
         cold_start_results[n_per] = {}
         for name in SUBSETS.keys():
             mean_tpr = float(np.mean(subset_tprs[name])) if subset_tprs[name] else 0.0
-            cold_start_results[n_per][name] = {"tpr": mean_tpr, "n_features": len(SUBSETS[name])}
-            print(f"  {name:<18} | {len(SUBSETS[name]):>6} | {mean_tpr:>6.3f}")
+            mean_fpr = float(np.mean(subset_fprs[name])) if subset_fprs[name] else 0.0
+            std_fpr = float(np.std(subset_fprs[name])) if subset_fprs[name] else 0.0
+            cold_start_results[n_per][name] = {
+                "tpr": mean_tpr, "fpr_mean": mean_fpr, "fpr_std": std_fpr,
+                "n_features": len(SUBSETS[name])
+            }
+            fpr_str = f"{mean_fpr:.3f}±{std_fpr:.3f}" if std_fpr > 0 else f"{mean_fpr:.3f}"
+            print(f"  {name:<18} | {len(SUBSETS[name]):>6} | {mean_tpr:>6.3f} | {fpr_str}")
 
     # ══════════════════════════════════════════════════════════════
     #  PART 4: Vicuna-like regime (4 methods × 25 attacks)
@@ -295,6 +303,7 @@ def main():
         sub_atk.append(available[:take])
 
     subset_tprs_vic = {name: [] for name in SUBSETS.keys()}
+    subset_fprs_vic = {name: [] for name in SUBSETS.keys()}
     for held_out in vicuna_methods:
         train_atk = np.concatenate([sub_atk[i] for i, m in enumerate(vicuna_methods)
                                      if m != held_out])
@@ -309,16 +318,21 @@ def main():
         f_be = extract_trajectory_features(proj_fold, cv_ben_te)
         f_at = extract_trajectory_features(proj_fold, test_atk)
         for name, idx in SUBSETS.items():
-            _, t, _ = evaluate_subset(f_tr, y_tr, f_be, f_at, idx)
+            _, t, fpr_actual = evaluate_subset(f_tr, y_tr, f_be, f_at, idx)
             subset_tprs_vic[name].append(t)
+            subset_fprs_vic[name].append(fpr_actual)
 
-    print(f"  {'Subset':<18} | {'#feats':>6} | {'TPR':>6}")
-    print(f"  {'─'*18}─┼─{'─'*6}─┼─{'─'*6}")
+    print(f"  {'Subset':<18} | {'#feats':>6} | {'TPR':>6} | {'FPR':>5}")
+    print(f"  {'─'*18}─┼─{'─'*6}─┼─{'─'*6}─┼─{'─'*5}")
     vicuna_results = {}
     for name in SUBSETS.keys():
         mean_tpr = float(np.mean(subset_tprs_vic[name])) if subset_tprs_vic[name] else 0.0
-        vicuna_results[name] = {"tpr": mean_tpr, "n_features": len(SUBSETS[name])}
-        print(f"  {name:<18} | {len(SUBSETS[name]):>6} | {mean_tpr:>6.3f}")
+        mean_fpr = float(np.mean(subset_fprs_vic[name])) if subset_fprs_vic[name] else 0.0
+        std_fpr = float(np.std(subset_fprs_vic[name])) if subset_fprs_vic[name] else 0.0
+        vicuna_results[name] = {"tpr": mean_tpr, "fpr_mean": mean_fpr, "fpr_std": std_fpr,
+                                 "n_features": len(SUBSETS[name])}
+        fpr_str = f"{mean_fpr:.3f}±{std_fpr:.3f}" if std_fpr > 0 else f"{mean_fpr:.3f}"
+        print(f"  {name:<18} | {len(SUBSETS[name]):>6} | {mean_tpr:>6.3f} | {fpr_str}")
 
     # ══════════════════════════════════════════════════════════════
     #  Decision Summary
@@ -363,16 +377,39 @@ def main():
         vicuna_results["top6_byimp"]["tpr"] - a12_vic,
     ]
     worst_top6 = min(top6_deltas)
-    print(f"  top6_byimp worst Δ across regimes: {worst_top6:+.3f}")
+    print(f"  top6_byimp worst Δ TPR across regimes: {worst_top6:+.3f}")
 
-    if worst_top6 >= -0.02:
-        print(f"  ✓ DROP TO 6 FEATURES — top6_byimp matches all_12 within 0.02 TPR everywhere")
-        print(f"    Recommended subset: {[FEAT_NAMES[i] for i in top6]}")
+    # Check FPR drift for smaller subsets vs all_12 (cold-start)
+    print(f"\n  FPR drift check (cold-start, FPR target = 0.05):")
+    print(f"  {'Subset':<18} | {'CS5 FPR':>8} | {'CS25 FPR':>9} | {'CS100 FPR':>10} | {'Vicuna FPR':>11}")
+    print(f"  {'─'*18}─┼─{'─'*8}─┼─{'─'*9}─┼─{'─'*10}─┼─{'─'*11}")
+    for name in ["all_12", "radial_disp_8", "top6_byimp", "top4_byimp", "top1_byimp"]:
+        if name not in cold_start_results[5]:
+            continue
+        f5 = cold_start_results[5][name].get("fpr_mean", 0)
+        f25 = cold_start_results[25][name].get("fpr_mean", 0)
+        f100 = cold_start_results[100][name].get("fpr_mean", 0)
+        fvic = vicuna_results[name].get("fpr_mean", 0)
+        print(f"  {name:<18} | {f5:>8.3f} | {f25:>9.3f} | {f100:>10.3f} | {fvic:>11.3f}")
+
+    # Verdict
+    fpr_max = max([
+        cold_start_results[5]["top6_byimp"].get("fpr_mean", 0),
+        cold_start_results[5]["top1_byimp"].get("fpr_mean", 0),
+    ])
+    if worst_top6 >= -0.02 and fpr_max <= 0.08:
+        print(f"\n  ✓ DROP TO 6 (or fewer) FEATURES")
+        print(f"    - top6_byimp matches all_12 within 0.02 TPR everywhere")
+        print(f"    - FPR drift bounded (worst FPR = {fpr_max:.3f}, within 0.08)")
+        print(f"    - Recommended: {[FEAT_NAMES[i] for i in top6]}")
+        print(f"      (or even simpler: radial_disp_8 — drops curvature only)")
     elif worst_top6 >= -0.05:
-        print(f"  ⚠ MARGINAL — top6_byimp loses {-worst_top6:.3f} TPR in worst regime")
-        print(f"    Author's call: keep 12 (safer) or drop to 6 (cleaner)")
+        print(f"\n  ⚠ MARGINAL — top6_byimp loses {-worst_top6:.3f} TPR in worst regime")
+        if fpr_max > 0.08:
+            print(f"    ⚠ FPR drift concern: max FPR = {fpr_max:.3f}")
+        print(f"    Author's call: keep 12 (safer) or drop to 6/8 (cleaner)")
     else:
-        print(f"  ✗ KEEP ALL 12 — top6_byimp loses {-worst_top6:.3f} TPR (>0.05) in some regime")
+        print(f"\n  ✗ KEEP ALL 12 — top6_byimp loses {-worst_top6:.3f} TPR (>0.05) in some regime")
         print(f"    The full 12 features matter for the cold-start regime")
 
     # Save results
@@ -384,7 +421,7 @@ def main():
             "epochs": EPOCHS,
         },
         "feature_names": FEAT_NAMES,
-        "subsets": {name: idx for name, idx in SUBSETS.items()},
+        "subsets": {name: [int(i) for i in idx] for name, idx in SUBSETS.items()},
         "importance_ranking": [
             {"feature": FEAT_NAMES[i], "importance": float(v)}
             for i, v in sorted(enumerate(importances), key=lambda x: -x[1])
@@ -395,8 +432,18 @@ def main():
     }
     out_path = "results/feature_ablation.json"
     os.makedirs("results", exist_ok=True)
+
+    def _np_default(o):
+        if isinstance(o, (np.integer,)):
+            return int(o)
+        if isinstance(o, (np.floating,)):
+            return float(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        raise TypeError(f"Type {type(o)} not serializable")
+
     with open(out_path, "w") as f:
-        json.dump(out, f, indent=2)
+        json.dump(out, f, indent=2, default=_np_default)
     print(f"\n  Saved → {out_path}")
     print(f"{'═'*60}\n")
 
