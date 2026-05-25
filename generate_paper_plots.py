@@ -585,6 +585,7 @@ def main():
         "seeds": plot_seed_stability,
         "adaptive": plot_adaptive_pgd,
         "features": plot_feature_importance,
+        "ablation": plot_feature_ablation,
         "cross_attack": plot_per_method_cross_attack,
         "learning": plot_learning_curve,
     }
