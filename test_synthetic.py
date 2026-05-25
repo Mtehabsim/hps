@@ -16,7 +16,8 @@ import numpy as np
 def make_synthetic_cache(out_path, d=4096, n_layers_total=9,
                           n_train_ben=200, n_train_atk=200,
                           n_test_ben=100, n_test_atk=100,
-                          seed=42):
+                          seed=42, layers_set=None,
+                          attack_shift_scale=0.5):
     """
     Make a fake cache that matches the structure of llama3_activations_cache.npz:
 
@@ -25,27 +26,24 @@ def make_synthetic_cache(out_path, d=4096, n_layers_total=9,
       - cfg_hash: string
     """
     rng = np.random.RandomState(seed)
-    layers = sorted({0, 1, 2, 17, 24, 28, 29, 30, 31})
-    assert len(layers) == n_layers_total
+    if layers_set is None:
+        layers_set = {0, 1, 2, 17, 24, 28, 29, 30, 31}
+    layers = sorted(layers_set)
 
     def gen(n, label):
         out = []
-        # Make benign and attack distributions linearly separable for sanity
         offset_per_layer = {l: rng.randn(d) * 0.1 for l in layers}
-        if label == 1:  # attack
-            shift = rng.randn(d) * 0.5
+        if label == 1:
+            shift = rng.randn(d) * attack_shift_scale
         else:
             shift = np.zeros(d)
         for _ in range(n):
-            # Each example has T=10 token positions
             T = 10
             d_per_layer = {}
             for l in layers:
                 base = rng.randn(T, d) * 0.5 + offset_per_layer[l]
-                if label == 1:
-                    # Attacks have slight shift in last token at deeper layers
-                    if l >= 17:
-                        base[-1] += shift
+                if label == 1 and l >= max(layers) // 2:
+                    base[-1] += shift
                 d_per_layer[l] = base.astype(np.float32)
             out.append(d_per_layer)
         return out
@@ -71,19 +69,31 @@ def make_synthetic_cache(out_path, d=4096, n_layers_total=9,
 
 
 def main():
-    cache_path = Path("results/llama3_activations_cache.npz")
-    cache_existed = cache_path.exists()
-    backup = None
-    if cache_existed:
-        backup = cache_path.with_suffix(".npz.real_backup")
-        shutil.copy(cache_path, backup)
-        print(f"BACKED UP existing cache → {backup}")
+    # ── Llama-3-style cache ──
+    llama_path = Path("results/llama3_activations_cache.npz")
+    if llama_path.exists():
+        backup = llama_path.with_suffix(".npz.real_backup")
+        shutil.copy(llama_path, backup)
+        print(f"BACKED UP {llama_path} → {backup}")
 
-    print("Generating synthetic cache for testing...")
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    # Smaller dimensions to make local testing fast
-    make_synthetic_cache(cache_path, d=256, n_train_ben=100, n_train_atk=100,
-                          n_test_ben=50, n_test_atk=50)
+    print("Generating synthetic Llama-3-style cache (32 layers)...")
+    llama_path.parent.mkdir(parents=True, exist_ok=True)
+    make_synthetic_cache(llama_path, d=256, n_train_ben=100, n_train_atk=100,
+                          n_test_ben=50, n_test_atk=50,
+                          layers_set={0, 1, 2, 17, 24, 28, 29, 30, 31})
+
+    # ── Vicuna-style cache ──
+    vicuna_path = Path("results/vicuna_activations_cache.npz")
+    if vicuna_path.exists():
+        backup = vicuna_path.with_suffix(".npz.real_backup")
+        shutil.copy(vicuna_path, backup)
+        print(f"BACKED UP {vicuna_path} → {backup}")
+
+    print("Generating synthetic Vicuna-style cache (40 layers)...")
+    make_synthetic_cache(vicuna_path, d=320, n_train_ben=100, n_train_atk=100,
+                          n_test_ben=50, n_test_atk=50,
+                          layers_set={0, 2, 22, 31, 35, 39},
+                          attack_shift_scale=0.3)  # weaker signal for Vicuna
 
     print()
     print("=" * 70)
@@ -93,12 +103,9 @@ def main():
     print("  python radial_distribution_check.py --n_seeds 2 \\")
     print("      --total_epochs 20 --epochs_to_check 5 10 20 \\")
     print("      --kappas 0.1 1.0 --skip_plots")
+    print("  python vicuna_diagnostic.py --epochs 10")
     print()
     print("If they complete without error, the scripts work correctly.")
-    print()
-    if cache_existed:
-        print(f"To restore your real cache:")
-        print(f"  mv {backup} {cache_path}")
 
 
 if __name__ == "__main__":

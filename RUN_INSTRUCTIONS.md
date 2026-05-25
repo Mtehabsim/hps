@@ -106,6 +106,77 @@ The `summary` field in the JSON tells you the headline:
 
 ---
 
+## Script 3 — Vicuna failure diagnostic
+
+**Purpose:** Identify exactly why HPS fails on Vicuna but works on Llama-3.
+Tests 6 distinct hypotheses to pin down the mechanism (addresses the
+"why does HPS fail on Vicuna" research question).
+
+**Prerequisite:** You need both `results/llama3_activations_cache.npz` AND
+`results/vicuna_activations_cache.npz` (the cache from `cross_model_compare.py
+--extract`).
+
+**Run:**
+```bash
+# Full diagnostic (~5-10 min on GPU)
+python vicuna_diagnostic.py
+
+# Skip H5 (HPS retraining) for fast diagnostic
+python vicuna_diagnostic.py --skip_h5
+```
+
+**Output:**
+- `results/vicuna_diagnostic.json` — full numeric results for all 6 hypotheses
+- `results/figs/vicuna_diag_h3_per_layer.png` — per-layer separability comparison
+- `results/figs/vicuna_diag_h5_loss.png` — HPS training loss curves on both LLMs
+- `results/figs/vicuna_diag_h4_refusal.png` — refusal direction strength bar chart
+
+**Hypotheses tested:**
+
+| H | Hypothesis | What it tests |
+|---|---|---|
+| H1 | Vicuna activations are less tree-like (less hyperbolic) | Gromov δ-hyperbolicity per layer |
+| H2 | 64-dim projection bottleneck loses Vicuna signal | C4 forced to 64-dim via PCA — does it still work? |
+| H3 | Safety signal is spread across many layers on Vicuna | Per-layer LR probe AUROC distribution |
+| H4 | Vicuna's refusal direction is intrinsically weaker (no RLHF) | d′ along mean(harmful)−mean(benign) |
+| H5 | HPS contrastive training converges worse on Vicuna | Final loss + loss history |
+| H6 | Vicuna activations have higher effective dimensionality | Eigenvalue spectrum / participation ratio |
+
+**Interpreting verdicts:**
+
+The script prints a summary table like:
+```
+SUMMARY OF HYPOTHESES
+  H1: δ-hyperbolicity                  → SUPPORTS_H1   (or CONTRADICTS_H1, INCONCLUSIVE_H1)
+  H2: Capacity bottleneck (PCA64)      → CONTRADICTS_H2
+  H3: Per-layer signal concentration   → VICUNA_MORE_SPREAD
+  ...
+  PRIMARY EXPLANATIONS: H1 hyperbolicity, H3 per_layer_signal
+```
+
+**Decision rules from the verdicts:**
+
+- **H1 supports + H6 supports** → Vicuna intrinsically harder for any 64-dim
+  projection. Curing requires bigger dim or different geometry.
+- **H2 supports** → Just increase projection dim. Easy fix.
+- **H2 contradicts + H5 supports** → Optimization issue. Try better optimizer,
+  longer training, or different κ.
+- **H3 says VICUNA_MORE_SPREAD** → Layer selection matters; rescan layers.
+- **H4 supports + H6 supports** → Vicuna is intrinsically harder; switch to
+  C4 on Vicuna. Inherent property of the model, not method.
+- **H1 contradicts + H4 supports** → Safety signal is weak overall on Vicuna,
+  not a hyperbolic-specific problem.
+
+**What to do based on results:**
+- If H1 supports → write up "hyperbolic doesn't fit Vicuna activation geometry"
+- If H2 supports → run an experiment with higher projection dim
+- If H3+H4 support → conclude "Vicuna's safety alignment is too weak for
+  geometric methods; this is an alignment/RLHF issue, not a method issue"
+- If everything is INCONCLUSIVE → the failure may be due to some
+  unexamined factor (worth follow-up)
+
+---
+
 ## After running both scripts
 
 Once you have `results/statistical_tests.json` and
