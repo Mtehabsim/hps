@@ -81,20 +81,117 @@ def _np_default(o):
 
 
 def to_hps_array(hs_list, layers):
-    return np.array([[hs[l][-1] for l in layers] for hs in hs_list])
+    """
+    Convert a list of dicts {layer_idx -> (T, d) array} to (N, n_layers, d).
+
+    Uses last-token activation. Streams to avoid duplicating memory.
+    """
+    n = len(hs_list)
+    if n == 0:
+        return np.empty((0, len(layers), 0), dtype=np.float32)
+    # Probe first item to get d
+    sample = hs_list[0][layers[0]]
+    d = sample.shape[1] if sample.ndim == 2 else sample.shape[0]
+    out = np.empty((n, len(layers), d), dtype=np.float32)
+    for i, hs in enumerate(hs_list):
+        for li, L in enumerate(layers):
+            t = hs[L]
+            out[i, li, :] = t[-1] if t.ndim == 2 else t
+    return out
+
+
+def _hs_array_to_hps(np_object_array, layers):
+    """
+    Same as to_hps_array but iterates over a numpy object array directly
+    (avoiding .tolist() which materializes all dicts in memory at once).
+    Use this for very large caches.
+    """
+    n = len(np_object_array)
+    if n == 0:
+        return np.empty((0, len(layers), 0), dtype=np.float32)
+    # Probe first dict
+    first = np_object_array[0]
+    sample = first[layers[0]]
+    d = sample.shape[1] if sample.ndim == 2 else sample.shape[0]
+    out = np.empty((n, len(layers), d), dtype=np.float32)
+    for i in range(n):
+        hs = np_object_array[i]  # one dict at a time
+        for li, L in enumerate(layers):
+            t = hs[L]
+            out[i, li, :] = t[-1] if t.ndim == 2 else t
+    return out
+
+
+def _split_pre_extracted(X, seed=42, test_frac=0.2):
+    """Split a pre-extracted (N, n_layers, d) array into train/test."""
+    rng = np.random.RandomState(seed)
+    idx = rng.permutation(len(X))
+    n_te = max(1, int(test_frac * len(X)))
+    return X[idx[n_te:]], X[idx[:n_te]]
 
 
 def load_cache(path, layers):
-    """Load activation cache and convert to (N, n_layers, d) arrays."""
+    """
+    Load activation cache. Handles two formats:
+
+    Format A (hps_llama3.py output):
+      - hs_train_ben, hs_train_atk, hs_test_ben, hs_test_atk
+        each is np.array(dtype=object) of dicts {layer_idx -> (T, d)}
+      - cfg_hash
+
+    Format B (cross_model_compare.py output):
+      - X_benign:    (N_ben, n_layers, d_hidden) — already last-token-extracted
+      - X_attack:    (N_atk, n_layers, d_hidden)
+      - attack_methods: object array
+      - layers: int array
+
+    Returns dict with X_tr_ben, X_tr_atk, X_te_ben, X_te_atk arrays of
+    shape (N, n_layers, d).
+    """
     if not Path(path).exists():
         raise FileNotFoundError(f"Cache not found: {path}")
     cache = np.load(path, allow_pickle=True)
-    return {
-        "X_tr_ben": to_hps_array(cache["hs_train_ben"].tolist(), layers),
-        "X_tr_atk": to_hps_array(cache["hs_train_atk"].tolist(), layers),
-        "X_te_ben": to_hps_array(cache["hs_test_ben"].tolist(), layers),
-        "X_te_atk": to_hps_array(cache["hs_test_atk"].tolist(), layers),
-    }
+    keys = list(cache.keys())
+
+    if "hs_train_ben" in keys:
+        # Format A — Llama-3 style. Stream through numpy object array
+        # without materializing via .tolist() (saves memory on huge caches)
+        return {
+            "X_tr_ben": _hs_array_to_hps(cache["hs_train_ben"], layers),
+            "X_tr_atk": _hs_array_to_hps(cache["hs_train_atk"], layers),
+            "X_te_ben": _hs_array_to_hps(cache["hs_test_ben"], layers),
+            "X_te_atk": _hs_array_to_hps(cache["hs_test_atk"], layers),
+        }
+
+    if "X_benign" in keys and "X_attack" in keys:
+        # Format B — Vicuna style (already last-token, layer-indexed)
+        X_ben = np.array(cache["X_benign"])
+        X_atk = np.array(cache["X_attack"])
+        cached_layers = cache["layers"].tolist() \
+            if "layers" in keys else None
+
+        # Optional: subset to requested layers if cache contains a superset
+        if cached_layers is not None and set(layers) <= set(cached_layers):
+            layer_idx = [cached_layers.index(L) for L in layers]
+            X_ben = X_ben[:, layer_idx, :]
+            X_atk = X_atk[:, layer_idx, :]
+        elif cached_layers is not None and set(layers) != set(cached_layers):
+            print(f"  WARNING: requested layers {layers} differ from cache "
+                  f"layers {cached_layers}; using cache as-is")
+
+        # Split into train/test (cache doesn't have a pre-split for Vicuna)
+        X_tr_ben, X_te_ben = _split_pre_extracted(X_ben, seed=42)
+        X_tr_atk, X_te_atk = _split_pre_extracted(X_atk, seed=43)
+        return {
+            "X_tr_ben": X_tr_ben, "X_tr_atk": X_tr_atk,
+            "X_te_ben": X_te_ben, "X_te_atk": X_te_atk,
+        }
+
+    raise ValueError(
+        f"Unknown cache format. Keys: {keys}. "
+        f"Expected either 'hs_train_ben' (Llama-3 format) or 'X_benign' "
+        f"(Vicuna format)."
+    )
 
 
 def auroc(y, s):
