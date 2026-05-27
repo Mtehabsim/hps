@@ -144,6 +144,51 @@ def eval_features(features_train, y_train, features_te_ben, features_te_atk, see
     return {"auroc": auroc, "tpr": tpr, "fpr": fpr}
 
 
+def _contrastive_pairs_minibatch(h_proj, y_t, k, margin=2.0, batch_size=512, seed=0):
+    """Compute contrastive loss over a sampled minibatch of pairs.
+
+    h_proj: (N, d_proj+1) on the hyperboloid
+    y_t:    (N,) labels
+    Returns scalar loss tensor.
+    """
+    n = h_proj.shape[0]
+    if n <= batch_size:
+        idx = torch.arange(n, device=h_proj.device)
+    else:
+        g = torch.Generator(device="cpu").manual_seed(seed)
+        idx = torch.randperm(n, generator=g)[:batch_size].to(h_proj.device)
+    h = h_proj[idx]
+    y = y_t[idx]
+    d = lorentz_distance(h.unsqueeze(0), h.unsqueeze(1), k=k)
+    same = (y.unsqueeze(0) == y.unsqueeze(1)).float()
+    diff = 1.0 - same
+    triu = torch.triu(torch.ones_like(d), diagonal=1)
+    ns = (same * triu).sum().clamp(min=1)
+    nd = (diff * triu).sum().clamp(min=1)
+    return ((d ** 2 * same * triu).sum() / ns +
+            (torch.clamp(margin - d, min=0) ** 2 * diff * triu).sum() / nd) / 2
+
+
+def _contrastive_pairs_minibatch_l2(h, y_t, margin, batch_size=512, seed=0):
+    """L2 contrastive loss minibatch (for Euclidean and HMLP variants)."""
+    n = h.shape[0]
+    if n <= batch_size:
+        idx = torch.arange(n, device=h.device)
+    else:
+        g = torch.Generator(device="cpu").manual_seed(seed)
+        idx = torch.randperm(n, generator=g)[:batch_size].to(h.device)
+    h_b = h[idx]
+    y = y_t[idx]
+    d = torch.cdist(h_b, h_b)
+    same = (y.unsqueeze(0) == y.unsqueeze(1)).float()
+    diff = 1.0 - same
+    triu = torch.triu(torch.ones_like(d), diagonal=1)
+    ns = (same * triu).sum().clamp(min=1)
+    nd = (diff * triu).sum().clamp(min=1)
+    return ((d ** 2 * same * triu).sum() / ns +
+            (torch.clamp(margin - d, min=0) ** 2 * diff * triu).sum() / nd) / 2
+
+
 # -------------------------- Method 1: HPS (existing) --------------------------
 def method_hps(data, seed=42):
     """The Lorentz projection + contrastive + radial mean feature."""
@@ -160,20 +205,13 @@ def method_hps(data, seed=42):
     Xt = torch.tensor(X_train, dtype=torch.float32, device=device)
     yt = torch.tensor(y_train, dtype=torch.long, device=device)
 
-    for _ in range(EPOCHS):
+    for ep in range(EPOCHS):
         loss = torch.tensor(0.0, device=device)
         for l in range(n_layers):
             h = proj(Xt[:, l, :])  # on the hyperboloid
-            # Contrastive on Lorentz distance
-            d = lorentz_distance(h.unsqueeze(0), h.unsqueeze(1), k=proj.k.item())
-            same = (yt.unsqueeze(0) == yt.unsqueeze(1)).float()
-            diff = 1.0 - same
-            triu = torch.triu(torch.ones_like(d), diagonal=1)
-            ns = (same * triu).sum().clamp(min=1)
-            nd = (diff * triu).sum().clamp(min=1)
-            margin = 2.0
-            loss = loss + ((d ** 2 * same * triu).sum() / ns +
-                           (torch.clamp(margin - d, min=0) ** 2 * diff * triu).sum() / nd) / 2
+            loss = loss + _contrastive_pairs_minibatch(
+                h, yt, k=proj.k.item(), margin=2.0, batch_size=512, seed=ep
+            )
         loss = loss / n_layers
         opt.zero_grad()
         loss.backward()
@@ -306,19 +344,13 @@ def method_hyperbolic_mlp(data, seed=42):
     Xt = torch.tensor(X_train, dtype=torch.float32, device=device)
     yt = torch.tensor(y_train, dtype=torch.long, device=device)
 
-    for _ in range(EPOCHS):
+    for ep in range(EPOCHS):
         loss = torch.tensor(0.0, device=device)
         for l in range(n_layers):
             h = hmlp(Xt[:, l, :])
-            d = lorentz_distance(h.unsqueeze(0), h.unsqueeze(1), k=KAPPA_INIT)
-            same = (yt.unsqueeze(0) == yt.unsqueeze(1)).float()
-            diff = 1.0 - same
-            triu = torch.triu(torch.ones_like(d), diagonal=1)
-            ns = (same * triu).sum().clamp(min=1)
-            nd = (diff * triu).sum().clamp(min=1)
-            margin = 2.0
-            loss = loss + ((d ** 2 * same * triu).sum() / ns +
-                           (torch.clamp(margin - d, min=0) ** 2 * diff * triu).sum() / nd) / 2
+            loss = loss + _contrastive_pairs_minibatch(
+                h, yt, k=KAPPA_INIT, margin=2.0, batch_size=512, seed=ep
+            )
         loss = loss / n_layers
         opt.zero_grad()
         loss.backward()
@@ -478,19 +510,14 @@ def method_euclidean_matched(data, seed=42):
     Xt = torch.tensor(X_train, dtype=torch.float32, device=device)
     yt = torch.tensor(y_train, dtype=torch.long, device=device)
 
-    for _ in range(EPOCHS):
+    for ep in range(EPOCHS):
         loss = torch.tensor(0.0, device=device)
         margin = torch.exp(log_margin).clamp(0.5, 5.0)
         for l in range(n_layers):
             h = proj(Xt[:, l, :]) * scale_per_layer[l]
-            d = torch.cdist(h, h)
-            same = (yt.unsqueeze(0) == yt.unsqueeze(1)).float()
-            diff = 1.0 - same
-            triu = torch.triu(torch.ones_like(d), diagonal=1)
-            ns = (same * triu).sum().clamp(min=1)
-            nd = (diff * triu).sum().clamp(min=1)
-            loss = loss + ((d ** 2 * same * triu).sum() / ns +
-                           (torch.clamp(margin - d, min=0) ** 2 * diff * triu).sum() / nd) / 2
+            loss = loss + _contrastive_pairs_minibatch_l2(
+                h, yt, margin=margin.item(), batch_size=512, seed=ep
+            )
         loss = loss / n_layers
         opt.zero_grad()
         loss.backward()

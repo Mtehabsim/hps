@@ -7,22 +7,31 @@
 
 ## Note on C4 (the baseline used throughout this document)
 
-**C4** is our controlled minimal baseline for activation-based jailbreak detection. It is **NOT a method we discovered** — the general approach of "linear probes on LLM hidden states for jailbreak detection" is **established prior art** with industry deployments:
-
-- **Anthropic Cheap Monitors** (Cunningham et al. 2025): deployed mean-token probes for Claude 3 Sonnet. *"Linear probing as a baseline is difficult to beat."*
-- **Google DeepMind Production-Ready Probes for Gemini** (arXiv:2601.11516, Jan 2026): MultiMax + Max of Rolling Means Attention Probes for cyber-offensive monitoring.
-- **Detecting High-Stakes Interactions with Activation Probes** (Bailey et al., ICML 2025): peer-reviewed at top ML venue.
-- **Bricken et al. 2024** (Anthropic): "Features as Classifiers" — used linear probes as baseline.
-
-**What we added:** A specific *recipe* for the controlled comparison against HPS. Anthropic's mean-token probe averages activations *over tokens* within a single layer; our C4 averages activations *over six layers* at the last token. That is the only architectural difference. Concretely:
+**C4 is our adaptation of Anthropic's "Cheap Monitors" approach** (Cunningham et al., 2025), which is deployed in production at Anthropic for jailbreak detection on Claude 3 Sonnet. Anthropic's mean-token probe pools activations *over tokens* within a single LLM layer, then applies a linear classifier:
 
 ```
-C4 = mean-pool 6 layers' last-token activations  →  StandardScaler  →  LR
+Anthropic Cheap Monitors (mean-token probe):
+  activations h ∈ ℝ^(T × d)  →  mean across tokens: f = (1/T) Σ h_t  →  LR
 ```
 
-We use the C4 baseline together with the **cold-start regime evaluation methodology** (varying N attacks per method, varying number of attack methods, leave-one-out) — that is genuinely our contribution. Linear probes per se are not.
+**We took this method and made two specific changes** to fit our experimental setup:
 
-**Why C4 matters in this study:** It is the lower bound for "what should be beaten." If HPS's 262K-parameter geometric framework cannot exceed a 4,097-parameter mean-pool linear probe, the geometric machinery is not adding measurable value at saturation. We use C4 specifically as the controlled minimal point of comparison — not as a novel claim of our own.
+1. **We mean-pool over LAYERS instead of over tokens.** Anthropic averages activations across all token positions at one fixed layer; we average activations across N=6 selected layers at the last-token position. This is one axis swap — both are mean-pooling on activations, just along a different dimension.
+
+2. **We use multiple layers (6) rather than one.** Anthropic uses a single layer; we use 6 spread layers `[0, 2, 17, 24, 28, 31]` selected to span shallow + middle + deep representations.
+
+The resulting C4 recipe:
+
+```
+Our C4 = activations from 6 layers' last token  →  mean across layers
+       →  StandardScaler  →  logistic regression
+```
+
+**We do not claim C4 as a novel method.** It is a controlled minimal baseline derived from Anthropic's published approach with the modifications above. The point of using C4 in this study is to ask: *does HPS's 262K-parameter geometric framework provide measurable advantage over a 4,097-parameter mean-pool linear probe based on an established industry approach?* Anthropic's own conclusion is that *"linear probing as a baseline is difficult to beat,"* and our results confirm this in the geometric-framework setting.
+
+**Related approaches** (linear probes on hidden states for harm detection): Google DeepMind Production-Ready Probes for Gemini (arXiv:2601.11516, 2026); Detecting High-Stakes Interactions with Activation Probes (Bailey et al., ICML 2025); Bricken et al. 2024 "Features as Classifiers." All share the general approach; specific architectural details vary.
+
+**What we contribute (separately from C4):** the controlled three-way comparison (HPS vs HPS-Euclidean vs C4), cold-start regime methodology, multi-LLM alignment analysis, and statistical rigor. Linear probes per se are established prior art; the methodology around comparing geometric to non-geometric approaches is what's new in this work.
 
 ---
 
