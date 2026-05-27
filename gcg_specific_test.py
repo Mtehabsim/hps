@@ -316,23 +316,32 @@ def main():
     print("PHASE 3 — Side-by-side: HPS detection rate per attack, both LLMs")
     print("=" * 78)
 
-    all_methods = sorted(set(list(breakdown_l.keys()) + list(breakdown_v.keys())))
-    print(f"\n  {'Attack':<30s}  "
+    # Build a case-insensitive method lookup so "gcg" and "GCG" align
+    def _norm(m):
+        return str(m).lower() if m is not None else None
+    breakdown_l_norm = {_norm(k): v for k, v in breakdown_l.items()}
+    breakdown_v_norm = {_norm(k): v for k, v in breakdown_v.items()}
+    all_methods_norm = sorted(set(list(breakdown_l_norm.keys())
+                                  + list(breakdown_v_norm.keys())))
+
+    print(f"\n  {'Attack (case-insensitive)':<30s}  "
           f"{'Llama-HPS':>9s}  {'Llama-C4':>9s}  "
           f"{'Vicuna-HPS':>10s}  {'Vicuna-C4':>10s}  "
           f"{'HPS Δ':>7s}")
     print("  " + "-" * 90)
     cross = {}
-    for m in all_methods:
-        bl = breakdown_l.get(m, {"hps_detection_rate": float("nan"),
-                                  "c4_detection_rate": float("nan"),
-                                  "n_total": 0})
-        bv = breakdown_v.get(m, {"hps_detection_rate": float("nan"),
-                                  "c4_detection_rate": float("nan"),
-                                  "n_total": 0})
-        hps_delta = bl["hps_detection_rate"] - bv["hps_detection_rate"] \
-            if not (np.isnan(bl["hps_detection_rate"])
-                    or np.isnan(bv["hps_detection_rate"])) else float("nan")
+    for m in all_methods_norm:
+        bl = breakdown_l_norm.get(m, {"hps_detection_rate": float("nan"),
+                                       "c4_detection_rate": float("nan"),
+                                       "n_total": 0})
+        bv = breakdown_v_norm.get(m, {"hps_detection_rate": float("nan"),
+                                       "c4_detection_rate": float("nan"),
+                                       "n_total": 0})
+        if (np.isnan(bl["hps_detection_rate"])
+                or np.isnan(bv["hps_detection_rate"])):
+            hps_delta = float("nan")
+        else:
+            hps_delta = bl["hps_detection_rate"] - bv["hps_detection_rate"]
         cross[m] = {
             "llama_n": bl["n_total"],
             "llama_hps": bl["hps_detection_rate"],
@@ -356,15 +365,17 @@ def main():
 
     diagnoses = []
 
-    # Check GCG specifically
-    if "GCG" in cross:
-        gcg = cross["GCG"]
+    # Check GCG specifically (case-insensitive)
+    gcg_key = "gcg"  # normalized
+    if gcg_key in cross:
+        gcg = cross[gcg_key]
         if gcg["llama_hps"] >= 0.95 and gcg["vicuna_hps"] < 0.6:
             diagnoses.append(
                 f"ALIGNMENT_HYPOTHESIS_CONFIRMED: HPS catches Llama-3 GCG at "
-                f"{gcg['llama_hps']:.3f} but Vicuna GCG at only "
-                f"{gcg['vicuna_hps']:.3f}. The alignment-strength → signal-"
-                f"concentration → HPS-detectability hypothesis holds. "
+                f"{gcg['llama_hps']:.3f} ({gcg['llama_n']} samples) but "
+                f"Vicuna GCG at only {gcg['vicuna_hps']:.3f} "
+                f"({gcg['vicuna_n']} samples). The alignment-strength → "
+                f"signal-concentration → HPS-detectability hypothesis holds. "
                 f"Strong RLHF alignment produces concentrated GCG signatures "
                 f"that survive HPS's compression; weak SFT-only alignment "
                 f"produces diffuse signatures that get filtered out."
@@ -387,9 +398,10 @@ def main():
         else:
             diagnoses.append(
                 f"GCG_PARTIAL: HPS catches Llama-3 GCG at "
-                f"{gcg['llama_hps']:.3f} and Vicuna GCG at "
-                f"{gcg['vicuna_hps']:.3f}. Alignment hypothesis partially "
-                f"supported; the gap is real but smaller than predicted."
+                f"{gcg['llama_hps']:.3f} ({gcg['llama_n']} samples) and "
+                f"Vicuna GCG at {gcg['vicuna_hps']:.3f} ({gcg['vicuna_n']} "
+                f"samples). Alignment hypothesis partially supported; "
+                f"the gap is real but smaller than predicted."
             )
 
     # Check overall HPS-Vicuna gap composition
@@ -440,7 +452,7 @@ def main():
     figdir.mkdir(parents=True, exist_ok=True)
 
     # Per-attack HPS detection rate, side-by-side
-    valid_methods = [m for m in all_methods
+    valid_methods = [m for m in all_methods_norm
                       if not np.isnan(cross[m]["llama_hps"])
                       or not np.isnan(cross[m]["vicuna_hps"])]
     x = np.arange(len(valid_methods))
@@ -475,11 +487,13 @@ def main():
 
     # GCG-specific bar
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    if "GCG" in cross:
-        gcg = cross["GCG"]
+    if "gcg" in cross:
+        gcg = cross["gcg"]
         configs = ["Llama-3 HPS", "Llama-3 C4", "Vicuna HPS", "Vicuna C4"]
         values = [gcg["llama_hps"], gcg["llama_c4"],
                   gcg["vicuna_hps"], gcg["vicuna_c4"]]
+        # Replace NaN with 0 for plotting
+        values = [0.0 if (v != v) else v for v in values]
         colors = ["tab:blue", "tab:cyan", "tab:red", "tab:orange"]
         ax.bar(configs, values, color=colors)
         for i, v in enumerate(values):
