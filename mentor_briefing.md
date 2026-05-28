@@ -5,15 +5,41 @@
 
 ---
 
-## ⚡ Major Update (May 28, 2026)
+## ⚡⚡ TWO Major Updates (May 28, 2026)
 
-Verification experiments revealed that initial benchmark results were heavily confounded by **prompt length**. After re-running with diverse benign data:
+### Update 1 (early afternoon): Length confound
 
-1. The geometric hypothesis (radial = "extremity") is now **CONFIRMED**, not refuted (it was masked by length confound)
-2. Saturation persists even after length control — the methods truly tie at TPR=1.000
-3. Vicuna findings are less dramatic than originally reported
+Verification experiments revealed that initial benchmark results were heavily confounded by **prompt length**. After diverse benign re-extraction:
 
-This briefing reflects the corrected results.
+1. Length-only AUROC dropped 0.973 → 0.318 (length confound resolved)
+2. The geometric hypothesis (radial = "extremity") is **CONFIRMED**, not refuted (was masked by length confound)
+3. Saturation persists even after length control — methods still tie at TPR=1.000
+4. Vicuna findings are less dramatic than originally reported
+
+### Update 2 (late afternoon): NORM CONFOUND DISCOVERED
+
+Re-checking the activation norm confound on the diverse cache revealed a far more serious methodology issue:
+
+| | Old cache (Alpaca benign) | Diverse cache |
+|---|---|---|
+| Norm-only AUROC | 0.917 | **1.000** |
+| Norm-only TPR @ 5%FPR | 0.686 | **1.000** |
+| Layer 5 benign norm | 155.6 | **35.5** |
+| Layer 5 attack norm | 153.0 | **153.0** |
+| Layer 5 ratio | 1.0× | **4.3×** |
+
+A trivial 6-feature classifier using only per-layer L2 norms achieves PERFECT detection at TPR=1.000. The diverse benign data has dramatically smaller deep-layer activation magnitudes than attacks, allowing the classifier to ignore semantic content entirely.
+
+**This means:** the saturation finding (HPS=C4=Euclidean=1.000) is now likely explained by all methods learning a norm-based shortcut. The "cold-start advantage of HPS over Euclidean" finding (HPS=0.978 vs Euc=0.244 at N=5) **disappears** on the diverse cache — at every N, all methods saturate immediately.
+
+**Open question (under active investigation):** Is the norm confound caused by inconsistent chat-template application across prompt sources, or is it a fundamental property of activation-based jailbreak benchmarks? The script `diagnose_norm_confound.py` answers this. Decision tree:
+
+- **If chat-template bug:** fix and rerun, paper survives with single methodology contribution (length confound).
+- **If fundamental:** paper becomes a 2-confound methodology critique covering the entire activation-based defense field.
+
+The script `norm_controlled_eval.py` evaluates whether real signal exists after norm normalization. If C4 stays high after L2-normalization, real signal exists; if C4 collapses to chance, the benchmark is fully norm-driven.
+
+This briefing reflects results known as of May 28, 2026 evening. The norm-confound diagnosis is pending.
 
 ---
 
@@ -317,9 +343,57 @@ In the spirit of "Are GANs Created Equal?" (Lucic et al. NeurIPS 2018) — metho
 
 **Stretch:** AAAI/IJCAI 2027 (35-50%) with the methodology framing.
 
-## 7. Should We Add or Remove Attacks?
+## 6.5 Implications of the Norm Confound Discovery
 
-**Neither will help.** Saturation isn't a sample-size issue.
+The norm-confound finding (Update 2 above) has serious implications that affect the paper's framing regardless of whether the cause turns out to be chat-template inconsistency or a fundamental issue.
+
+### What's affected by the norm confound
+
+| Finding | Was | Now |
+|---|---|---|
+| HPS = C4 at saturation | "Real signal, no advantage from geometry" | "Possibly all methods learning norm shortcut" |
+| Cold-start (HPS beats Euclidean at N=5) | HPS=0.978 vs Euc=0.244 | All methods=1.000 (advantage gone) |
+| Radial distribution flipped (attacks > benign) | "Geometric hypothesis confirmed" | Could be entirely norm-driven (high norm → high radial) |
+| Length confound resolved (AUROC=0.318) | Genuine fix | Real, but obscures presence of norm confound |
+| Permutation test passes (real label signal) | Confirms real signal | Real signal is at least partly norm-based |
+
+### What's NOT affected
+
+- The methodology critique angle (length confound is a real, documented issue)
+- HPS vs Euclidean architectural ablation (parameter-matched comparison stands)
+- The Hyperbolic MLP working on Vicuna (different architecture, different mechanism)
+- The PGD adversarial robustness finding (HPS more vulnerable than C4)
+
+### Three possible outcomes (pending diagnostic)
+
+**Outcome A (Best-case):** Chat-template inconsistency — benign prompts wrapped, attack prompts not. Re-extract with uniform templating, norm confound disappears. Paper survives with single methodology contribution (length).
+
+**Outcome B (Middle):** Some prompts have intrinsic norm differences regardless of template. After L2-normalization, methods achieve high TPR (e.g., 0.85+) but no longer perfect. Paper becomes "norm-aware evaluation reveals semantic signal existed all along; field benchmarks need both length AND norm control."
+
+**Outcome C (Worst-case but strongest paper):** L2-normalization collapses C4 to chance. The entire benchmark is driven by activation magnitudes, not semantic harm content. Paper becomes a methodology paper:
+> "Activation-based jailbreak detection benchmarks are dominated by surface confounds (length AUROC=0.973, norm AUROC=1.000). After controlling for both, no published method achieves TPR>X. The field needs harder benchmarks AND stricter evaluation protocols."
+
+This would be a TMLR-major contribution — the kind of paper that gets cited 100+ times because it forces the field to fix its evaluation methodology.
+
+### Decision tree
+
+```
+Run diagnose_norm_confound.py (10 min)
+├── Verdict: CHAT_TEMPLATE_IS_CAUSE
+│   → Re-extract with uniform template
+│   → Re-run all experiments
+│   → Paper as currently framed
+├── Verdict: FUNDAMENTAL_NORM_CONFOUND
+│   → Run norm_controlled_eval.py
+│   ├── REAL_SIGNAL: Pivot to "after both confounds, methods do X"
+│   ├── PARTIALLY_NORM_DRIVEN: Pivot to 2-confound methodology critique
+│   └── FULLY_NORM_DRIVEN: Methodology paper, cite as field-wide issue
+└── Verdict: FALSE_ALARM
+    → Original norm_check_diverse.py was an artifact
+    → Paper as currently framed
+```
+
+## 7. Should We Add or Remove Attacks?
 
 - More attacks → more samples confirming TPR=1.000, narrower CIs, but same point estimate
 - Fewer attacks → wider CIs, same point estimate
