@@ -221,6 +221,10 @@ def main():
     parser.add_argument("--device", default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--train_frac", type=float, default=0.8)
+    parser.add_argument("--store_full_sequence", action="store_true",
+                        help="Store FULL SEQUENCE activations (needed for "
+                             "Anthropic mean-token probe). Default off for "
+                             "backwards compat with array-format Vicuna cache.")
     args = parser.parse_args()
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -299,18 +303,23 @@ def main():
           f"Layers: {model.config.num_hidden_layers}")
 
     # Re-extract attacks at consistent max_length
-    print(f"\n  Re-extracting train attacks at max_length={args.max_length}...")
+    # If --store_full_sequence is set, we also save full token sequences,
+    # which enables Anthropic mean-token probe later.
+    store_seq = args.store_full_sequence or (fmt == "dict")
+    print(f"\n  Re-extracting train attacks at max_length={args.max_length}, "
+          f"store_full_sequence={store_seq}...")
     hs_train_atk = extract_activations(
         model, tokenizer, train_atk, args.layers, device,
         max_length=args.max_length,
-        store_full_sequence=(fmt == "dict"),
+        store_full_sequence=store_seq,
     )
 
-    print(f"\n  Re-extracting test attacks at max_length={args.max_length}...")
+    print(f"\n  Re-extracting test attacks at max_length={args.max_length}, "
+          f"store_full_sequence={store_seq}...")
     hs_test_atk = extract_activations(
         model, tokenizer, test_atk, args.layers, device,
         max_length=args.max_length,
-        store_full_sequence=(fmt == "dict"),
+        store_full_sequence=store_seq,
     )
 
     # Save in matching format
