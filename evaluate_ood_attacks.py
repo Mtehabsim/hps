@@ -165,8 +165,8 @@ def train_hps(X_tr_ben, X_tr_atk, hidden_dim, n_layers,
                device="cuda", verbose=False):
     """Train Lorentz projection + LR."""
     proj = LorentzProjection(
-        hidden_dim=hidden_dim, n_layers=n_layers,
-        proj_dim=proj_dim, kappa=kappa,
+        d_in=hidden_dim, n_layers=n_layers,
+        d_proj=proj_dim, k=kappa,
     ).to(device)
     optimizer = torch.optim.Adam(
         proj.parameters(), lr=lr, weight_decay=weight_decay,

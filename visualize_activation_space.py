@@ -353,8 +353,8 @@ def plot_lr_coefficients(X_tr_ben, X_tr_atk, layers, output_path):
 def train_hps_for_viz(X_tr_ben, X_tr_atk, hidden_dim, n_layers,
                         epochs=50, kappa=0.1, device="cuda"):
     proj = LorentzProjection(
-        hidden_dim=hidden_dim, n_layers=n_layers,
-        proj_dim=64, kappa=kappa,
+        d_in=hidden_dim, n_layers=n_layers,
+        d_proj=64, k=kappa,
     ).to(device)
     opt = torch.optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
     Xb = torch.from_numpy(np.asarray(X_tr_ben, dtype=np.float32)).to(device)
