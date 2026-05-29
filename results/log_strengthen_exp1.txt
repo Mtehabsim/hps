@@ -1,0 +1,47 @@
+
+==============================================================================
+ EXPERIMENT 1 — Test multiple hyperbolic methods
+==============================================================================
+
+  Loaded Llama-3-8B: train 5200 ben + 5216 atk, test 1300 ben + 1304 atk, layers [0, 2, 17, 24, 28, 31], d=4096
+  Loaded Vicuna-13B: train 416 ben + 252 atk, test 104 ben + 64 atk, layers [0, 2, 22, 31, 35, 39], d=5120
+
+------------------------------------------------------------------------------
+  Llama-3-8B
+------------------------------------------------------------------------------
+  Method                                   |  AUROC |  TPR@5% |   FPR
+  -----------------------------------------+--------+---------+------
+  C4 (linear probe on mean-pooled)         |  1.000 |   1.000 | 0.052
+  Euclidean (matched parameters)           |  1.000 |   1.000 | 0.052
+  HPS (Lorentz + contrastive)              |  1.000 |   1.000 | 0.049
+  Hyperbolic AE (reconstruction)           |  0.489 |   0.132 | 0.042
+  Hyperbolic MLP (stacked Lorentz)         |  0.996 |   1.000 | 0.045
+  Lorentz Centroid (random proj)           |  0.963 |   0.780 | 0.048
+  Hyperbolic + PCA (no training)           |  0.954 |   0.738 | 0.032
+
+------------------------------------------------------------------------------
+  Vicuna-13B
+------------------------------------------------------------------------------
+  Method                                   |  AUROC |  TPR@5% |   FPR
+  -----------------------------------------+--------+---------+------
+  C4 (linear probe on mean-pooled)         |  1.000 |   1.000 | 0.038
+  Euclidean (matched parameters)           |  0.910 |   0.484 | 0.019
+  HPS (Lorentz + contrastive)              |  0.936 |   0.703 | 0.038
+  Hyperbolic AE (reconstruction)           |  0.541 |   0.141 | 0.038
+  Hyperbolic MLP (stacked Lorentz)         |  1.000 |   1.000 | 0.019
+  Lorentz Centroid (random proj)           |  0.860 |   0.453 | 0.038
+  Hyperbolic + PCA (no training)           |  0.980 |   0.750 | 0.038
+
+  Saved -> results/strengthen_exp1_hyperbolic_methods.json
+
+==============================================================================
+ CONCLUSION
+==============================================================================
+
+  Llama-3-8B: C4 baseline TPR = 1.000
+    No hyperbolic method beats C4 by more than 0.01 TPR.
+    The 'hyperbolic doesn't help' claim is supported on Llama-3-8B.
+
+  Vicuna-13B: C4 baseline TPR = 1.000
+    No hyperbolic method beats C4 by more than 0.01 TPR.
+    The 'hyperbolic doesn't help' claim is supported on Vicuna-13B.

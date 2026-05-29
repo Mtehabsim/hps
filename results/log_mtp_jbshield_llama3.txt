@@ -1,0 +1,31 @@
+======================================================================
+ANTHROPIC MEAN-TOKEN PROBE — faithful reproduction
+======================================================================
+  Cache:       results/llama3_activations_cache_jbshield.npz
+  Layers:      [0, 2, 17, 24, 28, 31]
+  Hidden dim:  4096
+  Target FPR:  0.05
+  L2 lambda:   10000.0 (mean-token)
+  Device:      cuda
+
+Loading cache (must be full-sequence dict format)...
+  Train: 4000 ben + 0 atk
+  Test:  1000 ben + 0 atk
+
+======================================================================
+1. Mean-Token Probe (Anthropic 2025) — per-layer evaluation
+======================================================================
+  Layer     AUROC     TPR@5%FPR     TPR@1%FPR
+  Layer 0: ERROR — need at least one array to stack
+  Layer 2: ERROR — need at least one array to stack
+  Layer 17: ERROR — need at least one array to stack
+  Layer 24: ERROR — need at least one array to stack
+  Layer 28: ERROR — need at least one array to stack
+  Layer 31: ERROR — need at least one array to stack
+Traceback (most recent call last):
+  File "/mnt/lab/Mo/hps/hps2/hps/anthropic_mean_token_probe.py", line 509, in <module>
+    main()
+  File "/mnt/lab/Mo/hps/hps2/hps/anthropic_mean_token_probe.py", line 384, in main
+    best = max(results["mtp_per_layer"], key=lambda r: r["auroc"])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: max() iterable argument is empty

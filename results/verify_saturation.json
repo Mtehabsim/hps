@@ -1,0 +1,165 @@
+{
+  "config": {
+    "device": "cuda",
+    "seed": 42
+  },
+  "check1_contamination": {
+    "n_attacks": 6520,
+    "n_train": 5216,
+    "n_test": 1304,
+    "n_overlap": 15,
+    "contaminated": true
+  },
+  "check2_length_confound": {
+    "overall_auroc": 0.973178680981595,
+    "tpr5": 0.9156441717791411,
+    "tpr1": 0.8121165644171779,
+    "atk_mean_len": 961.2032208588957,
+    "ben_mean_len": 60.0,
+    "is_strong_confound": true,
+    "is_moderate_confound": false
+  },
+  "check3_strict_thresholds": {
+    "hps": {
+      "tpr_at_5pct_fpr": 1.0,
+      "tpr_at_1pct_fpr": 0.9992331288343558,
+      "tpr_at_0.1pct_fpr": 0.9946319018404908
+    },
+    "c4": {
+      "tpr_at_5pct_fpr": 1.0,
+      "tpr_at_1pct_fpr": 1.0,
+      "tpr_at_0.1pct_fpr": 0.9984662576687117
+    }
+  },
+  "check4_per_attack_strict": {
+    "hps": {
+      "autodan": {
+        "n": 148,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 0.9932432432432432
+      },
+      "base64": {
+        "n": 160,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "drattack": {
+        "n": 111,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "gcg": {
+        "n": 172,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "ijp": {
+        "n": 178,
+        "tpr5": 1.0,
+        "tpr1": 0.9943820224719101,
+        "tpr01": 0.9831460674157303
+      },
+      "pair": {
+        "n": 164,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 0.9878048780487805
+      },
+      "puzzler": {
+        "n": 11,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "saa": {
+        "n": 181,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "zulu": {
+        "n": 179,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      }
+    },
+    "c4": {
+      "autodan": {
+        "n": 148,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "base64": {
+        "n": 160,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "drattack": {
+        "n": 111,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "gcg": {
+        "n": 172,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "ijp": {
+        "n": 178,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 0.9943820224719101
+      },
+      "pair": {
+        "n": 164,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 0.9939024390243902
+      },
+      "puzzler": {
+        "n": 11,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "saa": {
+        "n": 181,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      },
+      "zulu": {
+        "n": 179,
+        "tpr5": 1.0,
+        "tpr1": 1.0,
+        "tpr01": 1.0
+      }
+    }
+  },
+  "check5_permutation": {
+    "real_auroc": 0.9999952807928268,
+    "real_tpr5": 1.0,
+    "permutation_aurocs": [
+      0.48263154789995283,
+      0.4884226050023597,
+      0.4655238319962246
+    ],
+    "permutation_mean": 0.4788593282995124,
+    "spurious_structure": false
+  },
+  "check6_norm_confound": {
+    "auroc": 0.9171136149126946,
+    "tpr5": 0.6863496932515337,
+    "tpr1": 0.5007668711656442,
+    "is_strong_confound": false
+  }
+}

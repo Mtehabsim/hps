@@ -1,0 +1,57 @@
+==============================================================================
+RADIAL DISTRIBUTION VERIFICATION
+==============================================================================
+  Cache:           results/llama3_activations_cache_diverse.npz
+  Seeds tested:    5
+  Epochs checked:  [5, 10, 25, 50]
+  Kappas tested:   [0.1, 0.5, 1.0, 2.0]
+  Device:          cuda
+
+  Train: (10432, 6, 4096), Test benign: (689, 6, 4096), attacks: (1304, 6, 4096)
+
+──────────────────────────────────────────────────────────────────────────────
+1. Seed robustness (κ=0.1, 50 epochs)
+──────────────────────────────────────────────────────────────────────────────
+  seed=42  benign_median=3.1925  attack_median=3.6434  diff=-0.4508  as_hypothesis
+  seed=43  benign_median=3.1926  attack_median=3.6328  diff=-0.4402  as_hypothesis
+  seed=44  benign_median=3.1941  attack_median=3.6522  diff=-0.4581  as_hypothesis
+  seed=45  benign_median=3.1909  attack_median=3.6385  diff=-0.4476  as_hypothesis
+  seed=46  benign_median=3.1936  attack_median=3.6813  diff=-0.4877  as_hypothesis
+
+  → 0/5 seeds show INVERSION (benign > attack)
+
+──────────────────────────────────────────────────────────────────────────────
+2. Epoch robustness (seed=42, κ=0.1, checkpoints at [5, 10, 25, 50])
+──────────────────────────────────────────────────────────────────────────────
+  epoch=5  benign_median=3.1946  attack_median=3.3174  diff=-0.1227  as_hypothesis
+  epoch=10  benign_median=3.2029  attack_median=3.3363  diff=-0.1334  as_hypothesis
+  epoch=25  benign_median=3.1985  attack_median=3.4565  diff=-0.2580  as_hypothesis
+  epoch=50  benign_median=3.1925  attack_median=3.6434  diff=-0.4508  as_hypothesis
+
+  → 0/4 epoch checkpoints show INVERSION
+
+──────────────────────────────────────────────────────────────────────────────
+3. Curvature κ robustness (seed=42, 50 epochs, κ ∈ [0.1, 0.5, 1.0, 2.0])
+──────────────────────────────────────────────────────────────────────────────
+  κ=0.1  benign_median=3.1925  attack_median=3.6434  diff=-0.4508  as_hypothesis
+  κ=0.5  benign_median=1.5049  attack_median=2.5131  diff=-1.0082  as_hypothesis
+  κ=1.0  benign_median=1.1731  attack_median=2.2426  diff=-1.0695  as_hypothesis
+  κ=2.0  benign_median=1.1835  attack_median=2.0406  diff=-0.8571  as_hypothesis
+
+  → 0/4 κ values show INVERSION
+
+Saved: results/radial_distribution_check.json
+
+Generating plots...
+  saved results/figs/radial_check_seeds.png
+  saved results/figs/radial_check_epochs.png
+  saved results/figs/radial_check_kappas.png
+
+==============================================================================
+CONCLUSION
+==============================================================================
+
+INVERSION (benign median > attack median) observed in 0/13 configurations
+
+✗ The inversion is NOT robust (0% of configurations).
+  The original observation may have been seed/config specific.

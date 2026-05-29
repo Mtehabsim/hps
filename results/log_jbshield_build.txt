@@ -1,0 +1,92 @@
+======================================================================
+JBShield Attack Dataset Builder
+======================================================================
+  JBShield repo:    /tmp/JBShield
+  Models:           ['vicuna-13b-v1.5', 'Meta-Llama-3-8B-Instruct']
+  Attacks:          ['autodan', 'base64', 'drattack', 'gcg', 'ijp', 'pair', 'puzzler', 'saa', 'zulu']
+  Include cal:      True
+  Output dir:       results
+
+
+  Building attacks for: vicuna-13b-v1.5
+  --------------------------------------------------
+    autodan/test:   820 prompts from vicuna-13b_test.json
+    autodan/cal:     30 prompts from vicuna-13b_calibration.json
+    base64/test:   820 prompts from vicuna-13b_test.json
+    base64/cal:     30 prompts from vicuna-13b_calibration.json
+    drattack/test:   490 prompts from vicuna-13b_test.json
+    drattack/cal:     30 prompts from vicuna-13b_calibration.json
+    gcg/test:   820 prompts from vicuna-13b_test.json
+    gcg/cal:     30 prompts from vicuna-13b_calibration.json
+    ijp/test:     0 prompts from vicuna-13b_test.json
+    ijp/cal:      0 prompts from vicuna-13b_calibration.json
+    WARNING: no prompts found for ijp on vicuna-13b-v1.5
+    pair/test:   820 prompts from vicuna-13b_test.json
+    pair/cal:     30 prompts from vicuna-13b_calibration.json
+    puzzler/test:    20 prompts from vicuna-13b_test.json
+    puzzler/cal:     30 prompts from vicuna-13b_calibration.json
+    saa/test:   820 prompts from vicuna-13b_test.json
+    saa/cal:     30 prompts from vicuna-13b_calibration.json
+    zulu/test:   820 prompts from vicuna-13b_test.json
+    zulu/cal:     30 prompts from vicuna-13b_calibration.json
+
+  Saved: results/jbshield_vicuna13b_attacks.json
+  Total prompts: 5670
+  Per attack:
+    autodan     : n= 850  mean_len=  108.7 chars
+    base64      : n= 850  mean_len=  108.7 chars
+    drattack    : n= 520  mean_len=   73.0 chars
+    gcg         : n= 850  mean_len=  108.7 chars
+    ijp         : n=   0  mean_len=    0.0 chars
+    pair        : n= 850  mean_len=  108.7 chars
+    puzzler     : n=  50  mean_len=   73.7 chars
+    saa         : n= 850  mean_len=  108.7 chars
+    zulu        : n= 850  mean_len=  108.7 chars
+
+  Building attacks for: Meta-Llama-3-8B-Instruct
+  --------------------------------------------------
+    WARNING: no prompts found for autodan on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for base64 on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for drattack on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for gcg on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for ijp on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for pair on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for puzzler on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for saa on Meta-Llama-3-8B-Instruct
+    WARNING: no prompts found for zulu on Meta-Llama-3-8B-Instruct
+
+  Saved: results/jbshield_llama3_attacks.json
+  Total prompts: 0
+  Per attack:
+    autodan     : n=   0  mean_len=    0.0 chars
+    base64      : n=   0  mean_len=    0.0 chars
+    drattack    : n=   0  mean_len=    0.0 chars
+    gcg         : n=   0  mean_len=    0.0 chars
+    ijp         : n=   0  mean_len=    0.0 chars
+    pair        : n=   0  mean_len=    0.0 chars
+    puzzler     : n=   0  mean_len=    0.0 chars
+    saa         : n=   0  mean_len=    0.0 chars
+    zulu        : n=   0  mean_len=    0.0 chars
+
+  Stats saved: results/jbshield_build_stats.json
+
+======================================================================
+DONE — next steps
+======================================================================
+
+  Extract Vicuna-13B activations on JBShield attacks:
+  python extract_jbshield_activations.py \
+    --model lmsys/vicuna-13b-v1.5 \
+    --attacks_json results/jbshield_vicuna13b_attacks.json \
+    --diverse_benign results/data_harmless_diverse.csv \
+    --output results/vicuna_activations_cache_jbshield.npz \
+    --layers 0 2 22 31 35 39
+
+  Same for Llama-3-8B-Instruct (cross-validation):
+  python extract_jbshield_activations.py \
+    --model meta-llama/Meta-Llama-3-8B-Instruct \
+    --attacks_json results/jbshield_llama3_attacks.json \
+    --diverse_benign results/data_harmless_diverse.csv \
+    --output results/llama3_activations_cache_jbshield.npz \
+    --layers 0 2 17 24 28 31
+

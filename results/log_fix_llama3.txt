@@ -1,0 +1,178 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+======================================================================
+CACHE FIX — Re-extract attacks at consistent max_length
+======================================================================
+  Model:         meta-llama/Meta-Llama-3-8B-Instruct
+  Diverse cache: results/llama3_activations_cache_diverse.npz
+  Attacks JSON:  llama3_attacks_clean.json
+  Output:        results/llama3_activations_cache_diverse_fixed.npz
+  Layers:        [0, 2, 17, 24, 28, 31]
+  Max length:    2048  ← matches diverse benign
+  Device:        cuda
+
+  Cache format: dict
+
+  Loading diverse cache (keeping benign activations)...
+    Train benign: 5216
+    Test benign:  689
+
+  Loading attacks from llama3_attacks_clean.json...
+    Train attacks: 5179
+    Test attacks:  1295
+
+Loading model: meta-llama/Meta-Llama-3-8B-Instruct
+Fetching 4 files:   0%|                                                                              | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|█████████████████▌                                                    | 1/4 [00:21<01:05, 21.98s/it]Fetching 4 files: 100%|██████████████████████████████████████████████████████████████████████| 4/4 [00:21<00:00,  5.49s/it]
+Loading weights:   0%|                                                                             | 0/291 [00:00<?, ?it/s]Loading weights:   0%|▏                                                                    | 1/291 [00:02<13:19,  2.76s/it]Loading weights:   8%|█████▏                                                              | 22/291 [00:03<00:27,  9.61it/s]Loading weights:   9%|██████                                                              | 26/291 [00:03<00:23, 11.15it/s]Loading weights:  11%|███████▏                                                            | 31/291 [00:03<00:18, 13.80it/s]Loading weights:  12%|████████▏                                                           | 35/291 [00:03<00:19, 13.21it/s]Loading weights:  14%|█████████▎                                                          | 40/291 [00:04<00:17, 14.06it/s]Loading weights:  16%|██████████▋                                                         | 46/291 [00:04<00:14, 16.43it/s]Loading weights:  17%|███████████▋                                                        | 50/291 [00:04<00:13, 18.06it/s]Loading weights:  19%|████████████▊                                                       | 55/291 [00:04<00:11, 21.07it/s]Loading weights:  20%|█████████████▌                                                      | 58/291 [00:04<00:13, 17.34it/s]Loading weights:  22%|██████████████▉                                                     | 64/291 [00:05<00:10, 21.01it/s]Loading weights:  23%|███████████████▋                                                    | 67/291 [00:05<00:11, 19.91it/s]Loading weights:  25%|████████████████▊                                                   | 72/291 [00:05<00:09, 23.37it/s]Loading weights:  26%|█████████████████▊                                                  | 76/291 [00:05<00:08, 24.92it/s]Loading weights:  27%|██████████████████▍                                                 | 79/291 [00:05<00:11, 18.68it/s]Loading weights:  29%|███████████████████▊                                                | 85/291 [00:06<00:09, 20.79it/s]Loading weights:  30%|████████████████████▌                                               | 88/291 [00:06<00:09, 21.68it/s]Loading weights:  32%|█████████████████████▉                                              | 94/291 [00:06<00:09, 19.72it/s]Loading weights:  33%|██████████████████████▋                                             | 97/291 [00:06<00:10, 18.73it/s]Loading weights:  35%|███████████████████████▋                                           | 103/291 [00:06<00:08, 21.57it/s]Loading weights:  36%|████████████████████████▍                                          | 106/291 [00:07<00:08, 21.55it/s]Loading weights:  37%|█████████████████████████                                          | 109/291 [00:07<00:08, 21.11it/s]Loading weights:  38%|█████████████████████████▊                                         | 112/291 [00:07<00:08, 22.11it/s]Loading weights:  40%|██████████████████████████▍                                        | 115/291 [00:07<00:08, 19.97it/s]Loading weights:  42%|███████████████████████████▊                                       | 121/291 [00:07<00:09, 17.63it/s]Loading weights:  44%|█████████████████████████████▏                                     | 127/291 [00:08<00:07, 21.43it/s]Loading weights:  45%|█████████████████████████████▉                                     | 130/291 [00:08<00:07, 22.20it/s]Loading weights:  46%|██████████████████████████████▌                                    | 133/291 [00:08<00:09, 16.94it/s]Loading weights:  48%|████████████████████████████████                                   | 139/291 [00:08<00:08, 18.95it/s]Loading weights:  49%|████████████████████████████████▋                                  | 142/291 [00:08<00:08, 18.04it/s]Loading weights:  51%|██████████████████████████████████                                 | 148/291 [00:09<00:06, 22.03it/s]Loading weights:  52%|██████████████████████████████████▊                                | 151/291 [00:09<00:06, 21.75it/s]Loading weights:  53%|███████████████████████████████████▍                               | 154/291 [00:09<00:05, 22.84it/s]Loading weights:  54%|████████████████████████████████████▏                              | 157/291 [00:09<00:06, 19.64it/s]Loading weights:  55%|████████████████████████████████████▊                              | 160/291 [00:09<00:06, 19.41it/s]Loading weights:  57%|██████████████████████████████████████▏                            | 166/291 [00:09<00:05, 23.22it/s]Loading weights:  58%|██████████████████████████████████████▉                            | 169/291 [00:10<00:05, 22.02it/s]Loading weights:  60%|████████████████████████████████████████▎                          | 175/291 [00:10<00:06, 18.32it/s]Loading weights:  63%|██████████████████████████████████████████▎                        | 184/291 [00:10<00:04, 23.23it/s]Loading weights:  64%|███████████████████████████████████████████                        | 187/291 [00:10<00:04, 23.04it/s]Loading weights:  65%|███████████████████████████████████████████▋                       | 190/291 [00:11<00:04, 23.07it/s]Loading weights:  66%|████████████████████████████████████████████▍                      | 193/291 [00:11<00:04, 22.34it/s]Loading weights:  67%|█████████████████████████████████████████████▏                     | 196/291 [00:11<00:04, 21.96it/s]Loading weights:  69%|██████████████████████████████████████████████                     | 200/291 [00:11<00:03, 23.14it/s]Loading weights:  70%|██████████████████████████████████████████████▋                    | 203/291 [00:11<00:04, 20.79it/s]Loading weights:  71%|███████████████████████████████████████████████▍                   | 206/291 [00:11<00:04, 20.41it/s]Loading weights:  73%|████████████████████████████████████████████████▊                  | 212/291 [00:12<00:03, 20.90it/s]Loading weights:  74%|█████████████████████████████████████████████████▌                 | 215/291 [00:12<00:03, 21.25it/s]Loading weights:  76%|██████████████████████████████████████████████████▉                | 221/291 [00:12<00:03, 19.09it/s]Loading weights:  79%|████████████████████████████████████████████████████▋              | 229/291 [00:12<00:02, 25.52it/s]Loading weights:  80%|█████████████████████████████████████████████████████▍             | 232/291 [00:12<00:02, 21.61it/s]Loading weights:  82%|██████████████████████████████████████████████████████▊            | 238/291 [00:13<00:02, 22.63it/s]Loading weights:  83%|███████████████████████████████████████████████████████▍           | 241/291 [00:13<00:02, 19.73it/s]Loading weights:  85%|████████████████████████████████████████████████████████▊          | 247/291 [00:13<00:02, 20.07it/s]Loading weights:  87%|██████████████████████████████████████████████████████████         | 252/291 [00:13<00:01, 22.43it/s]Loading weights:  88%|██████████████████████████████████████████████████████████▉        | 256/291 [00:14<00:01, 20.74it/s]Loading weights:  90%|████████████████████████████████████████████████████████████▎      | 262/291 [00:14<00:01, 23.92it/s]Loading weights:  91%|█████████████████████████████████████████████████████████████      | 265/291 [00:14<00:01, 19.72it/s]Loading weights:  92%|█████████████████████████████████████████████████████████████▋     | 268/291 [00:14<00:01, 20.65it/s]Loading weights:  94%|███████████████████████████████████████████████████████████████    | 274/291 [00:14<00:00, 23.68it/s]Loading weights:  95%|███████████████████████████████████████████████████████████████▊   | 277/291 [00:15<00:00, 20.23it/s]Loading weights:  97%|█████████████████████████████████████████████████████████████████▏ | 283/291 [00:15<00:00, 19.45it/s]Loading weights: 100%|███████████████████████████████████████████████████████████████████| 291/291 [00:15<00:00, 18.72it/s]
+  Loaded. Hidden: 4096, Layers: 32
+
+  Re-extracting train attacks at max_length=2048...
+    [50/5179] 14.4 prompts/sec, ETA 5.9 min
+    [100/5179] 15.1 prompts/sec, ETA 5.6 min
+    [150/5179] 15.6 prompts/sec, ETA 5.4 min
+    [200/5179] 14.2 prompts/sec, ETA 5.8 min
+    [250/5179] 14.9 prompts/sec, ETA 5.5 min
+    [300/5179] 14.8 prompts/sec, ETA 5.5 min
+    [350/5179] 15.2 prompts/sec, ETA 5.3 min
+    [400/5179] 15.4 prompts/sec, ETA 5.2 min
+    [450/5179] 15.2 prompts/sec, ETA 5.2 min
+    [500/5179] 15.3 prompts/sec, ETA 5.1 min
+    [550/5179] 15.5 prompts/sec, ETA 5.0 min
+    [600/5179] 15.5 prompts/sec, ETA 4.9 min
+    [650/5179] 15.8 prompts/sec, ETA 4.8 min
+    [700/5179] 16.0 prompts/sec, ETA 4.7 min
+    [750/5179] 16.0 prompts/sec, ETA 4.6 min
+    [800/5179] 16.2 prompts/sec, ETA 4.5 min
+    [850/5179] 16.1 prompts/sec, ETA 4.5 min
+    [900/5179] 16.1 prompts/sec, ETA 4.4 min
+    [950/5179] 16.1 prompts/sec, ETA 4.4 min
+    [1000/5179] 16.1 prompts/sec, ETA 4.3 min
+    [1050/5179] 16.0 prompts/sec, ETA 4.3 min
+    [1100/5179] 16.1 prompts/sec, ETA 4.2 min
+    [1150/5179] 16.1 prompts/sec, ETA 4.2 min
+    [1200/5179] 16.1 prompts/sec, ETA 4.1 min
+    [1250/5179] 16.0 prompts/sec, ETA 4.1 min
+    [1300/5179] 16.1 prompts/sec, ETA 4.0 min
+    [1350/5179] 16.0 prompts/sec, ETA 4.0 min
+    [1400/5179] 16.1 prompts/sec, ETA 3.9 min
+    [1450/5179] 16.2 prompts/sec, ETA 3.8 min
+    [1500/5179] 16.1 prompts/sec, ETA 3.8 min
+    [1550/5179] 16.1 prompts/sec, ETA 3.8 min
+    [1600/5179] 16.1 prompts/sec, ETA 3.7 min
+    [1650/5179] 16.0 prompts/sec, ETA 3.7 min
+    [1700/5179] 16.1 prompts/sec, ETA 3.6 min
+    [1750/5179] 16.0 prompts/sec, ETA 3.6 min
+    [1800/5179] 16.1 prompts/sec, ETA 3.5 min
+    [1850/5179] 16.1 prompts/sec, ETA 3.5 min
+    [1900/5179] 16.0 prompts/sec, ETA 3.4 min
+    [1950/5179] 16.0 prompts/sec, ETA 3.4 min
+    [2000/5179] 16.0 prompts/sec, ETA 3.3 min
+    [2050/5179] 15.9 prompts/sec, ETA 3.3 min
+    [2100/5179] 16.0 prompts/sec, ETA 3.2 min
+    [2150/5179] 16.0 prompts/sec, ETA 3.2 min
+    [2200/5179] 16.1 prompts/sec, ETA 3.1 min
+    [2250/5179] 16.1 prompts/sec, ETA 3.0 min
+    [2300/5179] 15.9 prompts/sec, ETA 3.0 min
+    [2350/5179] 15.8 prompts/sec, ETA 3.0 min
+    [2400/5179] 15.8 prompts/sec, ETA 2.9 min
+    [2450/5179] 15.5 prompts/sec, ETA 2.9 min
+    [2500/5179] 15.5 prompts/sec, ETA 2.9 min
+    [2550/5179] 15.3 prompts/sec, ETA 2.9 min
+    [2600/5179] 15.2 prompts/sec, ETA 2.8 min
+    [2650/5179] 15.1 prompts/sec, ETA 2.8 min
+    [2700/5179] 15.0 prompts/sec, ETA 2.7 min
+    [2750/5179] 15.0 prompts/sec, ETA 2.7 min
+    [2800/5179] 14.8 prompts/sec, ETA 2.7 min
+    [2850/5179] 14.7 prompts/sec, ETA 2.6 min
+    [2900/5179] 14.6 prompts/sec, ETA 2.6 min
+    [2950/5179] 14.5 prompts/sec, ETA 2.6 min
+    [3000/5179] 14.3 prompts/sec, ETA 2.5 min
+    [3050/5179] 14.2 prompts/sec, ETA 2.5 min
+    [3100/5179] 14.1 prompts/sec, ETA 2.5 min
+    [3150/5179] 14.0 prompts/sec, ETA 2.4 min
+    [3200/5179] 13.9 prompts/sec, ETA 2.4 min
+    [3250/5179] 13.8 prompts/sec, ETA 2.3 min
+    [3300/5179] 13.8 prompts/sec, ETA 2.3 min
+    [3350/5179] 13.8 prompts/sec, ETA 2.2 min
+    [3400/5179] 13.8 prompts/sec, ETA 2.2 min
+    [3450/5179] 13.7 prompts/sec, ETA 2.1 min
+    [3500/5179] 13.6 prompts/sec, ETA 2.1 min
+    [3550/5179] 13.6 prompts/sec, ETA 2.0 min
+    [3600/5179] 13.6 prompts/sec, ETA 1.9 min
+    [3650/5179] 13.6 prompts/sec, ETA 1.9 min
+    [3700/5179] 13.5 prompts/sec, ETA 1.8 min
+    [3750/5179] 13.5 prompts/sec, ETA 1.8 min
+    [3800/5179] 13.4 prompts/sec, ETA 1.7 min
+    [3850/5179] 13.3 prompts/sec, ETA 1.7 min
+    [3900/5179] 13.3 prompts/sec, ETA 1.6 min
+    [3950/5179] 13.3 prompts/sec, ETA 1.5 min
+    [4000/5179] 13.2 prompts/sec, ETA 1.5 min
+    [4050/5179] 13.1 prompts/sec, ETA 1.4 min
+    [4100/5179] 13.1 prompts/sec, ETA 1.4 min
+    [4150/5179] 13.1 prompts/sec, ETA 1.3 min
+    [4200/5179] 13.1 prompts/sec, ETA 1.2 min
+    [4250/5179] 13.0 prompts/sec, ETA 1.2 min
+    [4300/5179] 12.9 prompts/sec, ETA 1.1 min
+    [4350/5179] 12.9 prompts/sec, ETA 1.1 min
+    [4400/5179] 12.9 prompts/sec, ETA 1.0 min
+    [4450/5179] 12.8 prompts/sec, ETA 0.9 min
+    [4500/5179] 12.8 prompts/sec, ETA 0.9 min
+    [4550/5179] 12.8 prompts/sec, ETA 0.8 min
+    [4600/5179] 12.7 prompts/sec, ETA 0.8 min
+    [4650/5179] 12.7 prompts/sec, ETA 0.7 min
+    [4700/5179] 12.7 prompts/sec, ETA 0.6 min
+    [4750/5179] 12.6 prompts/sec, ETA 0.6 min
+    [4800/5179] 12.6 prompts/sec, ETA 0.5 min
+    [4850/5179] 12.5 prompts/sec, ETA 0.4 min
+    [4900/5179] 12.5 prompts/sec, ETA 0.4 min
+    [4950/5179] 12.5 prompts/sec, ETA 0.3 min
+    [5000/5179] 12.4 prompts/sec, ETA 0.2 min
+    [5050/5179] 12.5 prompts/sec, ETA 0.2 min
+    [5100/5179] 12.4 prompts/sec, ETA 0.1 min
+    [5150/5179] 12.4 prompts/sec, ETA 0.0 min
+    Done: 5179 prompts in 7.0 min (12.4 prompts/sec)
+
+  Re-extracting test attacks at max_length=2048...
+    [50/1295] 9.7 prompts/sec, ETA 2.1 min
+    [100/1295] 8.3 prompts/sec, ETA 2.4 min
+    [150/1295] 9.0 prompts/sec, ETA 2.1 min
+    [200/1295] 9.6 prompts/sec, ETA 1.9 min
+    [250/1295] 10.1 prompts/sec, ETA 1.7 min
+    [300/1295] 10.5 prompts/sec, ETA 1.6 min
+    [350/1295] 11.0 prompts/sec, ETA 1.4 min
+    [400/1295] 11.3 prompts/sec, ETA 1.3 min
+    [450/1295] 11.7 prompts/sec, ETA 1.2 min
+    [500/1295] 12.0 prompts/sec, ETA 1.1 min
+    [550/1295] 12.2 prompts/sec, ETA 1.0 min
+    [600/1295] 12.4 prompts/sec, ETA 0.9 min
+    [650/1295] 12.4 prompts/sec, ETA 0.9 min
+    [700/1295] 12.7 prompts/sec, ETA 0.8 min
+    [750/1295] 12.9 prompts/sec, ETA 0.7 min
+    [800/1295] 13.0 prompts/sec, ETA 0.6 min
+    [850/1295] 13.0 prompts/sec, ETA 0.6 min
+    [900/1295] 13.2 prompts/sec, ETA 0.5 min
+    [950/1295] 13.3 prompts/sec, ETA 0.4 min
+    [1000/1295] 13.5 prompts/sec, ETA 0.4 min
+    [1050/1295] 13.6 prompts/sec, ETA 0.3 min
+    [1100/1295] 13.5 prompts/sec, ETA 0.2 min
+    [1150/1295] 13.6 prompts/sec, ETA 0.2 min
+    [1200/1295] 13.7 prompts/sec, ETA 0.1 min
+    [1250/1295] 13.7 prompts/sec, ETA 0.1 min
+    Done: 1295 prompts in 1.6 min (13.8 prompts/sec)
+
+  Saving fixed cache to: results/llama3_activations_cache_diverse_fixed.npz
+    train: 5216 ben + 5179 atk
+    test:  689 ben + 1295 atk
+    Test methods sidecar: results/llama3_activations_cache_diverse_fixed_test_methods.json
+
+======================================================================
+CACHE FIXED
+======================================================================
+  Output cache: results/llama3_activations_cache_diverse_fixed.npz
+
+  Verify the fix:
+    python norm_check_diverse.py  # (point at results/llama3_activations_cache_diverse_fixed.npz)
+
+  Then re-run the experiments:
+    python verify_saturation.py --llama3_cache results/llama3_activations_cache_diverse_fixed.npz
+    python statistical_tests.py --cache results/llama3_activations_cache_diverse_fixed.npz
+    python radial_distribution_check.py --cache results/llama3_activations_cache_diverse_fixed.npz
