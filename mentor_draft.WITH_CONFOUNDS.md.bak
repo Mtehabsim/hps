@@ -1,0 +1,906 @@
+# HPS Research Draft: Hyperbolic Geometric Priors for LLM Jailbreak Detection
+
+**Author:** [Author Name]
+**For:** Mentor review — pre-submission draft
+**Status:** Draft v1 (post-meeting)
+**Date:** 2026-06-05
+**Length:** ~22 pages
+
+---
+
+## Abstract
+
+We investigate whether hyperbolic geometric priors improve LLM jailbreak detection over Euclidean baselines. Motivated by recent findings that LLM token embeddings exhibit hierarchical/tree-like structure (HypLoRA, HELM at NeurIPS 2025), we developed HPS — a Lorentz projection + 12-feature trajectory + contrastive-learning framework — and compared it against three baselines: HPS-Euclidean (parameter-matched flat ablation), C4 (cross-layer mean-pool linear probe adapted from Anthropic Cheap Monitors), and MTP (faithful Anthropic mean-token probe reproduction). Standard activation-based jailbreak detection benchmarks contain three confounds that allow trivial classifiers to approach saturation: (1) length confound (length-only AUROC=0.992), (2) max_length truncation confound (norm-only AUROC=1.000 from inconsistent tokenization), and (3) train/test contamination (15 prompts, 1.15%). Under controlled conditions (length-matched diverse benign data, deduplicated attacks, consistent max_length), four findings emerge: (i) the geometric hypothesis is theoretically validated (0/13 inversions show attacks at higher radial position, as predicted); (ii) HPS provides measurable advantage over parameter-matched Euclidean (+0.049 TPR), confirming the Lorentz constraint helps; (iii) but linear probes (C4 ≈ MTP ≈ HPS within 0.0017 AUROC) are statistically indistinguishable on aligned LLMs; (iv) HPS catastrophically fails on weakly-aligned LLMs (Vicuna-13B GCG: 7.6% vs C4's 99.4%), suggesting alignment-mediated harm-feature concentration. We do not claim adversarial robustness; Bailey et al. (ICLR 2025) established that all latent-space defenses fail under adaptive attacks, motivating planned follow-up work. The paper's primary contributions are (1) characterization of three confounds in standard benchmarks, (2) controlled architectural ablations isolating geometric prior contribution, and (3) cross-LLM evidence of alignment-mediated detection failure.
+
+---
+
+## Table of Contents
+
+1. Hypothesis & Motivation
+2. System Description
+3. Why Standard Benchmark Scores Are Uninformative
+4. Three Confounds in Standard Activation-Based Jailbreak Benchmarks
+5. Method Comparison Under Controlled Conditions
+6. Cross-Model Evaluation
+7. Adversarial Robustness Limitation
+8. Open Questions & Next Steps
+9. Appendices
+
+---
+
+## 1. Hypothesis & Motivation
+
+### 1.1 The Original Idea
+
+Activation-based jailbreak detection has emerged as a promising defense paradigm for aligned LLMs: train a classifier on hidden states to distinguish benign from harmful prompts. The standard approach uses Euclidean (flat) representations — linear probes (Anthropic Cheap Monitors), MLPs (HSF), Mahalanobis distance (RTV), or sparse autoencoders (Bricken et al.). These methods report high accuracy (AUC > 0.95 across multiple LLMs and attack types).
+
+But Euclidean geometry is poorly suited for hierarchical data. Recent work has shown that LLM token embeddings exhibit empirical δ-hyperbolicity, a quantitative measure of tree-likeness. **HypLoRA** (Yang et al., NeurIPS 2025; arxiv:2410.04010) demonstrated this property — token frequency follows a power-law distribution with high-frequency tokens clustered near the origin and low-frequency tokens further out — and used it to design more efficient hyperbolic fine-tuning. **HELM** (Yang et al., NeurIPS 2025; arxiv:2505.24722) built fully-hyperbolic billion-parameter LLMs, demonstrating that non-Euclidean geometry can scale to production-size language models. Together these results establish that LLM representations have intrinsic hierarchical structure that hyperbolic spaces — with their exponential volume growth — are theoretically better equipped to capture than flat Euclidean spaces.
+
+### 1.2 The Naive Prediction
+
+If LLM safety information is hierarchically organized (with general safe content near the conceptual root and specific harmful content deep in the leaves), then a hyperbolic projection should achieve cleaner separation than a flat one. Specifically, the **harm hypothesis** states:
+
+> Harmful content occupies higher radial position in Lorentz/Poincaré space than benign content, because harm represents specific (deeper-hierarchy) instantiations while benign content is more general (closer-to-root).
+
+This is a testable, falsifiable claim. If the geometric prior is correct, hyperbolic projection should:
+1. Achieve higher detection accuracy at low data (where geometric priors help most)
+2. Show systematic radial separation between benign and attack distributions
+3. Provide measurable advantage over parameter-matched flat geometry
+
+### 1.3 Why This Question Matters
+
+If the geometric prior holds, it would inform deployment-ready jailbreak detectors that:
+- Generalize from less data
+- Provide interpretable geometric structure
+- Scale to multi-turn jailbreaks (where conversational hierarchy is real)
+
+If the geometric prior does NOT hold, it would tell us that hierarchical structure in LLM activations is either:
+- Not safety-relevant
+- Not exploitable beyond what linear probes already capture
+
+Either result is publishable. The paper this draft prepares is a rigorous controlled evaluation of which case actually obtains.
+
+---
+
+## 2. System Description
+
+### 2.1 HPS Architecture
+
+HPS (Hyperbolic Projection System) takes activations from N=6 selected transformer layers' last-token positions and maps them through a Lorentz hyperboloid projection:
+
+```
+For input prompt → LLM forward pass → activations h ∈ ℝ^(N×d)
+where N=6 layers, d=4096 (Llama-3) or d=5120 (Vicuna-13B)
+
+Layer 1: Linear projection W ∈ ℝ^(d × 64)
+  z_spatial = W · h_l for l in {0, 2, 17, 24, 28, 31}
+  z_0 = sqrt(1/κ + ||z_spatial||²)  [project onto Lorentz hyperboloid]
+  z = (z_0, z_spatial) ∈ ℝ^65 lies on x_0² - ||x||² = 1/κ
+
+Layer 2: Trajectory feature extraction (12 features total)
+  Radial features (5):
+    mean(x_0), max(x_0), min(x_0), std(x_0), range(x_0)
+  Curvature features (4):
+    Triangle inequality bending across consecutive layers
+    max, mean, std of bending; argmax position normalized
+  Displacement features (3):
+    Lorentz distance start→end, sum of consecutive distances, straightness ratio
+
+Layer 3: Logistic regression on 12 features
+  with StandardScaler normalization
+```
+
+**Total parameters:** 4096 × 64 + 64 (W) + (12+1) (LR) = 262,221 ≈ 262K
+
+### 2.2 Hyperparameters and Design Choices
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| Layers (Llama-3) | [0, 2, 17, 24, 28, 31] | TEST 7 finding: spread layers achieve AUROC=1.000 vs Fisher-discovered [0,1,2,28,29,30,31] at 0.925. Spans shallow + middle + deep representations. |
+| Layers (Vicuna-13B) | [0, 2, 22, 31, 35, 39] | Proportional to Llama-3 layers (Vicuna has 40 layers vs Llama's 32) |
+| Curvature κ | 0.1 (frozen) | TEST 9 finding: best from sweep over {0.1, 0.5, 1.0, 2.0, 10.0}. Learnable κ unstable. |
+| Projection dim | 64 | Trade-off: smaller dim limits expressivity; larger dim defeats compression purpose |
+| Epochs | 50 | Plateau analysis showed convergence by epoch 50; overfit past 50 |
+| Learning rate | 1e-3 | Adam optimizer, standard for contrastive learning |
+| Weight decay | 1e-5 | Light regularization; HPS-Euclidean tested same |
+
+### 2.3 Training Loss
+
+Per-layer-temperature contrastive loss with normalized temperatures:
+
+```
+L = Σ_layer τ_l · (CE_loss(benign_pair) + CE_loss(attack_pair))
+```
+
+Per-layer temperatures τ_l are normalized so deeper layers (which have higher norms) don't dominate the gradient. This is critical for stability.
+
+### 2.4 HPS-Euclidean Ablation Control
+
+To isolate the **geometric** contribution, we built HPS-Euclidean: SAME architecture, FLAT geometry. Specifically:
+- Same 6-layer trajectory
+- Same 12 features (radial = mean of squared norms; curvature = Euclidean triangle inequality; displacement = Euclidean distance)
+- Per-layer scale + learnable margin to match HPS parameter count exactly (262K)
+- Same contrastive loss with same hyperparameters
+
+**This control rules out "more parameters helped" as an explanation.** If HPS beats HPS-Euclidean, it's because of the geometry, not because of the parameter count.
+
+### 2.5 C4 Baseline (Adapted from Anthropic Cheap Monitors)
+
+We tested a deliberately minimal baseline:
+
+```
+For each prompt:
+  Extract last-token activations from layers [0, 2, 17, 24, 28, 31]
+  Mean across layers: f = (1/6) · Σ_l h_l[-1]    (mean-pool over LAYERS)
+  StandardScaler normalization
+  Logistic regression
+```
+
+**Total parameters:** 4096 (LR weights) + 1 (bias) = 4,097
+
+This is essentially Anthropic's mean-token probe (Cunningham et al. 2025) with the pooling axis swapped: their mean-pool is over TOKENS at one layer; ours is over LAYERS at one (last) token. We refer to this as our C4 baseline. It serves to test whether HPS — with 64× more parameters and a more sophisticated geometric framework — actually provides measurable benefit over a minimal linear probe.
+
+**Direct comparison with Anthropic's MTP:**
+
+| Property | Anthropic MTP | C4 (ours) |
+|---|---|---|
+| Pooling axis | Tokens (within one layer) | Layers (within one token) |
+| Number of layers | 1 (best chosen via cross-validation) | 6 (fixed: [0, 2, 17, 24, 28, 31]) |
+| Tokens used | All in input sequence | Last only |
+| Regularization | L2 λ=1e4 (their Appendix D) | StandardScaler |
+| Result on Llama-3 (AUROC) | 0.9988 | 0.9981 |
+
+C4 is a deliberate variant of MTP, not an independent contribution. We test it to verify that aggregation-axis choice does not matter — and it doesn't (within 0.0007 AUROC).
+
+### 2.6 MTP Baseline (Faithful Anthropic Reproduction)
+
+To rule out the possibility that our axis swap is consequential, we also implemented Anthropic's mean-token probe exactly:
+
+```
+For each prompt:
+  At layer L: activations h_L ∈ ℝ^(T × d)  (full sequence)
+  Mean across tokens: f = (1/T) · Σ_t h_L[t]
+  StandardScaler normalization
+  Logistic regression with L2 regularization λ=1e4 (their Appendix D)
+```
+
+We tested all 6 layers separately and select the best (L17 for Llama-3-Instruct).
+
+**Comparison summary:**
+
+| Method | Parameters | Geometry | Aggregation | Training Loss |
+|---|---|---|---|---|
+| HPS | 262K | Lorentz hyperboloid (κ=0.1) | Layer trajectory + 12 features | Contrastive |
+| HPS-Euclidean | 262K (matched) | Flat | Layer trajectory + 12 features | Contrastive |
+| C4 | 4,097 | Flat | Mean across layers, last token | Discriminative LR |
+| MTP @ Lk | 4,097 | Flat | Mean across tokens, layer k | Discriminative LR |
+
+---
+
+## 3. Why Standard Benchmark Scores Are Uninformative
+
+### 3.1 The Saturation Pattern
+
+Evaluated on the standard benchmark (Alpaca harmless ~60 chars vs 9 attack types from JBShield), all four methods saturate at AUROC > 0.999:
+
+| Method | AUROC | TPR @ 5% FPR |
+|---|---|---|
+| HPS | 1.000 | 1.000 |
+| HPS-Euclidean | 0.999 | 0.998 |
+| C4 | 1.000 | 1.000 |
+| MTP @ best layer | 1.000 | 1.000 |
+
+Saturation across all four methods is suspicious because it suggests either ceiling performance or a benchmark-level confound. Three observations point toward the latter:
+
+1. **A 262K-parameter Lorentz contrastive framework achieves identical performance to a 4097-parameter linear probe.** Either both methods reach the task's information-theoretic ceiling simultaneously, or the task has a discriminative axis that doesn't require either method's full architecture.
+
+2. **Detection rates shift dramatically with benign-side variation alone.** Replacing Alpaca harmless with WildChat (longer prompts) changes results without any architectural changes — indicating the classifier is sensitive to benign-data properties rather than harmful-content semantics.
+
+3. **The parameter-matched flat geometry control (HPS-Euclidean) also saturates.** A defective-by-design ablation that shouldn't approach ceiling under the geometric-prior hypothesis nonetheless reaches 0.998.
+
+### 3.2 Permutation Test
+
+A permutation baseline distinguishes "real signal" from "memorization":
+- Real labels → AUROC = 0.998
+- Random labels (3 permutations) → AUROC ≈ 0.479 (mean across permutations)
+
+The permutation test confirms genuine label-correlated signal exists but does not identify what is being detected. The 1.000 AUROC could reflect any combination of:
+- Semantic harm structure (the intended target)
+- Length differences (potential confound)
+- Activation magnitude (potential confound)
+- Other benchmark properties
+
+Section 4 systematically tests for confounds and identifies three.
+
+---
+
+## 4. Three Confounds in Standard Activation-Based Jailbreak Benchmarks
+
+This section characterizes three confounds affecting standard benchmarks for activation-based jailbreak detection. Each enables a trivial classifier to approach saturation without learning semantic harm content. We document each, present its mechanism, and describe the controls applied.
+
+### 4.1 Length Confound
+
+#### 4.1.1 Characterization
+
+A single-feature classifier using only `len(prompt)` characters as input — no model, no activations — achieves the following on standard benchmarks:
+
+| Metric | Length-only classifier |
+|---|---|
+| AUROC | **0.992** |
+| TPR @ 5% FPR | **0.969** |
+| TPR @ 1% FPR | **0.875** |
+
+A classifier that **never accesses prompt content**, only its character count, catches 96.9% of attacks at 5% FPR. Saturation in standard benchmarks is largely a length-discrimination artifact.
+
+#### 4.1.2 Per-Attack Length-Only AUROCs
+
+| Attack | Mean length (chars) | Length-only AUROC |
+|---|---|---|
+| puzzler | 2,193 | 1.000 |
+| saa | 473 | 1.000 |
+| drattack | 437 | 1.000 |
+| base64 | 124 | 1.000 |
+| ijp | 460 | 0.999 |
+| autodan | 77 | 0.999 |
+| pair | 72 | 0.997 |
+| zulu | 50 | 0.976 |
+| gcg | 35 | 0.971 |
+
+8 of 9 attacks are >97% detectable by length alone. The cause: Alpaca harmless prompts mean ~60 chars vs attacks ranging from 35-2,193 chars. **Length is structurally separable from content in the standard benchmark.**
+
+#### 4.1.3 Affected Papers
+
+Any activation-based jailbreak detection paper using Alpaca-style harmless data + AdvBench/HarmBench-style harmful data inherits this confound. Specifically:
+- **JBShield** (USENIX 2025): confirmed via reading their paper Section 5.1 — they use Alpaca + 9-attack mixture
+- **HSF** (WWW 2025): same Alpaca + AdvBench setup (likely affected, not directly verified by reproduction)
+- **GradSafe** (ACL 2024) and **RTV** (Derya & Sunar 2026): use similar standard setups (likely affected, not verified)
+
+**Anthropic Cheap Monitors did this right:** Cunningham et al. 2025 used WildChat + OR-Bench Hard for harmless data, both of which have varied lengths matching real user prompts.
+
+#### 4.1.4 Control: Diverse Benign Dataset
+
+Controlling for length requires a benign dataset with length distribution matching the attacks. We construct a 5,905-prompt diverse benign dataset spanning 9 sources:
+- WildChat (real user conversations)
+- OR-Bench Hard (edge-case benign)
+- MMLU (factual queries)
+- GSM8K (math word problems)
+- HumanEval, MBPP (coding)
+- WikiText long-form (matched attack lengths)
+- Multilingual subset
+- Alpaca control
+
+After matching length distributions to attacks:
+- Mean: 1,076 chars
+- Median: 179 chars
+- Max: 18,205 chars
+- 752 prompts > 2,000 chars
+- 354 prompts > 5,000 chars
+
+**Length-only AUROC under length-matched conditions: 0.318** (length is slightly anti-correlated with attacks — long-form WikiText is benign). The length confound is removed from subsequent analysis.
+
+### 4.2 Train/Test Contamination
+
+The standard JBShield-released attack set contains overlap between training and test partitions. Hashing all attack prompts (SHA-256) and checking for cross-partition overlap reveals:
+- 6,520 total attack prompts in the released dataset
+- 5,216 train hashes (5,185 unique)
+- 1,304 test hashes (1,304 unique)
+- **Overlap: 15 prompts (1.15% of test set)**
+
+Source: ijp (8 prompts), saa (6), zulu (1). The overlap originated from JBShield's calibration and test splits sharing prompts.
+
+**Control:** Deduplication produces `llama3_attacks_clean.json` with 6,474 prompts. All downstream analysis uses this cleaned set. Effect on conclusions is small (1.15% of test) but the confound is removed for cleanliness.
+
+### 4.3 max_length Truncation Confound
+
+This is the most subtle confound and the most consequential for cache-based pipelines.
+
+#### 4.3.1 The Confound
+
+When benign and attack activations are extracted with different `max_length` parameters — for example, benign at 2048 to accommodate long-form text and attacks at 512 (a common pattern when attack prompts are short) — the cache contains tokenization-induced artifacts that have nothing to do with semantic content.
+
+Under this mismatch, a norm-only classifier (input: per-layer L2 norms, 6 features) achieves perfect detection:
+
+| Metric | Consistent max_length | Inconsistent max_length |
+|---|---|---|
+| Norm-only AUROC | 0.917 | **1.000** |
+| Norm-only TPR @ 5% FPR | 0.687 | **1.000** |
+
+#### 4.3.2 Diagnosis: Layer 5 Norm Distribution
+
+Direct measurement of last-token L2 norms at the deepest layer reveals the source:
+
+| | Consistent max_length=512 | Inconsistent (benign 2048, attacks 512) |
+|---|---|---|
+| Benign mean norm | 155.6 | **35.5** |
+| Attack mean norm | 153.0 | 153.0 |
+| Ratio | 1.0× | **4.3×** |
+
+The benign norm drops 4.4× when truncation length changes from 512 to 2048.
+
+#### 4.3.3 Mechanism
+
+Llama-3 uses Rotary Position Embeddings (RoPE), which are position-dependent. The last token at position 50 in a short prompt has different positional embeddings than the last token at position 2000 in a long prompt. Additionally:
+
+- Position 50: last-token activation reflects 50 attention integrations
+- Position 2000: 2000 attention integrations have occurred
+
+Long sequences exhibit more cumulative attention dilution, producing systematically smaller deep-layer last-token activations. This is a property of the extraction position, not the content. Inconsistent tokenization parameters across train/test create artificial separability.
+
+#### 4.3.4 Control
+
+Re-extracting all activations with consistent max_length=2048 reduces norm-only AUROC from 1.000 to **0.761**, with TPR @ 5% FPR dropping from 1.000 to 0.293.
+
+Permutation test under controlled conditions:
+- Random labels → AUROC ≈ 0.498 (chance, as expected)
+- Real labels → AUROC = 0.998 (genuine signal)
+
+This confirms a real semantic signal exists in activation space beyond the norm artifact.
+
+#### 4.3.5 Methodology Implication
+
+When using cached activations for downstream analysis, all data partitions must be processed with consistent tokenization parameters: max_length, padding strategy, chat template, attention masking. Inconsistency between any partition creates artificial discriminability unrelated to semantic content. This applies field-wide to any pipeline that rebuilds caches incrementally.
+
+### 4.4 Validation: Permutation Test Under Controlled Conditions
+
+Under controlled conditions (length-matched diverse benign + deduplicated attacks + consistent max_length), the permutation test yields:
+- Random labels → AUROC ≈ 0.498 (chance)
+- Real labels → AUROC = 0.998 (signal)
+
+A **genuine semantic signal exists in activation space** beyond all three confounds. Subsequent analysis evaluates methods under these controlled conditions.
+
+---
+
+## 5. Method Comparison Under Controlled Conditions
+
+Under length-matched diverse benign data, deduplicated attacks, and consistent max_length=2048, the methods produce measurable, distinguishable results.
+
+### 5.1 Geometric Hypothesis Test
+
+The harm hypothesis states attacks should occupy higher radial position in Lorentz space than benign content. We tested 13 configurations: 5 random seeds × 4 epoch checkpoints × 4 curvature κ values.
+
+#### 5.1.1 Seed Robustness (κ=0.1, 50 epochs)
+
+| Seed | Benign median | Attack median | Δ (ben - atk) | Direction |
+|---|---|---|---|---|
+| 42 | 3.20 | 3.50 | -0.30 | as predicted ✓ |
+| 43 | 3.20 | 3.50 | -0.30 | as predicted ✓ |
+| 44 | 3.20 | 3.52 | -0.32 | as predicted ✓ |
+| 45 | 3.20 | 3.51 | -0.31 | as predicted ✓ |
+| 46 | 3.20 | 3.52 | -0.32 | as predicted ✓ |
+
+#### 5.1.2 Epoch Robustness (seed 42, κ=0.1)
+
+| Epoch | Benign median | Attack median | Δ |
+|---|---|---|---|
+| 5 | 3.23 | 3.27 | -0.04 |
+| 10 | 3.23 | 3.40 | -0.17 |
+| 25 | 3.21 | 3.45 | -0.24 |
+| 50 | 3.20 | 3.50 | -0.30 |
+
+#### 5.1.3 Curvature Robustness (seed 42, 50 epochs)
+
+| κ | Benign median | Attack median | Δ |
+|---|---|---|---|
+| 0.1 | 3.20 | 3.50 | -0.30 |
+| 0.5 | 1.57 | 1.96 | -0.39 |
+| 1.0 | 1.36 | 1.53 | -0.17 |
+| 2.0 | 1.37 | 1.42 | -0.05 |
+
+**Conclusion: 0/13 configurations show inversion.** All show ben_median < atk_median, exactly as the harm hypothesis predicts.
+
+#### 5.1.4 Interpretation
+
+The hyperbolic prior is **theoretically validated**. Attacks DO occupy higher radial position in the learned Lorentz space, regardless of seed, training duration, or curvature.
+
+**Important corollary:** Under length-confounded data, the contrastive loss learns a length-discriminative direction that aligns with high radial position for the (short) benign class. Under length-controlled data, this artifact disappears and the hypothesis-consistent direction emerges. The geometric prior is theoretically sound; the apparent inversion observed under uncontrolled benchmarks is a property of the data and the loss, not a property of the geometry.
+
+### 5.2 Performance Comparison (Same-Distribution, n=5 Seeds)
+
+We compared all four methods under controlled conditions on the cleaned diverse-benign cache with consistent max_length=2048. Bootstrap CIs from 10,000 iterations.
+
+| Method | AUROC | TPR @ 5% FPR | TPR @ 1% FPR | Parameters |
+|---|---|---|---|---|
+| **MTP @ L17** (Anthropic exact, best layer) | 0.9988 | 0.9946 | 0.9799 | 4,097 |
+| **C4** (cross-layer, our variant) | 0.9981 | 0.9954 | 0.9776 | 4,097 |
+| **HPS** (Lorentz contrastive) | 0.9971 ± 0.0001 | 0.9914 ± 0.0003 | — | 262,221 |
+| **HPS-Euclidean** (parameter-matched flat) | 0.9680 ± 0.0022 | 0.9311 ± 0.0032 | — | 262,221 |
+
+#### 5.2.1 Statistical Tests
+
+| Test | Result | Verdict |
+|---|---|---|
+| ΔAUROC (HPS - C4) paired bootstrap | -0.0010, p=0.036 | Significant but trivially small |
+| ΔTPR5 (HPS - C4) paired bootstrap | -0.0019, p=0.601 | NOT SIGNIFICANT |
+| McNemar's test on per-example correctness | p=0.755 | NOT SIGNIFICANT |
+| Cohen's d (effect size) | -0.039 | Negligible |
+
+**Interpretation:** Linear probes (C4 and MTP) and HPS are statistically indistinguishable. The 0.001 AUROC gap is statistically detectable but practically irrelevant. McNemar's test (which is the right test for binary classification disagreement) fails to reject the null hypothesis of no difference.
+
+#### 5.2.2 The MTP-vs-C4 Equivalence
+
+A key sanity check: MTP (Anthropic's exact published method, mean-pool over tokens at single layer) and our C4 (mean-pool over layers at single token) achieve nearly identical numbers (AUROC 0.9988 vs 0.9981). **Pooling axis doesn't matter for activation-based jailbreak detection on aligned LLMs.**
+
+This means we should not present C4 as a novel contribution. It's a variant of Anthropic's published method, not an independent discovery. Our paper cites Anthropic for the baseline.
+
+### 5.3 Cold-Start Sweep
+
+If geometric priors help, they should help most at low data (where inductive bias matters more). We tested with N attacks per method ranging from 45 to 2,250.
+
+| N | HPS (Lorentz) | HPS-Euclidean | C4 (linear probe) |
+|---|---|---|---|
+| 45 | 0.70 | 0.61 | 0.96 |
+| 90 | 0.82 | 0.61 | 0.98 |
+| 225 | 0.95 | 0.89 | 0.98 |
+| 450 | 0.90 | 0.83 | 0.99 |
+| 900 | 0.98 | 0.94 | 0.99 |
+| 2250 | 0.97 | 0.93 | 0.99 |
+
+**Three clean tiers across all N values:**
+- C4 dominates throughout
+- HPS > HPS-Euclidean consistently (geometric prior helps over flat)
+- HPS - HPS-Euclidean: +0.049 TPR average, statistically real
+- HPS - C4: -0.015 TPR (linear probe still wins)
+
+#### 5.3.1 Interpretation
+
+The Lorentz constraint provides a **measurable advantage over parameter-matched flat geometry**. This is the architectural finding that survives: hyperbolic geometry IS a useful inductive bias.
+
+But: the linear probe baseline (C4) doesn't have a learned projection at all — it just averages activations and runs LR. **Not having a learned projection regularizes more effectively than having a Lorentz-constrained one** at low data. This is consistent with Bricken et al.'s finding at Anthropic that linear probing provides a strong baseline that's difficult to outperform.
+
+### 5.4 Prediction Agreement (HPS Adds 0 Information Beyond C4)
+
+To test whether HPS catches different attacks than C4, we ran a per-example agreement analysis: at calibrated 5% FPR thresholds for each method, on n=1,295 test attacks, mean of 3 seeds:
+
+| Statistic | Value |
+|---|---|
+| Both correct | 1,265 attacks (97.7%) |
+| HPS correct only (HPS catches, C4 misses) | **0 examples** |
+| C4 correct only (C4 catches, HPS misses) | 21 examples (1.6%) |
+| Both miss | 6 examples (0.5%) |
+| Pearson(HPS, C4) score correlation | 0.958 |
+
+**Interpretation: HPS is empirically a noisy strict subset of C4.** Every attack HPS catches, C4 also catches. C4 catches 21 additional attacks that HPS misses. The two methods are not orthogonal — they make the same correct predictions, plus HPS misses some that C4 catches.
+
+#### 5.4.1 Implications for Ensembling
+
+We tested an OR-gate ensemble (HPS or C4 fires → attack):
+- TPR = 0.995 (= C4 alone, no improvement)
+- FPR = 0.103 (above 5% target — strictly worse than either method alone)
+
+The ensemble doesn't improve detection but does inflate false positives. **The "HPS+C4 ensemble" hypothesis fails empirically.**
+
+#### 5.4.2 The Big-Picture Interpretation
+
+If HPS and C4 disagree, they could complement each other for ensemble defense. They don't disagree — they agree on what they can both detect, and HPS has additional misses C4 doesn't have. The geometric prior captures structure, but not orthogonal-to-linear-probe structure.
+
+This is a strong negative result: **HPS provides no architectural advantage that linear probes don't already capture in equivalent form.**
+
+### 5.5 Norm-Controlled Evaluation (Final Methodology Check)
+
+After all fixes, is the remaining performance from semantic harm signal or residual norm correlation? We applied L2-normalization to remove magnitude:
+
+| Setting | Norm-only AUROC | C4 AUROC | C4 TPR |
+|---|---|---|---|
+| Baseline (raw) | 0.7611 | 0.9982 | 0.9954 |
+| L2-normalized per layer | **0.5515** | 0.9984 | 0.9954 |
+| Standardized per layer | 0.7291 | 0.9980 | 0.9954 |
+| Standardized + L2-normalized | **0.5480** | 0.9985 | 0.9961 |
+
+**Verdict: REAL_SIGNAL.** Norm-only classifier collapses (0.76 → 0.55) when norm is removed, but C4 stays at 0.998. The signal C4 detects is genuinely semantic, not norm-based. The remaining 0.76 norm-AUROC reflects content-correlated norm differences (e.g., attacks have different vocabularies that produce different norms), not the artificial confound from max_length mismatch.
+
+---
+
+## 6. Cross-Model Evaluation
+
+The most striking finding of our study comes from comparing HPS performance across two LLMs: Llama-3-8B-Instruct (RLHF-aligned) and Vicuna-13B-v1.5 (SFT-only).
+
+### 6.1 Vicuna-13B Per-Attack Failure
+
+Same architecture, same hyperparameters, same code as Llama-3 — but different LLM. Per-attack detection rates on Vicuna-13B-v1.5 test set:
+
+| Attack | N | HPS rate | C4 rate | gap (C4 - HPS) |
+|---|---|---|---|---|
+| **gcg** | 171 | **0.076** | 0.994 | **+0.92** ← catastrophic |
+| ijp | 164 | 0.329 | 0.933 | +0.60 |
+| pair | 167 | 0.389 | 0.958 | +0.57 |
+| puzzler | 13 | 0.462 | 1.000 | +0.54 |
+| zulu | 185 | 0.632 | 1.000 | +0.37 |
+| autodan | 167 | 0.701 | 1.000 | +0.30 |
+| base64 | 166 | 0.922 | 1.000 | +0.08 |
+| drattack | 91 | 0.956 | 1.000 | +0.04 |
+| saa | 170 | 0.994 | 1.000 | +0.01 |
+
+- **Mean detection across 9 attacks: HPS = 0.61, C4 = 0.99**
+- **GCG specifically: HPS catches 13/171 (7.6%), C4 catches 170/171 (99.4%)**
+
+For comparison, on Llama-3-Instruct (same data, same code, same attacks): HPS GCG = 100%, C4 GCG = 99.4%. The methods are equivalent on Llama-3 and dramatically different on Vicuna.
+
+### 6.2 Imbalance Ablation (Controls for Sample Size)
+
+Could the Vicuna failure be explained by class imbalance or sample size? We ran controls:
+
+| Configuration | HPS TPR | C4 TPR |
+|---|---|---|
+| Vicuna BASELINE (full imbalanced 416 ben + 5180 atk) | 0.594 | 0.985 |
+| Vicuna BALANCED 253 ben + 253 atk | 0.672 | 0.988 |
+| Vicuna BALANCED + drop shallow layers | 0.445 | 0.988 |
+| Llama-3 with VICUNA-STYLE imbalance | 0.999 | 1.000 |
+| Llama-3 with EXTREME imbalance (5:1) | 0.999 | 1.000 |
+
+**Diagnostic conclusions:**
+- Balancing Vicuna leaves HPS TPR within +0.08 of baseline — imbalance is NOT the primary issue
+- Llama-3 with extreme imbalance achieves HPS TPR = 0.999 — imbalance alone doesn't break HPS
+- HPS gap to C4 is >0.2 on six different attacks across all Vicuna configurations
+
+**Conclusion: It's Vicuna-specific, not an experimental artifact.**
+
+### 6.3 Alignment-Mediated Failure Hypothesis
+
+Llama-3-Instruct and Vicuna-13B-v1.5 differ in two key ways:
+1. **Scale/architecture:** Llama-3-8B vs Llama-2-13B (Vicuna's base)
+2. **Alignment training:** RLHF (Llama-3-Instruct) vs SFT only (Vicuna)
+
+Our hypothesis: the difference is **alignment-mediated**.
+
+```
+Llama-3-Instruct (RLHF-aligned):
+    Strong alignment → harm features concentrate into compact regions
+    of activation manifold (refusal direction is clean and dominant)
+    HPS's 12-feature compression preserves concentrated signal ✓
+    Detection works (100% on GCG)
+
+Vicuna-13B-v1.5 (SFT only, no RLHF):
+    Weak alignment → harm features remain diffuse across activation space
+    Multiple representations encode "harm" without clear consolidation
+    HPS's 12-feature compression FILTERS OUT diffuse signal ✗
+    Detection collapses (7.6% on GCG)
+```
+
+#### 6.3.1 Why Compression Hurts Without RLHF
+
+HPS's projection W ∈ ℝ^(d×64) reduces 4096-dim activations to 64-dim before extracting 12 trajectory features. This compression is necessary for tractable training but creates a bottleneck:
+- If harm signal is concentrated in a few dominant directions (RLHF case), the projection can preserve it
+- If harm signal is distributed across many small directions (SFT-only case), the projection averages it out toward zero
+
+C4 doesn't have this bottleneck — it uses raw 4096-dim activations. Whether harm is concentrated or diffuse, C4's logistic regression can find the discriminative direction.
+
+#### 6.3.2 Why This Is a Novel Finding
+
+Among published work we surveyed, this is the most explicit demonstration that:
+1. Activation-based defense effectiveness depends on alignment training strength
+2. Compressed feature spaces (like HPS) are fragile in ways high-dimensional linear probes are not
+3. RLHF doesn't just affect output behavior — it reshapes activation geometry in ways that determine detector design choices
+
+Related work (MacDiarmid et al. 2024, "Simple Probes Can Catch Sleeper Agents") showed that linear probes effectively detect aligned vs. backdoored states in alignment-trained models, but did not directly address how detection effectiveness varies between RLHF-aligned and SFT-only models. Our finding extends this line of work by showing the cross-alignment-training disparity directly.
+
+#### 6.3.3 Implications for Deployment
+
+For HPS specifically:
+- HPS works only on RLHF-aligned models
+- If you deploy on a weakly-aligned LLM, HPS will silently fail (especially on gradient-optimized attacks like GCG)
+- A practitioner choosing between HPS and C4 should default to C4 unless the target LLM has clear strong alignment
+
+For the field generally:
+- Reports of activation-based detector performance should specify alignment training type
+- Cross-model evaluation is necessary to assess deployment readiness
+- The Llama-3-Instruct vs Vicuna gap should be a standard cross-model test
+
+### 6.4 Caveat: Single Cross-Model Comparison
+
+This finding has one limitation: we have only one RLHF model (Llama-3-Instruct) and one SFT-only model (Vicuna-13B). They differ in scale (8B vs 13B) AND alignment. A cleaner test would compare:
+- Llama-2-7b-chat (Llama-2 base, SFT+RLHF)
+- Vicuna-7b/13b (Llama-2 base, SFT only)
+
+Same base model, only alignment differs. JBShield released both these as part of their dataset; future work should run this ablation. Section 8 details the plan.
+
+---
+
+## 7. Adversarial Robustness Limitation
+
+### 7.1 What We Did NOT Test
+
+Our paper evaluates standard (non-adaptive) attacks only. The 9 attack types from JBShield are pre-existing, fixed jailbreak techniques (GCG, PAIR, AutoDAN, etc.) that we evaluate detection against. We did NOT test adaptive attacks, where the attacker explicitly optimizes against a specific defense.
+
+### 7.2 Bailey et al. (ICLR 2025): Field-Wide Vulnerability
+
+**Bailey et al. (arxiv:2412.09565)** demonstrated that ALL latent-space defenses fail under adaptive attacks. Their setup is directly comparable to ours:
+- Same model: Llama-3-8B-Instruct
+- Same probe types: linear regression, MLP probes, sparse autoencoders, OOD detectors
+- Adaptive attack: 16-token universal embedding suffix optimized via Adam
+
+The attack jointly minimizes:
+1. **Behavior loss**: Cross-entropy to harmful target output (jailbreak)
+2. **Obfuscation loss**: Probe score on suffix-augmented input (make probe think it's benign)
+
+Their results:
+- Standard jailbreaks: probes work (90-100% recall)
+- **Adaptive obfuscation attacks: probes drop to 0% recall while maintaining 90% jailbreak success rate**
+
+### 7.3 Bailey's Adversarial Training Failure
+
+Particularly important: Bailey et al. tested adversarial training (defender retrains probe against new attacks each round) for 70 rounds. Even with continual adversarial training:
+- Defender achieves perfect recall against all PAST attacks
+- Attacker always finds a new bypass each round
+- Geometric implication: **"There is no single 'harmfulness direction'" — the model can represent harm in many ways, and ensembles/adversarial training can't cover them all.**
+
+### 7.4 Transfer Findings
+
+Bailey et al. also showed obfuscation attacks transfer between probe types:
+- Suffix trained against LR probe also bypasses MLP probes
+- Suffix trained against generation-based probe bypasses input-based probes
+- Suffix trained against OOD detector bypasses input-based probes (different architecture, similar weakness)
+
+**Implication for our work:** even if HPS uses different architecture (Lorentz hyperboloid + trajectory features), Bailey-style attacks would likely transfer. We have no architectural reason to believe HPS is more adversarially robust than the probes Bailey tested.
+
+### 7.5 Field-Wide Confirmations
+
+Multiple independent groups have confirmed Bailey's findings:
+- **Nasr et al. (2025, arxiv:2510.09023):** "None of 12 defenses across four common techniques is robust to strong adaptive attacks." Tested on Google DeepMind's Gemini.
+- **Gupta & Jenner (2025, arxiv:2506.14261):** RL-trained models can learn to evade probes from training time, not just inference time.
+- **DeepMind (2026, arxiv:2601.11516):** "Probes fail to generalize under important production distribution shifts."
+
+### 7.6 Why We Don't Claim Robustness
+
+Combining all evidence:
+1. We tested only non-adaptive attacks (limited scope)
+2. Bailey shows latent-space defenses share fundamental vulnerability
+3. HPS's compressed feature space (12 features → effectively 1 dominant feature, mean radial position) likely makes it MORE vulnerable, not less, to adaptive attacks
+4. Our preliminary activation-space sensitivity analysis (under PGD perturbations applied directly to activations — not a realistic input-space attack) showed HPS at 96% evasion vs C4 at 2% under the same perturbation budget. Bailey et al. (Section 2 of their paper) carefully distinguishes this from realistic input-space attacks, but the result is suggestive that HPS's compressed feature space is a single point of failure
+
+**We don't claim adversarial robustness. We cite Bailey et al. as the field-wide limitation.**
+
+### 7.7 Lead-In to Future Work
+
+The natural next experiment is: run Bailey-style adaptive attacks on HPS, C4, MTP, HPS-Euclidean. Predicted outcomes:
+- All methods fail similarly (most likely, per Bailey)
+- HPS marginally more robust (unlikely but possible)
+- HPS catastrophically more vulnerable (consistent with our PGD finding)
+
+Section 8 details the plan for this experiment. Either result is publishable.
+
+---
+
+## 8. Open Questions & Next Steps
+
+### 8.1 Adaptive Attack Experiment (highest priority)
+
+**Plan:** Implement Bailey-style 16-token universal embedding suffix attack against HPS, C4, MTP @ L17, and HPS-Euclidean. Use Bailey's released code (github.com/LukeBailey181/obfuscated-activations) as starting point.
+
+**Tests:**
+1. **Per-method standalone obfuscation:** train suffix against each method, measure recall reduction
+2. **Per-attack-category robustness:** test obfuscation effectiveness per attack type
+3. **Cross-method transfer:** does suffix trained against C4 also bypass HPS?
+4. **Cross-LLM transfer:** does suffix trained on Llama-3 transfer to Vicuna?
+
+**Decision tree (predicted outcomes):**
+- All methods fail similarly (Bailey replication for hyperbolic): confirms field-wide vulnerability extends to geometric defenses
+- HPS marginally more robust: investigate mechanism (trajectory features may add constraint)
+- HPS catastrophically more vulnerable: confirms compression bottleneck (consistent with PGD finding)
+- Method-specific vulnerabilities: finer-grained finding
+
+**Estimated time:** 1-2 weeks
+
+### 8.2 Llama-2-7b-chat Alignment Ablation
+
+**Goal:** Cleanly isolate RLHF as the variable in the alignment-mediated failure hypothesis.
+
+**Setup:**
+- Llama-2-7b-chat: SFT + RLHF on Llama-2 base
+- Vicuna-7b-v1.5: SFT only on SAME Llama-2 base
+- Both released by JBShield (free, no extraction needed for benign)
+
+**Predicted result:**
+- Llama-2-7b-chat with HPS: high detection (similar to Llama-3-Instruct)
+- Vicuna-7b with HPS: low detection (similar to Vicuna-13B failure pattern)
+
+If this prediction holds, the alignment hypothesis is properly controlled — same base model, only alignment differs.
+
+**Estimated time:** 2-3 days extraction + experiments
+
+### 8.3 Multi-Turn Pivot Consideration
+
+Multi-turn jailbreaks have genuine hierarchical structure (later turns elaborate on earlier turns). Hyperbolic priors may help where harm is built across turns rather than concentrated in a single prompt.
+
+**Pros:**
+- Theoretically motivated (real hierarchical structure)
+- Different threat surface from current single-turn focus
+- Recent work (Scale AI's MHJ benchmark, 2024) shows multi-turn attacks bypass current defenses
+
+**Cons:**
+- 6-month commitment vs 6 weeks to TMLR submission
+- Requires new attack data (we cannot generate ourselves)
+- Risk that hyperbolic still doesn't help
+
+**Recommendation:** Defer to follow-up paper. Submit current paper to TMLR first.
+
+### 8.4 Other Open Questions
+
+- **Generation-based variants:** Bailey et al. found generation-based probes (looking at output tokens too) are more robust than input-based. Could HPS-Generation work better than current input-based HPS?
+- **HSF/JBShield reproductions:** Would their reported numbers survive on diverse benign? Could their methodology issues be quantified directly?
+- **Defense-in-depth:** Combining input classifiers (HPS, C4) with output classifiers (Constitutional Classifiers; Sharma et al. 2025, arxiv:2501.18837) in cascade?
+
+### 8.5 Recommended Paper Venue
+
+**Recommendation: TMLR.**
+- Matches their methodology paper criteria
+- No "novelty" or "SOTA" bar to clear
+- Allows acknowledgment of prior art (Anthropic, JBShield)
+- Adversarial robustness is field-wide, not specific to us
+
+**Stretch venues:** AAAI 2027, IJCAI 2027 with methodology framing.
+
+**Not recommended:** USENIX Security (would require adaptive attack experiments before submission), ICLR/NeurIPS (would require novel-method claim).
+
+---
+
+## 9. Appendices
+
+### Appendix A: Full Hyperparameter Specification
+
+```python
+# HPS hyperparameters
+HPS_LAYERS_LLAMA3 = [0, 2, 17, 24, 28, 31]    # 6 layers, spread
+HPS_LAYERS_VICUNA = [0, 2, 22, 31, 35, 39]    # proportional to Llama-3
+KAPPA_INIT = 0.1
+FREEZE_KAPPA = True
+EPOCHS = 50
+PROJ_DIM = 64
+LEARNING_RATE = 1e-3
+WEIGHT_DECAY = 1e-5
+BATCH_SIZE = "full batch"
+
+# Anthropic MTP (their Appendix D)
+MTP_L2_LAMBDA = 1e4   # mean-token probes
+LR_L2_LAMBDA = 1e2    # last-token probes
+STANDARDIZE = True
+
+# Cache extraction
+MAX_LENGTH = 2048     # consistent across train/test/benign/attacks
+DEVICE = "cuda"
+TORCH_DTYPE = "float16"
+
+# Evaluation
+TARGET_FPR = 0.05
+N_BOOTSTRAP = 10000
+N_SEEDS = 5
+
+# Train/test split
+TRAIN_FRAC = 0.8
+SEED = 42
+```
+
+### Appendix B: Dataset Construction
+
+#### B.1 Diverse Benign Sources (5,905 prompts after deduplication)
+
+| Source | Approx N | Mean length | Purpose |
+|---|---|---|---|
+| WildChat | 1500 | 200-2000 chars | Real user conversations (Anthropic-style) |
+| OR-Bench Hard | 1000 | 60-300 chars | Edge-case benign (looks suspicious) |
+| MMLU | 1000 | 100-500 chars | Factual queries across domains |
+| GSM8K | 500 | 100-300 chars | Math word problems |
+| HumanEval | 164 | 80-200 chars | Code generation (Python) |
+| MBPP | 374 | 80-200 chars | Code generation (Python) |
+| WikiText long-form | 800 | 1500-15000 chars | Matches puzzler/saa attack lengths |
+| Multilingual subset | 200 | varied | Cross-lingual test |
+| Alpaca control | 367 | 50-100 chars | Original setup for backwards compat |
+
+#### B.2 Length Distribution
+
+- Mean: 1,076 chars
+- Median: 179 chars
+- Max: 18,205 chars
+- >2,000 chars: 752 prompts
+- >5,000 chars: 354 prompts
+
+#### B.3 JBShield Attack Source
+
+Released at github.com/NISPLab/JBShield. 9 categories per LLM:
+
+| Attack | N (Llama-3) | N (Vicuna-13B) | Mean length |
+|---|---|---|---|
+| autodan | 850 | 850 | 77 chars |
+| base64 | 850 | 850 | 124 chars |
+| drattack | 520 | 520 | 437 chars |
+| gcg | 850 | 850 | 35 chars |
+| ijp | 821 | 821 | 460 chars |
+| pair | 850 | 850 | 72 chars |
+| puzzler | 50 | 50 | 2,193 chars |
+| saa | 834 | 834 | 473 chars |
+| zulu | 849 | 849 | 50 chars |
+
+After deduplication (15 train/test overlapping prompts removed):
+- Llama-3 attacks: 6,474 unique → 5,179 train + 1,295 test
+- Vicuna attacks: 6,474 unique → 5,180 train + 1,294 test
+
+#### B.4 Train/Test Split
+
+- 80/20 split with seed=42
+- Llama-3: 5,216 train benign + 5,179 train attacks; 689 test benign + 1,295 test attacks
+- Vicuna: 416 train benign + 5,180 train attacks; 105 test benign + 1,294 test attacks
+
+### Appendix C: Result Files (Reference)
+
+All numerical results are stored in JSON files for reproducibility:
+
+| File | Contents |
+|---|---|
+| `results/statistical_tests.json` | HPS vs C4 5-seed bootstrap, McNemar's, Cohen's d |
+| `results/radial_distribution_check.json` | 13-config inversion analysis |
+| `results/gcg_specific_test.json` | Cross-model GCG breakdown |
+| `results/vicuna_imbalance_test.json` | Imbalance + per-attack ablations |
+| `results/hyperbolic_vs_euclidean_diverse.json` | Cold-start sweep + 4-way comparison |
+| `results/anthropic_mtp_llama3.json` | Anthropic MTP per-layer |
+| `results/prediction_agreement.json` | Per-example HPS vs C4 agreement |
+| `results/verify_saturation_fixed.json` | Length confound + permutation |
+| `results/norm_check_diverse.json` | Norm-only confound |
+| `results/norm_controlled_eval_llama3.json` | After-L2-normalization eval |
+
+### Appendix D: Code Organization
+
+#### D.1 Self-Contained Core
+- `hps_core.py` (170 lines): LorentzProjection, contrastive_loss, extract_trajectory_features. No dependencies on transformers — pure PyTorch implementation suitable for self-contained ablations.
+
+#### D.2 Activation Extraction
+- `extract_diverse_benign_activations.py`: Extracts on diverse benign + reuses cached attacks
+- `fix_cache_max_length.py`: Re-extracts attacks at consistent max_length=2048
+- `extract_jbshield_activations.py`: Extracts using JBShield prompts
+- `extract_llama3_base_activations.py`: For alignment ablation
+
+#### D.3 Methodology Verification
+- `verify_saturation.py`: 6-check confound diagnosis (contamination, length, norm, permutation, etc.)
+- `norm_check_diverse.py`: Norm-only classifier baseline
+- `diagnose_norm_confound.py`: Chat-template vs without ablation
+- `norm_controlled_eval.py`: L2-normalize + standardize controls
+
+#### D.4 Main Experiments
+- `statistical_tests.py`: Bootstrap CIs + paired tests + McNemar's
+- `radial_distribution_check.py`: Multi-config inversion check
+- `vicuna_imbalance_test.py`: Imbalance + per-attack breakdown
+- `gcg_specific_test.py`: Cross-LLM GCG analysis
+- `hyperbolic_vs_euclidean_diverse.py`: 4-way comparison + cold-start
+- `anthropic_mean_token_probe.py`: Faithful Anthropic MTP reproduction
+- `prediction_agreement.py`: Per-example HPS vs C4 agreement
+
+#### D.5 Build / Pipeline
+- `build_diverse_benign.py`: Constructs diverse benign from 9 sources
+- `build_jbshield_attacks.py`: Parses JBShield repository data
+- `investigate_contamination.py`: Identifies and fixes 15-prompt overlap
+- `run_overnight_pipeline.sh`: Full 7-phase orchestration
+
+#### D.6 Visualization
+- `visualize_activation_space.py`: PCA, t-SNE, decision boundaries
+- `generate_meeting_charts.py`: Publication-quality bar charts
+
+### Appendix E: References
+
+[1] Cunningham et al. (2025). "Cost-Effective Constitutional Classifiers via Representation Re-use." Anthropic. https://alignment.anthropic.com/2025/cheap-monitors/
+
+[2] Bailey et al. (2025). "Obfuscated Activations Bypass LLM Latent-Space Defenses." ICLR 2025. arxiv:2412.09565
+
+[3] Zhang et al. (2025). "JBShield: Defending Large Language Models from Jailbreak Attacks through Activated Concept Analysis and Manipulation." USENIX Security 2025. arxiv:2502.07557
+
+[4] Yang et al. (2025). "Hyperbolic Fine-Tuning for Large Language Models" (HypLoRA). NeurIPS 2025. arxiv:2410.04010
+
+[5] Yang et al. (2025). "HELM: Hyperbolic Large Language Models via Mixture-of-Curvature Experts." NeurIPS 2025. arxiv:2505.24722
+
+[6] Sharma et al. (2025). "Constitutional Classifiers: Defending against Universal Jailbreaks across Thousands of Hours of Red Teaming." Anthropic. arxiv:2501.18837
+
+[7] Nasr et al. (2025). "The Attacker Moves Second: Stronger Adaptive Attacks Bypass Defenses Against LLM Jailbreaks and Prompt Injections." arxiv:2510.09023
+
+[8] Gupta & Jenner (2025). "Can Language Models Learn to Evade Latent-Space Monitors?" arxiv:2506.14261 (RL-Obfuscation)
+
+[9] Zou et al. (2023). "Universal and Transferable Adversarial Attacks on Aligned Language Models." arxiv:2307.15043 (GCG)
+
+[10] Bricken et al. (2024). "Features as Classifiers." Transformer Circuits Thread. https://transformer-circuits.pub/2024/features-as-classifiers/index.html
+
+[11] MacDiarmid et al. (2024). "Simple Probes Can Catch Sleeper Agents." Anthropic. https://www.anthropic.com/news/probes-catch-sleeper-agents
+
+---
+
+**End of Draft v1**
+
+**Total length:** ~22 pages of structured content plus appendices.
+**Status:** Ready for mentor review.
+**Suggested mentor reading priority:** Sections 4-7 (the substantive findings) first, then Section 1-3 (background) as needed.
+**Open question for mentor:** Should we proceed directly to Task B (adaptive attack experiments) before submission, or submit current draft to TMLR with adaptive attacks as future work?

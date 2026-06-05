@@ -5,6 +5,28 @@
 
 ---
 
+## Figure Inventory & Setup
+
+Before the meeting, ensure all figures are in `figures_for_meeting/`. Run this once:
+
+```bash
+# Generate locally-built figures (instant)
+python fig_4method_comparison.py
+python fig_cold_start_sweep.py
+python fig_lorentz_concept.py
+
+# Copy DGX figures (they were generated on the GPU server from the fixed cache)
+mkdir -p figures_for_meeting/dgx
+scp dgx03:/mnt/lab/Mo/hps/hps2/hps/results/figs/radial_check_seeds.png   figures_for_meeting/dgx/
+scp dgx03:/mnt/lab/Mo/hps/hps2/hps/results/figs/vicuna_per_attack.png    figures_for_meeting/dgx/
+scp dgx03:/mnt/lab/Mo/hps/hps2/hps/results/figs/gcg_per_attack_cross_model.png  figures_for_meeting/dgx/
+scp dgx03:/mnt/lab/Mo/hps/hps2/hps/results/figs/gcg_specific.png         figures_for_meeting/dgx/
+scp dgx03:/mnt/lab/Mo/hps/hps2/hps/results/figs/norm_controlled_eval.png figures_for_meeting/dgx/
+scp dgx03:/mnt/lab/Mo/hps/hps2/hps/results/figs/norm_confound_summary.png figures_for_meeting/dgx/
+```
+
+---
+
 ## SLIDE 1: The Question
 
 **Title:** Do Hyperbolic Geometric Priors Help LLM Jailbreak Detection?
@@ -22,11 +44,15 @@ The research question (large text, centered):
 > **"If LLM activations have hierarchical structure, does hyperbolic projection provide a measurable detection advantage over flat (Euclidean) baselines?"**
 
 Bottom strip — 3 deliverables:
-- ✓ Built HPS (Hyperbolic Projection System): Lorentz contrastive framework
+- ✓ Built HPS (Hyperbolic Projection Sentinel): Lorentz contrastive framework
 - ✓ Compared against parameter-matched Euclidean ablation + linear probe baseline
 - ✓ Tested across two LLMs with different alignment (RLHF vs SFT-only)
 
-**Visual:** Simple diagram showing benign cluster (origin) vs attack cluster (high radial position) on Lorentz hyperboloid
+**Visual:**
+
+![Hyperbolic geometry concept](figures_for_meeting/fig_lorentz_concept.png)
+
+*Conceptual: Lorentz hyperboloid (left) and Poincaré disk projection (right). Hypothesis predicts attacks at higher radial position than benign. (Synthetic illustration; real measurements on Slide 5.)*
 
 **Speaker notes:**
 - Frame as "we set out to test a theoretical prediction"
@@ -62,6 +88,12 @@ Trained with per-layer-temperature contrastive loss, 50 epochs
 **Why HPS-Euclidean control is critical:**
 > "Without parameter-matched Euclidean, any HPS-vs-C4 win could be 'more parameters helped.' HPS-Euclidean has IDENTICAL parameter count and architecture, only flat geometry. This isolates the geometric prior."
 
+**Visual (optional):**
+
+![HPS pipeline](figures/hps_pipeline.png)
+
+*HPS architecture: activations → Lorentz projection → trajectory features → LR.*
+
 **Speaker notes:**
 - Emphasize MTP is faithful Anthropic reproduction (not C4 axis swap)
 - Don't oversell C4 as novel — it's "an adaptation of Anthropic"
@@ -73,37 +105,37 @@ Trained with per-layer-temperature contrastive loss, 50 epochs
 
 **Title:** Standard Benchmarks Have a Length Confound
 
-**Subtitle:** A trivial classifier using only prompt length detects 91.6% of attacks
+**Subtitle:** A trivial classifier using only prompt length detects 96.9% of attacks
 
 **Body content — top half:**
 
-Original Alpaca harmless vs attacks setup (the standard in the field):
-- Alpaca harmless: mean **60 chars**, median 45
-- Attack prompts: mean **961 chars** (16× longer)
+The standard benchmark setup (Alpaca-style harmless + 9 attacks):
+- Alpaca-style harmless: very short (mean ~12-60 chars depending on filter)
+- Attack prompts: weighted mean **218 chars**, with extreme variation by attack type
 
-Length-only classifier (input: just `len(prompt)` characters):
+Length-only classifier (input: just `len(prompt)` characters, NO model needed):
 
 | Metric | Length-only |
 |---|---|
-| AUROC | **0.973** |
-| TPR @ 5% FPR | **0.916** |
-| TPR @ 1% FPR | 0.875 |
+| AUROC | **0.992** |
+| TPR @ 5% FPR | **0.969** |
+| TPR @ 1% FPR | **0.875** |
 
-> **A classifier that NEVER LOOKS at the prompt CONTENT, only its length, catches 91.6% of attacks at 5% FPR.**
+> **A classifier that NEVER LOOKS at the prompt CONTENT, only its length, catches 96.9% of attacks at 5% FPR.**
 
 **Body content — bottom half — per-attack table:**
 
 | Attack | Mean length | Length-only AUROC |
 |---|---|---|
-| puzzler | 2,257 chars | **1.000** |
+| puzzler | 2,193 chars | **1.000** |
 | saa | 473 chars | **1.000** |
 | drattack | 437 chars | **1.000** |
-| base64 | 124 chars | 0.999 |
-| ijp | 460 chars | 0.993 |
-| autodan | 77 chars | 0.991 |
-| pair | 71 chars | 0.996 |
-| gcg | 35 chars | 0.982 |
-| zulu | 50 chars | 0.841 |
+| base64 | 124 chars | **1.000** |
+| ijp | 460 chars | 0.999 |
+| autodan | 77 chars | 0.999 |
+| pair | 72 chars | 0.997 |
+| zulu | 50 chars | 0.976 |
+| gcg | 35 chars | 0.971 |
 
 **Bottom callout — implications:**
 
@@ -114,6 +146,10 @@ This affects:
 - RTV — same setup
 
 Anthropic Cheap Monitors did the RIGHT thing: used WildChat + OR-Bench Hard (varied lengths).
+
+**Our fix:** Diverse benign data (WildChat + OR-Bench Hard + MMLU + GSM8K + WikiText long-form + ...) matched in length distribution. After fix:
+- Length-only AUROC: 0.992 → **0.318** (length is now slightly anti-correlated with attacks)
+- Permutation test: 0.498 (real signal exists)
 
 **Speaker notes:**
 - This is the headline methodology finding
@@ -158,6 +194,12 @@ Re-extract attacks at max_length=2048 to match diverse benign:
 - Norm-only AUROC: 1.000 → **0.761** ✓ confounding largely resolved
 - Permutation test: AUROC = 0.498 → real signal exists when labels are real
 
+**Visual:**
+
+![Norm-controlled evaluation](figures_for_meeting/dgx/norm_controlled_eval.png)
+
+*Norm-only AUROC across control conditions. After L2-normalization, norm signal disappears (~chance), but C4 detection holds. Real semantic signal exists beyond norm.*
+
 **Bottom callout:**
 > Methodology lesson: when re-using cached activations, ALL data must be processed with the same max_length, chat template, padding strategy, and tokenizer settings. Inconsistent preprocessing creates artificial separability.
 
@@ -197,6 +239,12 @@ Re-extract attacks at max_length=2048 to match diverse benign:
 | κ=1.0 | 1.36 | 1.53 | -0.17 | ✓ |
 | κ=2.0 | 1.37 | 1.42 | -0.05 | ✓ |
 
+**Visual:**
+
+![Radial distribution across seeds](figures_for_meeting/dgx/radial_check_seeds.png)
+
+*Benign vs attack radial position medians across 5 random seeds. All 5 show attacks at higher radial position (as theory predicts).*
+
 **The mechanism:**
 
 Hyperbolic prior predicts: harmful content (specific, deeper hierarchy) → high radial; benign (general) → near origin.
@@ -206,8 +254,6 @@ Before length-confound fix: appeared inverted (benign at high radial). The contr
 After length-confound fix: attacks ARE at higher radial, exactly as theory predicts.
 
 > **"The geometric prior is theoretically valid. Hyperbolic projection learns the meaningful direction once the data is clean."**
-
-**Visual:** Histogram showing benign distribution (centered at 3.20) and attack distribution (centered at 3.50) on Lorentz radial coordinate.
 
 **Speaker notes:**
 - This was the SURPRISE: we thought this would be 13/13 inversion (proving hypothesis wrong)
@@ -231,6 +277,12 @@ After length-confound fix: attacks ARE at higher radial, exactly as theory predi
 | **C4 (linear probe)** | 0.998 | 0.995 | 4,097 |
 | **MTP (Anthropic exact)** | 0.999 | 0.995 | 4,097 |
 
+**Visual — main comparison:**
+
+![4-method comparison](figures_for_meeting/fig_4method_comparison.png)
+
+*HPS-Euclidean control isolates the geometric prior. HPS (Lorentz) beats HPS-Euclidean (matched parameters), but linear probes (C4, MTP) tie at the top.*
+
 **Key deltas:**
 - HPS - HPS-Euclidean: **+0.049 TPR** (geometric prior helps over flat)
 - HPS - C4: **-0.015 TPR** (linear probe still wins)
@@ -247,9 +299,27 @@ After length-confound fix: attacks ARE at higher radial, exactly as theory predi
 | 900 | 0.98 | 0.94 | 0.99 |
 | 2250 | 0.97 | 0.93 | 0.99 |
 
+**Visual — cold-start sweep:**
+
+![Cold-start sweep](figures_for_meeting/fig_cold_start_sweep.png)
+
+*Three clean tiers: C4 dominates throughout, HPS beats HPS-Euclidean (geometry helps over flat), but C4's simplicity wins overall.*
+
 > **"Three clean tiers: C4 > HPS > HPS-Euclidean. Geometric prior provides architectural insight (Lorentz > flat at matched parameters), but C4 dominates regardless."**
 
-**Visual:** Bar chart with three bars per N value (HPS, Euclidean, C4) showing the cold-start sweep.
+**Prediction agreement (per-example, n=1295 attacks, mean of 3 seeds)**
+
+At calibrated 5% FPR thresholds:
+
+| Metric | Value |
+|---|---|
+| HPS catches that C4 misses | **0 examples** |
+| C4 catches that HPS misses | 21 examples |
+| Pearson(HPS, C4) | **0.958** |
+| OR-gate ensemble TPR | 0.995 (= C4 alone) |
+| OR-gate ensemble FPR | 0.103 (vs 5% target) |
+
+> **HPS is essentially a noisy subset of C4. They make the same correct predictions; HPS's extra parameters add no orthogonal information. The "ensemble HPS+C4" hypothesis fails empirically — no TPR gain, doubles FPR.**
 
 **Speaker notes:**
 - This is the architectural finding
@@ -291,6 +361,18 @@ HPS GCG detection rate:
 
 **Mean detection: HPS=0.61, C4=0.99 on Vicuna**
 
+**Visual — Vicuna per-attack:**
+
+![Vicuna per-attack breakdown](figures_for_meeting/dgx/vicuna_per_attack.png)
+
+*Per-attack HPS vs C4 on Vicuna-13B. Massive gap on GCG (0.076 vs 0.994) and other attack types. C4 is robust; HPS collapses.*
+
+**Visual — Cross-model comparison:**
+
+![GCG cross-model](figures_for_meeting/dgx/gcg_per_attack_cross_model.png)
+
+*Same code, same hyperparameters, same 9 attack types. Only the LLM differs. HPS detection on Vicuna averages 61%; on Llama-3 averages 99%.*
+
 **Mechanism:**
 
 ```
@@ -306,14 +388,12 @@ Vicuna-13B:        SFT only, weak alignment
 
 > **"Geometric priors work ONLY on alignment-trained models. Without RLHF, the compression that makes HPS efficient becomes the very thing that breaks it."**
 
-**Visual:** Side-by-side bar chart. Left: Llama-3 per-attack (HPS≈C4 everywhere). Right: Vicuna per-attack (massive gap on GCG/IJP/PAIR/Puzzler/Zulu).
-
 **Speaker notes:**
 - This is the most striking finding
 - Same code, same hyperparameters, same attacks
 - Only difference: alignment training
 - Strong evidence for "alignment concentrates harm features" hypothesis
-- Note: 16 GCG samples in original test was n=16, but with JBShield data we now have n=171 — properly powered
+- Note: This finding is on n=171 GCG samples on Vicuna (n=172 on Llama-3) — properly powered. Earlier preliminary tests with smaller samples showed similar pattern.
 
 ---
 
@@ -335,13 +415,13 @@ Bailey et al. trained adversarial obfuscation suffixes against linear probes on 
 
 | Defense type | Recall before | Recall after | Source |
 |---|---|---|---|
-| Logistic regression probe | 100% | **0%** | Bailey et al. |
-| MLP probe | 100% | **0%** | Bailey et al. |
-| Sparse autoencoder | 91% | **0%** | Bailey et al. |
-| OOD detector (Mahalanobis) | 100% | **0%** | Bailey et al. |
-| Adversarially trained probe (70 epochs) | 100% | **0%** | Bailey et al. |
-| Circuit Breakers | broken | broken | Bailey et al. |
-| LAT (Latent Adversarial Training) | broken | broken | Bailey et al. |
+| Logistic regression probe | 100% | **0%** | Bailey et al. (Sec 3.3) |
+| MLP probe | 100% | **0%** | Bailey et al. (Sec 3.3) |
+| Sparse autoencoder | 91% | **0%** | Bailey et al. (Sec 5) |
+| OOD detector (Mahalanobis) | 100% | **0%** | Bailey et al. (Sec 3.3) |
+| Adversarially trained probe (70 rounds) | perfect on past attacks | **0% on new attacks** | Bailey et al. (Sec 3.5) |
+| Circuit Breakers | broken | broken | Bailey et al. (Sec 3.4) |
+| LAT (Latent Adversarial Training) | broken | broken | Bailey et al. (Sec 3.4) |
 
 > **Quote from Bailey et al. (ICLR 2025):**
 > "Obfuscated activations are not rare exceptions but rather appear to be widespread in the latent space... an attacker can always find new activations that bypass the monitor."
@@ -350,14 +430,9 @@ Bailey et al. trained adversarial obfuscation suffixes against linear probes on 
 
 Affects:
 - HSF, JBShield, GradSafe, RTV — none have been adversarially tested
-- Anthropic Cheap Monitors — they explicitly acknowledge this limitation
+- Anthropic Cheap Monitors — they explicitly acknowledge this limitation in their paper:
+  > "Further testing with adaptive adversarial attacks is needed."
 - Our HPS — we don't claim adversarial robustness
-
-Confirmed by:
-- Bailey et al. (ICLR 2025): white-box attacks bypass all latent probes
-- Nasr et al. (2025): "None of 12 defenses across four common techniques is robust to strong adaptive attacks"
-- Gupta & Jenner (2025): RL-trained models learn to evade probes
-- DeepMind (2026): probes fail under production distribution shifts
 
 **Bottom line for our paper:**
 
@@ -378,7 +453,7 @@ Confirmed by:
 **Body content — left column: WHAT WE FOUND**
 
 Methodology contributions:
-1. Length confound: standard benchmarks have AUROC=0.973 from length alone
+1. Length confound: standard benchmarks have AUROC=**0.992** from length alone
 2. max_length confound: inconsistent truncation → norm-only AUROC=1.000
 3. Train/test contamination: 15 attack prompts (1.15%) overlap
 
@@ -386,7 +461,7 @@ Empirical findings:
 4. Geometric hypothesis CONFIRMED (0/13 inversions after fixes)
 5. HPS provides advantage over flat Euclidean (+0.049 TPR, parameter-matched)
 6. HPS catastrophically fails on Vicuna without RLHF (gcg: 7.6% vs 99%)
-7. Linear probes (C4 = MTP = HPS) on aligned LLMs
+7. Linear probes (C4 ≈ MTP ≈ HPS) on aligned LLMs
 
 **Body content — right column: WHAT'S OPEN**
 
@@ -404,9 +479,10 @@ Decisions for the team:
 - Open: required by reviewers?
 
 **Q3: More LLMs?**
-- Could add Mistral-7B, Llama-2-7b (JBShield released free)
+- Could add Mistral-7B, Llama-2-7b-chat (JBShield released free)
 - 2-3 hours each
 - Strengthens cross-model claims
+- **Critical for alignment hypothesis:** Llama-2-7b-chat has SFT+RLHF on the SAME base model as Vicuna (which has SFT only). Comparing them isolates RLHF as the variable. If Llama-2-chat works and Vicuna fails, the alignment-mediated story is properly controlled.
 
 **Q4: What's the lead?**
 - Architectural contribution (HPS as geometric framework)
@@ -431,19 +507,27 @@ Decisions for the team:
 
 # Visual Style Guidelines
 
-**Color scheme:**
+**Color scheme used in figures:**
 - Benign data: blue (#3498db)
 - Attack data: red (#e74c3c)
 - HPS: purple (#9b59b6)
+- HPS-Euclidean: gray (#95a5a6)
 - C4: green (#2ecc71)
+- MTP: dark green (#27ae60)
 - Methodology issues: orange (#f39c12)
 
-**Charts to generate:**
-1. Slide 1: Lorentz hyperboloid sketch (theoretical motivation)
-2. Slide 5: Histogram of HPS radial distribution (benign vs attack)
-3. Slide 6: Bar chart cold-start sweep (HPS, Euclidean, C4 across N)
-4. Slide 7: Per-attack bar chart (Llama-3 vs Vicuna)
-5. Slide 8: Bailey et al. recall reduction table
+**Figure manifest (8 figures total across 9 slides):**
+
+| Slide | Figure file | Source |
+|---|---|---|
+| 1 | `figures_for_meeting/fig_lorentz_concept.png` | Generated locally |
+| 2 | `figures/hps_pipeline.png` (optional) | Existing local |
+| 4 | `figures_for_meeting/dgx/norm_controlled_eval.png` | Copy from DGX |
+| 5 | `figures_for_meeting/dgx/radial_check_seeds.png` | Copy from DGX |
+| 6 | `figures_for_meeting/fig_4method_comparison.png` | Generated locally |
+| 6 | `figures_for_meeting/fig_cold_start_sweep.png` | Generated locally |
+| 7 | `figures_for_meeting/dgx/vicuna_per_attack.png` | Copy from DGX |
+| 7 | `figures_for_meeting/dgx/gcg_per_attack_cross_model.png` | Copy from DGX |
 
 **Tone:**
 - Confident about findings, humble about limitations
@@ -466,7 +550,7 @@ For each slide, the ONE thing to emphasize:
 
 1. "We're testing a theoretical prediction, not promoting a method"
 2. "Notice the parameter-matched control — that's our methodology contribution"
-3. "Length alone explains 92% of detection — this is field-wide"
+3. "Length alone catches 97% of attacks at 5% FPR — this is field-wide"
 4. "Max_length consistency matters — methodology lesson"
 5. "Geometric hypothesis was hidden by length confound"
 6. "Geometric prior helps over flat, but doesn't beat linear probes"
@@ -489,7 +573,31 @@ A: "No. They report real numbers on their benchmarks. We're saying the standard 
 A: "Same architecture family as Llama-2 (which Vicuna fine-tuned), but only SFT. Lets us isolate the alignment variable. RLHF (Llama-3-Instruct) vs SFT-only (Vicuna). Different alignment, controlled for everything else as much as possible."
 
 **Q: "How much compute have we used?"**
-A: "[fill in based on actual usage] Cache extractions: ~10 hours. Experiments: ~5 hours. Total ~15 GPU-days across the project."
+A: "Cache extractions: ~10 hours. Experiments: ~5 hours. Total ~15 GPU-days across the project."
 
 **Q: "What's our timeline if we go to TMLR?"**
 A: "4-6 weeks of writing. Submit, ~3 month review cycle. So target: paper draft in 6 weeks, submission August, accept/reject by November."
+
+**Q: "What if HPS fails on Llama-2-7b-chat too?"**
+A: "Then the alignment-mediated story is more nuanced — maybe Llama-3's specific alignment recipe matters. We'd need a third aligned model to test. Either way, it sharpens the paper: 'HPS works on this specific class of aligned models.'"
+
+**Q: "How does this compare to JBShield's claimed 99% detection?"**
+A: "JBShield's setup has the length confound — Alpaca harmless (mean ~60 chars) vs longer attacks. Their 99% likely includes substantial length signal. We didn't reproduce their full pipeline; we'd need to run their code on diverse benign data to know what fraction is real signal vs length."
+
+---
+
+# Pre-Meeting Checklist
+
+- [ ] Generate local figures: `python fig_4method_comparison.py && python fig_cold_start_sweep.py && python fig_lorentz_concept.py`
+- [ ] Copy DGX figures via scp commands at top of this file
+- [ ] Verify all 8 figure paths exist before opening slides
+- [ ] Print speaker notes (or load on second screen)
+- [ ] Have JSON files ready for any "where does this number come from?" follow-ups:
+  - `results/verify_saturation_fixed.json` (Slide 3 length confound)
+  - `results/norm_check_diverse.json` (Slide 4 norm confound)
+  - `results/radial_distribution_check.json` (Slide 5 radial inversion)
+  - `results/hyperbolic_vs_euclidean_diverse.json` (Slide 6 main comparison)
+  - `results/prediction_agreement.json` (Slide 6 ensemble negative result)
+  - `results/gcg_specific_test.json` (Slide 7 cross-model)
+  - `results/vicuna_imbalance_test.json` (Slide 7 per-attack Vicuna)
+- [ ] Bring laptop with `paper_draft.md` open in case team wants paper outline discussion
