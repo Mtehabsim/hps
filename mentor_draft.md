@@ -326,6 +326,8 @@ The most striking finding comes from comparing HPS performance across two LLMs: 
 
 Same architecture, same hyperparameters, same code as Llama-3 — but different LLM. Per-attack detection rates on Vicuna-13B-v1.5 test set:
 
+![Vicuna-13B per-attack: HPS vs C4](results/figs/meeting/slide7_vicuna_per_attack.png)
+
 | Attack | N | HPS rate | C4 rate | gap (C4 - HPS) |
 |---|---|---|---|---|
 | **gcg** | 171 | **0.076** | 0.994 | **+0.92** ← catastrophic |

@@ -403,15 +403,13 @@ def run_adaptive_attack(model, tokenizer, probe, layers,
     """
     embed = model.get_input_embeddings()
     embed_dim = embed.weight.shape[1]
+    model_dtype = next(model.parameters()).dtype  # e.g. fp16
 
-    # Initialize suffix near zero (Bailey et al. style)
-    suffix = nn.Parameter(torch.randn(suffix_length, embed_dim, device=DEVICE) * 0.001)
+    # Initialize suffix in FP32 for stable Adam optimization;
+    # cast to model dtype at the forward-pass boundary.
+    suffix = nn.Parameter(torch.randn(suffix_length, embed_dim,
+                                       device=DEVICE, dtype=torch.float32) * 0.001)
     optimizer = torch.optim.Adam([suffix], lr=lr)
-
-    # Tokenize target once
-    target_ids = tokenizer(harmful_target, return_tensors="pt",
-                            add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
-    target_embeds_const = embed(target_ids).detach()  # do NOT optimize target embeds
 
     log = []
     t_start = time.time()
@@ -426,41 +424,65 @@ def run_adaptive_attack(model, tokenizer, probe, layers,
 
         total_beh, total_obf = 0.0, 0.0
         for query in batch_queries:
-            # Tokenize query
-            q_ids = tokenizer(query, return_tensors="pt",
-                               add_special_tokens=True).input_ids.to(DEVICE).squeeze(0)
-            q_embeds = embed(q_ids).detach()
+            # Build chat-templated input with placeholder for suffix.
+            # We use a sentinel string and split, so we can splice the
+            # suffix embeddings into the right position.
+            sentinel = " __ADV_SUFFIX_SENTINEL__"
+            messages = [{"role": "user", "content": query + sentinel}]
+            templated = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True)
+            if sentinel not in templated:
+                raise RuntimeError(f"Sentinel not found after templating: {templated[:200]!r}")
+            pre_text, post_text = templated.split(sentinel, 1)
 
-            # Build [query, suffix, target]
-            full_embeds = torch.cat([q_embeds, suffix, target_embeds_const], dim=0).unsqueeze(0)
+            # Tokenize the three pieces (pre, target, post)
+            pre_ids = tokenizer(pre_text, return_tensors="pt",
+                                 add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
+            post_ids = tokenizer(post_text, return_tensors="pt",
+                                  add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
+            target_ids = tokenizer(harmful_target, return_tensors="pt",
+                                    add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
+
+            pre_embeds = embed(pre_ids).detach()           # (T_pre, d), model dtype
+            post_embeds = embed(post_ids).detach()         # (T_post, d), model dtype
+            target_embeds = embed(target_ids).detach()     # (T_target, d), model dtype
+
+            # Cast suffix to model dtype (differentiable)
+            suffix_md = suffix.to(model_dtype)
+
+            full_embeds = torch.cat([pre_embeds, suffix_md, post_embeds, target_embeds],
+                                     dim=0).unsqueeze(0)
+
+            T_pre = pre_embeds.shape[0]
+            T_s = suffix.shape[0]
+            T_post = post_embeds.shape[0]
+            T_t = target_embeds.shape[0]
 
             # Forward pass with hidden states
             outputs = model(inputs_embeds=full_embeds, output_hidden_states=True,
                              return_dict=True, use_cache=False)
-            T_q = q_embeds.shape[0]
-            T_s = suffix.shape[0]
-            T_t = target_embeds_const.shape[0]
 
-            # ---- Behavior loss: predict target tokens from query+suffix ----
-            # Logits at position [T_q+T_s-1 .. T_q+T_s+T_t-2] predict target_ids[0..T_t-1]
+            # ---- Behavior loss: predict target tokens from prefix ----
+            # Logits at positions [T_pre+T_s+T_post-1 .. ... +T_t-2] predict target_ids
+            input_len = T_pre + T_s + T_post
             logits = outputs.logits.squeeze(0)
-            target_logits = logits[T_q + T_s - 1: T_q + T_s + T_t - 1]
+            target_logits = logits[input_len - 1: input_len - 1 + T_t]
             log_probs = F.log_softmax(target_logits, dim=-1)
             token_lp = log_probs.gather(-1, target_ids.unsqueeze(-1)).squeeze(-1)
             behavior_loss = -token_lp.mean()
 
-            # ---- Obfuscation loss: probe score on query+suffix activations ----
-            # Last "input" token is at position T_q + T_s - 1
-            last_pos = T_q + T_s - 1
+            # ---- Obfuscation loss: probe score at last INPUT token ----
+            # Last input token = position (input_len - 1)
+            last_pos = input_len - 1
             layer_acts = torch.stack([
                 outputs.hidden_states[l + 1][0, last_pos]  # +1 because [0] is embeddings
                 for l in layers
             ]).unsqueeze(1)  # (n_layers, 1, hidden_dim)
-            probe_logit = probe(layer_acts).squeeze()  # log-odds (positive = attack)
+            # Cast acts to fp32 for the probe (probe is fp32, more numerically stable)
+            layer_acts_fp32 = layer_acts.float()
+            probe_logit = probe(layer_acts_fp32).squeeze()  # log-odds (positive = attack)
 
-            # We want probe to think it's benign (low score)
-            # Use logit directly (lower = more benign in our LR convention)
-            obf_loss = probe_logit
+            obf_loss = probe_logit  # we want this LOW (looks benign)
 
             loss = behavior_loss + lambda_obf * obf_loss
             (loss / len(batch_queries)).backward()
@@ -489,30 +511,64 @@ def run_adaptive_attack(model, tokenizer, probe, layers,
 # ============================================================
 
 def evaluate_attack(model, tokenizer, probe, layers,
-                     queries, suffix=None, n_max=None):
-    """Compute probe scores on queries, optionally with suffix appended."""
+                     queries, suffix=None, n_max=None, is_chat=True):
+    """
+    Compute probe scores on queries.
+
+    is_chat: if True, applies chat template (matches probe's training distribution).
+    suffix:  if not None, append this embedding suffix into the user content position.
+    """
     embed = model.get_input_embeddings()
+    model_dtype = next(model.parameters()).dtype
     scores = []
     if n_max:
         queries = queries[:n_max]
+
     with torch.no_grad():
         for query in queries:
-            q_ids = tokenizer(query, return_tensors="pt",
-                               add_special_tokens=True).input_ids.to(DEVICE).squeeze(0)
-            q_embeds = embed(q_ids)
-            if suffix is not None:
-                full_embeds = torch.cat([q_embeds, suffix], dim=0).unsqueeze(0)
+            if is_chat:
+                if suffix is not None:
+                    sentinel = " __ADV_SUFFIX_SENTINEL__"
+                    messages = [{"role": "user", "content": query + sentinel}]
+                    templated = tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True)
+                    pre_text, post_text = templated.split(sentinel, 1)
+                    pre_ids = tokenizer(pre_text, return_tensors="pt",
+                                         add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
+                    post_ids = tokenizer(post_text, return_tensors="pt",
+                                          add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
+                    pre_embeds = embed(pre_ids)
+                    post_embeds = embed(post_ids)
+                    suffix_md = suffix.to(model_dtype)
+                    full_embeds = torch.cat([pre_embeds, suffix_md, post_embeds], dim=0).unsqueeze(0)
+                else:
+                    messages = [{"role": "user", "content": query}]
+                    templated = tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True)
+                    ids = tokenizer(templated, return_tensors="pt",
+                                     add_special_tokens=False).input_ids.to(DEVICE)
+                    full_embeds = embed(ids).squeeze(0).unsqueeze(0)
             else:
-                full_embeds = q_embeds.unsqueeze(0)
+                # Raw, no chat template
+                q_ids = tokenizer(query, return_tensors="pt",
+                                   add_special_tokens=True).input_ids.to(DEVICE).squeeze(0)
+                q_embeds = embed(q_ids)
+                if suffix is not None:
+                    suffix_md = suffix.to(model_dtype)
+                    full_embeds = torch.cat([q_embeds, suffix_md], dim=0).unsqueeze(0)
+                else:
+                    full_embeds = q_embeds.unsqueeze(0)
+
             outputs = model(inputs_embeds=full_embeds, output_hidden_states=True,
                              return_dict=True, use_cache=False)
             last_pos = full_embeds.shape[1] - 1
             layer_acts = torch.stack([
                 outputs.hidden_states[l + 1][0, last_pos]
                 for l in layers
-            ]).unsqueeze(1)
+            ]).unsqueeze(1).float()  # cast to fp32 for probe
             probe_logit = probe(layer_acts).squeeze().item()
             scores.append(probe_logit)
+
     return np.array(scores)
 
 
@@ -608,8 +664,7 @@ def main():
         param.requires_grad_(False)
     print(f"    Loaded. Hidden size: {model.config.hidden_size}, layers: {model.config.num_hidden_layers}")
 
-    # Cast probe to model dtype for matmul compatibility
-    probe = probe.to(dtype)
+    # Probe stays in fp32 for numerical stability; we cast activations to fp32 at the boundary.
 
     # ---- Split harmful queries ----
     np.random.seed(42)
