@@ -25,7 +25,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-results/adaptive_attacks}"
 
 # Default attack hyperparameters (Bailey-equivalent settings)
 N_TRAIN="${N_TRAIN:-20}"           # Harmful queries used to train suffix
-N_EVAL="${N_EVAL:-30}"             # Harmful queries held out for eval
+N_EVAL="${N_EVAL:-100}"            # Harmful queries held out for eval (was 30, expanded)
 STEPS="${STEPS:-2048}"             # Adam optimization steps
 SUFFIX_LEN="${SUFFIX_LEN:-16}"     # Token length of universal suffix
 LAMBDA_OBF="${LAMBDA_OBF:-1.0}"    # Weight on obfuscation loss
@@ -202,6 +202,123 @@ else
 fi
 
 # ============================================================
+#  PHASE 5: HPS-Euclidean direct attack (~25 min)
+# ============================================================
+if [ "${SKIP_PHASE_5:-0}" -eq 0 ]; then
+  echo "─────────────────────────────────────────────────────────────"
+  echo " PHASE 5: HPS-Euclidean direct attack (geometric ablation)"
+  echo " Started: $(date)"
+  echo "─────────────────────────────────────────────────────────────"
+  python adaptive_attack.py \
+      --defender hps_euc \
+      --model_name "$MODEL" \
+      --cache "$CACHE" \
+      --layers $LAYERS \
+      --n_train_queries $N_TRAIN \
+      --n_eval_queries $N_EVAL \
+      --steps $STEPS \
+      --suffix_length $SUFFIX_LEN \
+      --lambda_obf $LAMBDA_OBF \
+      --target_fpr $TARGET_FPR \
+      --suffix_save "$OUTPUT_DIR/suffix_hps_euc.pt" \
+      --output "$OUTPUT_DIR/attack_hps_euc.json" \
+      2>&1 | tee "$OUTPUT_DIR/log_phase5_hps_euc.txt"
+  ELAPSED=$(( ($(date +%s) - START) / 60 ))
+  echo "  Phase 5 done at $ELAPSED min from start"
+  echo ""
+else
+  echo "[SKIP] PHASE 5 disabled by SKIP_PHASE_5=1"
+fi
+
+# ============================================================
+#  PHASE 6: Ensemble (HPS+C4) adaptive attack (~30 min)
+# ============================================================
+if [ "${SKIP_PHASE_6:-0}" -eq 0 ]; then
+  echo "─────────────────────────────────────────────────────────────"
+  echo " PHASE 6: Ensemble (HPS+C4 max-aggregation) adaptive attack"
+  echo " Started: $(date)"
+  echo " This tests whether the transfer asymmetry survives an"
+  echo " adaptive ensemble attack (Bailey et al. Section 3.5 setup)."
+  echo "─────────────────────────────────────────────────────────────"
+  python adaptive_attack.py \
+      --defender ensemble \
+      --model_name "$MODEL" \
+      --cache "$CACHE" \
+      --layers $LAYERS \
+      --n_train_queries $N_TRAIN \
+      --n_eval_queries $N_EVAL \
+      --steps $STEPS \
+      --suffix_length $SUFFIX_LEN \
+      --lambda_obf $LAMBDA_OBF \
+      --target_fpr $TARGET_FPR \
+      --suffix_save "$OUTPUT_DIR/suffix_ensemble.pt" \
+      --output "$OUTPUT_DIR/attack_ensemble.json" \
+      2>&1 | tee "$OUTPUT_DIR/log_phase6_ensemble.txt"
+  ELAPSED=$(( ($(date +%s) - START) / 60 ))
+  echo "  Phase 6 done at $ELAPSED min from start"
+  echo ""
+else
+  echo "[SKIP] PHASE 6 disabled by SKIP_PHASE_6=1"
+fi
+
+# ============================================================
+#  PHASE 7: Re-evaluate prior suffixes with n=100 eval set
+# ============================================================
+if [ "${SKIP_PHASE_7:-0}" -eq 0 ]; then
+  echo "─────────────────────────────────────────────────────────────"
+  echo " PHASE 7: Re-evaluate suffixes with n=100 held-out queries"
+  echo " (Strengthens statistical confidence in transfer asymmetry.)"
+  echo " Started: $(date)"
+  echo "─────────────────────────────────────────────────────────────"
+
+  if [ -f "$OUTPUT_DIR/suffix_c4.pt" ]; then
+    echo "  7a: C4 suffix → C4 (n=100)"
+    python adaptive_attack.py \
+        --defender c4 --eval_only \
+        --model_name "$MODEL" --cache "$CACHE" --layers $LAYERS \
+        --n_eval_queries 100 --target_fpr $TARGET_FPR \
+        --suffix_load "$OUTPUT_DIR/suffix_c4.pt" \
+        --output "$OUTPUT_DIR/eval_n100_c4_on_c4.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase7a.txt"
+
+    echo "  7b: C4 suffix → HPS (n=100)"
+    python adaptive_attack.py \
+        --defender hps --eval_only \
+        --model_name "$MODEL" --cache "$CACHE" --layers $LAYERS \
+        --n_eval_queries 100 --target_fpr $TARGET_FPR \
+        --suffix_load "$OUTPUT_DIR/suffix_c4.pt" \
+        --output "$OUTPUT_DIR/eval_n100_c4_on_hps.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase7b.txt"
+  fi
+
+  if [ -f "$OUTPUT_DIR/suffix_hps.pt" ]; then
+    echo "  7c: HPS suffix → HPS (n=100)"
+    python adaptive_attack.py \
+        --defender hps --eval_only \
+        --model_name "$MODEL" --cache "$CACHE" --layers $LAYERS \
+        --n_eval_queries 100 --target_fpr $TARGET_FPR \
+        --suffix_load "$OUTPUT_DIR/suffix_hps.pt" \
+        --output "$OUTPUT_DIR/eval_n100_hps_on_hps.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase7c.txt"
+
+    echo "  7d: HPS suffix → C4 (n=100)"
+    python adaptive_attack.py \
+        --defender c4 --eval_only \
+        --model_name "$MODEL" --cache "$CACHE" --layers $LAYERS \
+        --n_eval_queries 100 --target_fpr $TARGET_FPR \
+        --suffix_load "$OUTPUT_DIR/suffix_hps.pt" \
+        --output "$OUTPUT_DIR/eval_n100_hps_on_c4.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase7d.txt"
+  fi
+
+  ELAPSED=$(( ($(date +%s) - START) / 60 ))
+  echo "  Phase 7 done at $ELAPSED min from start"
+  echo ""
+else
+  echo "[SKIP] PHASE 7 disabled by SKIP_PHASE_7=1"
+fi
+
+# ============================================================
 #  SUMMARY
 # ============================================================
 TOTAL_MIN=$(( ($(date +%s) - START) / 60 ))
@@ -219,7 +336,10 @@ echo "  Suffix files:"
 ls -la "$OUTPUT_DIR"/*.pt 2>/dev/null || echo "  (no suffix files yet)"
 echo ""
 echo "  Quick summary:"
-for f in "$OUTPUT_DIR"/attack_c4.json "$OUTPUT_DIR"/attack_hps.json; do
+for f in "$OUTPUT_DIR"/attack_c4.json \
+         "$OUTPUT_DIR"/attack_hps.json \
+         "$OUTPUT_DIR"/attack_hps_euc.json \
+         "$OUTPUT_DIR"/attack_ensemble.json; do
   if [ -f "$f" ]; then
     echo "  --- $(basename $f) ---"
     python3 -c "
@@ -231,8 +351,24 @@ print(f\"    Recall drop:     {d['recall_reduction']:.3f}\")
 "
   fi
 done
+
 echo ""
-echo "  Headline question: Did HPS hold up better than C4?"
-echo "    Compare 'recall_reduction' between attack_c4.json and attack_hps.json."
-echo "    If HPS drop < C4 drop: HPS has some adversarial robustness."
-echo "    If HPS drop ≥ C4 drop: HPS confirmed broken (Bailey field-wide finding extends)."
+echo "  Transfer evaluations (n=100, Phase 7):"
+for f in "$OUTPUT_DIR"/eval_n100_*.json; do
+  if [ -f "$f" ]; then
+    name=$(basename $f .json)
+    python3 -c "
+import json
+d = json.load(open('$f'))
+print(f\"    {'$name':30s} adaptive_recall = {d['adaptive_attack']['recall_at_fpr']:.3f}\")
+"
+  fi
+done
+
+echo ""
+echo "  Headline questions:"
+echo "    1. Does HPS-Euclidean break differently from HPS? → see attack_hps_euc.json"
+echo "    2. Does the ensemble attack survive? → see attack_ensemble.json"
+echo "       If ensemble adaptive_recall ≈ 0 → transfer asymmetry doesn't help adaptively (Bailey confirmed)"
+echo "       If ensemble adaptive_recall > 0 → defense diversity has practical value"
+echo "    3. Does the transfer asymmetry hold at n=100? → compare eval_n100_*.json"
