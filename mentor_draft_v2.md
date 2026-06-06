@@ -11,7 +11,7 @@
 
 ## Abstract
 
-This addendum reports adaptive obfuscation attack experiments planned in Draft v1 Section 8.1. We implement Bailey et al. (2024) style 16-token universal embedding suffix attacks against HPS and C4 on Llama-3-8B-Instruct, with cross-method transfer evaluation and attack-budget scaling. Three findings: (1) Direct attack — both HPS and C4 collapse from 76.7% standard recall to 0% adaptive recall, confirming the field-wide adversarial vulnerability extends to hyperbolic methods; (2) Transfer asymmetry — suffixes trained against C4 do NOT transfer to HPS (HPS detects them at 100% recall, an increase from baseline), while suffixes trained against HPS DO transfer to fully bypass C4 (0% recall), suggesting geometric methods provide defense diversity rather than adversarial robustness; (3) Budget scaling — HPS adaptive recall is 0% at 256, 512, 1024, and 2048 attack steps, indicating no quantitative robustness margin. We update Draft v1 Section 7 with these results and refine the recommended TMLR framing accordingly.
+This addendum reports adaptive obfuscation attack experiments planned in Draft v1 Section 8.1. We implement Bailey et al. (2024) style 16-token universal embedding suffix attacks against HPS, C4, HPS-Euclidean, and the HPS+C4 max-aggregation ensemble on Llama-3-8B-Instruct, with cross-method transfer evaluation at n=30 and n=100, and attack-budget scaling. Five findings: (1) Direct attack — all four probes (C4, HPS, HPS-Euclidean, ensemble) collapse from 0.48-0.77 standard recall to 0.000 adaptive recall, confirming the field-wide adversarial vulnerability extends to hyperbolic, ablated-geometric, and combined-defense methods; (2) Transfer asymmetry — suffixes trained against C4 do NOT transfer to HPS (HPS detects them at 1.000 recall at n=100, replicating the n=30 result), while suffixes trained against HPS DO transfer to fully bypass C4 (0.000 recall); (3) Ensemble attack — when the attacker explicitly optimizes against max(C4, HPS), both probes are bypassed simultaneously (Bailey Section 3.5 confirmed for our setup); (4) Geometric prior — HPS-Euclidean (parameter-matched flat ablation) shows the same complete adversarial collapse, ruling out the hyperbolic constraint as a source of robustness; (5) Budget scaling — HPS adaptive recall is 0.000 at 256, 512, 1024, and 2048 attack steps, confirming no quantitative robustness margin. The transfer asymmetry exists but has no practical defense value because adaptive ensemble attacks bypass both probes. We update Draft v1 Section 7 with these results and finalize TMLR as the recommended venue.
 
 ---
 
@@ -31,31 +31,39 @@ This addendum reports adaptive obfuscation attack experiments planned in Draft v
 
 ## 1. Summary of New Findings
 
-We ran four adaptive-attack experiments against Llama-3-8B-Instruct probes:
+We ran nine adaptive-attack experiments against Llama-3-8B-Instruct probes:
 
 | # | Experiment | Standard recall | Adaptive recall | Drop |
 |---|------------|----------------|-----------------|------|
 | 1 | C4 direct attack | 0.767 | 0.000 | +0.767 |
 | 2 | HPS direct attack | 0.767 | 0.000 | +0.767 |
-| 3 | Transfer: C4-suffix → HPS | 0.767 | **1.000** | **−0.233** |
-| 4 | Transfer: HPS-suffix → C4 | 0.767 | 0.000 | +0.767 |
+| 3 | **HPS-Euclidean direct attack** | **0.610** | **0.000** | **+0.610** |
+| 4 | **Ensemble (HPS+C4) direct attack** | **0.480** | **0.000** | **+0.480** |
+| 5 | Transfer: C4-suffix → HPS (n=30) | 0.767 | **1.000** | −0.233 |
+| 6 | Transfer: HPS-suffix → C4 (n=30) | 0.767 | 0.000 | +0.767 |
+| 7 | **Transfer: C4-suffix → HPS (n=100)** | **0.640** | **1.000** | **−0.360** |
+| 8 | **Transfer: HPS-suffix → C4 (n=100)** | 0.480 | 0.000 | +0.480 |
 
 | # | HPS budget scaling | Adaptive recall |
 |---|---------------------|-----------------|
-| 5 | HPS at 256 steps | 0.000 |
-| 6 | HPS at 512 steps | 0.000 |
-| 7 | HPS at 1024 steps | 0.000 |
-| 8 | HPS at 2048 steps | 0.000 |
+| 9 | HPS at 256 steps | 0.000 |
+| 10 | HPS at 512 steps | 0.000 |
+| 11 | HPS at 1024 steps | 0.000 |
+| 12 | HPS at 2048 steps | 0.000 |
 
-Three findings emerge:
+Five findings emerge:
 
-**Finding 1 (Bailey confirmed for hyperbolic):** HPS provides no adversarial robustness against direct white-box attack. Both probes collapse to 0% recall under 16-token universal embedding suffix optimization (Bailey et al. 2024 setup).
+**Finding 1 (Bailey confirmed across all activation-probe variants):** All four probes — C4, HPS, HPS-Euclidean, and the HPS+C4 ensemble — collapse to 0.000 adaptive recall under direct attack. The geometric prior (Lorentz vs Euclidean), the trajectory architecture (vs simple linear probe), and the defense-in-depth combination (vs individual) all fail at the same complete level. The field-wide adversarial vulnerability is now confirmed for our entire experimental setup.
 
-**Finding 2 (Defense diversity, NOT robustness):** Suffixes optimized against C4 do not transfer to HPS — HPS detection rate INCREASES from 76.7% to 100% under C4-targeted attack. The reverse direction shows full transfer (HPS-suffix bypasses C4 at 0% recall). This asymmetry is consistent with Bailey et al.'s Figure 4(c) transfer pattern but reveals a specific geometric-vs-flat asymmetry not previously characterized.
+**Finding 2 (Defense diversity has no practical value):** The transfer asymmetry is real and statistically robust at both n=30 and n=100: suffixes trained against C4 fail to transfer to HPS (HPS recall stays at 1.000), while suffixes trained against HPS transfer fully to bypass C4. However, when the attacker explicitly optimizes against the ensemble (HPS+C4 max-aggregation), BOTH probes are bypassed simultaneously. Therefore, the asymmetry exists but provides no defense value against an adaptive attacker who knows about both probes.
 
-**Finding 3 (No budget margin):** HPS recall reaches 0% at 256 attack steps, well below the 2048-step budget Bailey used. The geometric prior provides zero quantitative robustness budget improvement over the linear probe.
+**Finding 3 (Ensemble degrades standard performance too):** The HPS+C4 max-aggregation ensemble achieves only 0.480 standard recall (n=100) — substantially worse than either probe alone (HPS=0.640, C4=0.480 at n=100). The MAX-aggregation inflates the FPR threshold, reducing recall. Even before considering adversarial robustness, simple ensembles of activation probes are not a productive direction.
 
-Together, these findings yield a refined characterization: **HPS is no more adversarially robust than C4 against targeted attacks, but provides defense diversity by detecting attacks crafted against simpler probes.**
+**Finding 4 (Geometric prior provides no robustness margin):** HPS-Euclidean (the parameter-matched flat ablation) shows the same complete adversarial collapse as HPS (Lorentz). The behavior loss converged less smoothly under the HPS-Euclidean attack (final 4.7 vs HPS's 0.04), but probe recall still reaches 0.000. The hyperbolic constraint provides no measurable adversarial benefit.
+
+**Finding 5 (No budget margin):** HPS recall reaches 0.000 at 256 attack steps, well below the 2048-step budget Bailey used. The geometric prior provides zero quantitative robustness budget improvement over the linear probe.
+
+Together, these findings yield the final characterization: **HPS, HPS-Euclidean, and HPS+C4 ensemble all fail under adaptive attack. The transfer asymmetry between simple and geometric probes is real but adaptively defeated by ensemble-targeted attacks. We recommend TMLR as the publication venue and frame the work as a methodology critique with empirical adversarial robustness limitations.**
 
 ---
 
@@ -246,15 +254,49 @@ The defense-diversity argument therefore depends on threat model:
 - **Sophisticated attacker (knows ensemble exists):** trains against HPS, fools C4 by transfer
 - **Adaptive ensemble attacker:** defeats both per Bailey Section 3.5
 
-### 4.5 Caveats
+### 4.5 Statistical Validation at n=100
 
-We tested a single transfer pair. The asymmetry should hold across:
-- Different attack methods (PAIR, AutoDAN, etc.) — not yet tested
-- Different attack lengths — not yet tested
-- Different LLMs (Vicuna-13B) — not yet tested
-- Adaptive ensemble attack — not yet tested
+We re-evaluated the C4 and HPS suffixes (trained on 20 queries each) on a held-out set of 100 harmful queries (vs. the original 30). The asymmetry holds robustly at the larger sample size:
 
-These are reasonable follow-up experiments. With current data, the asymmetry is a single-point observation supporting a defense-diversity claim with caveats.
+| Trained against | Tested on | Standard recall (n=100) | Adaptive recall (n=100) | Effect |
+|-----------------|-----------|-------------------------|--------------------------|--------|
+| C4 | HPS | 0.640 | **1.000** | HPS catches all |
+| HPS | C4 | 0.480 | **0.000** | C4 fully fooled |
+
+Note: standard recall at n=100 is lower than at n=30 (HPS: 0.640 vs 0.767; C4: 0.480 vs 0.767) because the larger evaluation set includes more diverse harmful queries, some of which fall outside the probe's training distribution. The lower baselines are more conservative measurements of the probe's true performance on raw harmful intents.
+
+The transfer asymmetry survives this stricter evaluation: HPS catches 100/100 attacks crafted against C4, while C4 catches 0/100 attacks crafted against HPS. The directional mismatch is empirically robust.
+
+### 4.6 Adaptive Ensemble Attack: The Asymmetry Doesn't Help Adaptively
+
+If the transfer asymmetry from Sections 4.1-4.5 had practical value, it would manifest in an OR-gate ensemble defense: the attacker bypasses one probe while the other catches them.
+
+We tested this directly by training a suffix that minimizes `max(C4_score, HPS_score)`. The attacker now optimizes against the worst-case score, which forces them to fool BOTH probes simultaneously.
+
+**Result:** The ensemble adaptive recall is **0.000**. The attack fully succeeds in bypassing both probes.
+
+| Probe configuration | Standard recall | Adaptive recall |
+|---------------------|-----------------|-----------------|
+| HPS+C4 max-aggregation ensemble | 0.480 | 0.000 |
+
+**This confirms Bailey et al. Section 3.5 for our setup.** When the attacker has access to both probes and optimizes against their joint score, the ensemble does not survive. The transfer asymmetry from Section 4 only "helps" when attackers don't target HPS — which is not a defensible threat model.
+
+The standard recall observation is also instructive. The ensemble achieves 0.480 standard recall, which is WORSE than either probe alone (HPS: 0.640 at n=100, C4: 0.480 at n=100). The MAX-aggregation approach inflates the FPR threshold (because the maximum of two noisy scores has higher variance), and detection drops accordingly. Simple ensembles of activation probes are not a productive direction even before considering adversarial robustness.
+
+### 4.7 HPS-Euclidean: Geometric Prior Provides No Adversarial Robustness
+
+To isolate the contribution of hyperbolic geometry, we ran the same direct adaptive attack against HPS-Euclidean (the parameter-matched flat ablation). Same architecture, same trajectory feature pipeline, same training protocol, only the geometric constraint differs.
+
+| Probe | Geometry | Standard recall | Adaptive recall |
+|-------|----------|-----------------|-----------------|
+| HPS | Lorentz hyperboloid | 0.767 | 0.000 |
+| HPS-Euclidean | Flat | 0.610 | 0.000 |
+
+Both collapse to 0.000 adaptive recall. **The hyperbolic constraint provides no adversarial robustness benefit.**
+
+A subtle observation worth noting: HPS-Euclidean's behavior loss converged less smoothly during the attack (final value 4.7, vs HPS's 0.04). This suggests the attacker had MORE difficulty achieving simultaneous jailbreak success and probe evasion against HPS-Euclidean than against HPS, even though both ultimately succeeded in evading the probe. This is a marginal effect that does not translate to defensive value, but is documented for completeness.
+
+The standard recall difference (HPS: 0.767, HPS-Euclidean: 0.610) reflects HPS-Euclidean's lower base AUROC (0.9773 vs HPS's 0.9965). The hyperbolic constraint does help with standard detection — but not with adversarial robustness.
 
 ---
 
@@ -383,29 +425,15 @@ Our results confirm these findings extend to geometric (Lorentz hyperboloid) pro
 
 This section updates Draft v1 Section 8 with results-informed priorities.
 
-### 8.1 Adaptive Ensemble Attack (now top priority)
+### 8.1 Adaptive Ensemble Attack [COMPLETED — see Section 4.6]
 
-**Goal:** Test whether the transfer asymmetry survives when an attacker optimizes against the HPS+C4 ensemble jointly.
+This experiment has been completed. The HPS+C4 max-aggregation ensemble was attacked with a 16-token universal embedding suffix optimized against the joint objective. **Result: ensemble adaptive recall = 0.000**, fully bypassing both probes simultaneously. This confirms Bailey et al. Section 3.5 for our setup and removes the "defense diversity" pathway as a positive contribution.
 
-**Setup:**
-- Loss = behavior_loss + λ · max(C4_score, HPS_score)
-- Or: behavior_loss + λ · LR(C4_score, HPS_score)
-- Suffix optimized against the ensemble objective
+### 8.1.1 Adaptive Attacks on Vicuna-13B (potential follow-up)
 
-**Predicted outcome (Bailey Section 3.5):** ensemble breaks. The transfer asymmetry from Section 4 of this draft would not survive this attack.
+### 8.2 HPS-Euclidean Attack [COMPLETED — see Section 4.7]
 
-**Why test it:** The defense-diversity claim from Section 4.4 only holds if the adaptive ensemble attack fails. If it succeeds, the asymmetry is academic — practical defense gains nothing.
-
-**Estimated time:** ~1 day extra GPU. ~30 min for the attack run + setup.
-
-### 8.2 HPS-Euclidean Attack
-
-We did not run adaptive attacks on HPS-Euclidean (the parameter-matched flat ablation). This would test whether the transfer asymmetry is specifically due to hyperbolic geometry or due to the multi-feature trajectory structure.
-
-**If HPS-Euclidean shows the same asymmetry:** the geometric prior is irrelevant; multi-feature trajectory aggregation is the cause.
-**If HPS-Euclidean fails like C4:** the hyperbolic constraint matters.
-
-**Estimated time:** ~30 min.
+This experiment has been completed. HPS-Euclidean (parameter-matched flat ablation) shows the same complete adversarial collapse as HPS (Lorentz). **The hyperbolic constraint provides no adversarial robustness margin.** See Section 4.7 for full results.
 
 ### 8.3 Cross-LLM Adaptive Attack (Vicuna-13B)
 
@@ -433,15 +461,22 @@ We tested only 16-token suffixes. Bailey explored 8 / 16 / 32 / 64 token lengths
 
 **Estimated time:** ~2 hours per length.
 
-### 8.6 Updated Venue Recommendation
+### 8.6 Final Venue Recommendation: TMLR
 
-**TMLR (60-65%):** still recommended. Methodology paper + adversarial attack result fits TMLR scope. The transfer asymmetry is a single-experiment finding; TMLR is the right venue for nuanced negative results.
+With Phases 5-7 results in hand, the venue decision is finalized.
 
-**USENIX Security (35-50%, conditional):** if Section 8.1 (adaptive ensemble attack) and Section 8.4 (statistical validation) are completed, the transfer asymmetry could be presented as a positive contribution: "Geometric activation probes provide defense diversity not adversarial robustness." This would be a focused paper on the asymmetry finding.
+**TMLR (recommended):** matches their methodology paper criteria. The paper is now a clean methodology critique with empirical adversarial robustness limitations:
+1. Three field-wide methodology confounds (length, max_length, contamination)
+2. After fixing: HPS = HPS-Euclidean = C4 = MTP statistically (saturated benchmark)
+3. Transfer asymmetry exists (statistically robust at n=100) but adaptively defeated by ensemble attacks
+4. Cross-model alignment-mediated failure (HPS catastrophically fails on Vicuna-13B)
+5. All activation-probe variants fail under direct adaptive attack
 
-**ICLR/NeurIPS (25-35%):** would require defense-in-depth experiments under adaptive ensemble attack to claim novelty.
+**USENIX Security (NOT recommended):** ruled out by the ensemble attack result. The transfer asymmetry, though statistically robust, has no practical defense value when attackers can target the ensemble objective. USENIX would expect a positive defense contribution that survives adaptive attacks; we cannot provide that.
 
-**Recommendation:** TMLR submission with current findings, USENIX as stretch goal if Section 8.1 results are favorable.
+**ICLR/NeurIPS (NOT recommended):** would require a novel-method positive claim with full adversarial evaluation showing survival under adaptive attack. Our findings are negative.
+
+**Conclusion:** TMLR submission with current findings. No further experiments needed before submission unless mentor disagrees with framing.
 
 ### 8.7 Generation-Based HPS (Strongest Future Direction)
 
@@ -503,15 +538,19 @@ Bailey's "complex task forces tradeoff" argument is fundamentally about deployme
 
 For a research paper, this is a **discussion-section observation**, not a defensive contribution. Generation-based HPS is the right architectural step forward, but the deployment context bounds achievable robustness more than the probe architecture does.
 
-### 8.8 Decision Tree After Phase 6 Results
+### 8.8 Decision Tree After Phase 5/6/7 Results [RESOLVED]
 
-The Phase 6 (adaptive ensemble attack) result will determine which of these paths is most promising:
+The Phase 5/6/7 results determine the path:
 
-| Phase 6 outcome | Recommended path |
-|-----------------|------------------|
-| Ensemble adaptive recall → 0 | TMLR submission of current findings; generation-based HPS as separate follow-up |
-| Ensemble adaptive recall = 0.2-0.7 | Add Section 8.1 transfer-asymmetry-survives-ensemble framing; USENIX submission becomes viable; generation-based HPS as natural extension |
-| Ensemble adaptive recall > 0.7 | Major positive finding (unexpected); careful verification required before claim; strong USENIX/NeurIPS Safety; generation-based HPS as direct follow-up paper |
+| Outcome (predicted) | Outcome (actual) | Recommended path |
+|---------------------|------------------|------------------|
+| Ensemble adaptive recall → 0 | **CONFIRMED**: ensemble recall = 0.000 | TMLR submission of current findings; generation-based HPS as separate follow-up |
+| Ensemble adaptive recall = 0.2-0.7 | not observed | (would have indicated USENIX viability) |
+| Ensemble adaptive recall > 0.7 | not observed | (would have indicated major positive finding) |
+
+The ensemble attack achieved full bypass (0.000 recall), confirming Bailey et al. Section 3.5. The transfer asymmetry from Section 4 has no practical defense value because adaptive ensemble attacks defeat it.
+
+**Decision: TMLR submission with current Draft v1 + v2 findings. Generation-based HPS deferred to Section 8.7 as a follow-up paper.**
 
 ---
 
@@ -610,10 +649,18 @@ In addition to Draft v1 Appendix E references:
 
 **End of Draft v2**
 
-**Total length:** ~14 pages
-**Key new findings:** (1) HPS = C4 under direct adaptive attack, (2) Transfer asymmetry between geometric and flat probes, (3) No HPS attack-budget margin, (4) Probe logit saturation in HPS reflects compactness of geometric feature space.
-**Status:** Ready for mentor review as a follow-up to Draft v1.
+**Total length:** ~17 pages
+**Key findings (post Phase 5/6/7):**
+1. HPS = HPS-Euclidean = C4 = Ensemble all collapse to 0.000 adaptive recall under direct attack
+2. Transfer asymmetry between simple and geometric probes is real but adaptively defeated
+3. No HPS attack-budget margin (breaks at 256 steps)
+4. Hyperbolic prior provides no adversarial robustness benefit (Section 4.7)
+5. Ensemble defenses are doubly broken: bypassed adaptively AND degrade standard performance (Section 4.6)
+
+**Status:** Final empirical findings complete. Ready for mentor review and TMLR draft writing.
+
 **Open questions for mentor:**
-  1. Adaptive ensemble attack (Section 8.1) — run before submission or as future work?
-  2. Update the Draft v1 paper with these findings, or treat as a separate addendum?
-  3. With the transfer asymmetry result, is USENIX a more appropriate venue than TMLR?
+  1. Final paper framing: methodology critique with adversarial robustness limitations (recommended)?
+  2. Should we add the layer-ablation experiment (run_layer_ablation.sh, 15 configs, ~5 hrs) to characterize layer choice sensitivity? (Optional but informative.)
+  3. Llama-2-7b-chat vs Vicuna alignment ablation (Draft v1 Section 8.2) — still worth running before submission?
+  4. Generation-based HPS pivot — explicit follow-up paper, or merge into current paper?

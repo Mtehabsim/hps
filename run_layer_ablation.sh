@@ -62,6 +62,33 @@ if [ ! -f "adaptive_attack.py" ]; then
   echo "ERROR: adaptive_attack.py not found"; exit 1
 fi
 
+# Verify cache has required layers
+echo "  Verifying cache contents..."
+AVAILABLE_LAYERS=$(python3 -c "
+import numpy as np
+cache = np.load('$CACHE', allow_pickle=True)
+hs = cache['hs_train_ben'].tolist()[0]
+if isinstance(hs, dict):
+    layers = sorted(hs.keys())
+    print(' '.join(str(l) for l in layers))
+else:
+    print('UNKNOWN_FORMAT')
+")
+echo "  Available layers in cache: [$AVAILABLE_LAYERS]"
+echo ""
+if [ "$AVAILABLE_LAYERS" = "UNKNOWN_FORMAT" ]; then
+  echo "ERROR: cache format not recognized"; exit 1
+fi
+
+# Check if cache has all 32 layers (full ablation possible)
+N_AVAILABLE=$(echo $AVAILABLE_LAYERS | wc -w)
+if [ "$N_AVAILABLE" -lt 32 ]; then
+  echo "  WARN: cache only has $N_AVAILABLE layers (full ablation needs all 32)"
+  echo "  WARN: configurations using missing layers will FAIL"
+  echo "  RECOMMEND: re-extract with extract_all_layers.py first"
+  echo ""
+fi
+
 nvidia-smi --query-gpu=name,memory.free --format=csv | head -3
 echo ""
 
