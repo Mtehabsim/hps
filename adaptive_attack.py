@@ -376,6 +376,82 @@ class HPSEuclideanProbe(nn.Module):
                             displacement, path_len, progress], dim=-1)
 
 
+class HPSGenProbe(nn.Module):
+    """HPS computed across generation tokens (Bailey-style gen-based monitor).
+
+    Architecture:
+      - For each generation token at each of the 6 layers, project through
+        Lorentz hyperboloid (same projection as HPSProbe).
+      - Compute the 12 trajectory features per token (across-layer trajectory).
+      - Mean-pool the 12 features across tokens -> single 12-dim vector / sample.
+      - Linear regression on this mean-pooled feature.
+
+    Input shape: (n_layers, batch, n_tokens, hidden_dim)
+    Output shape: (batch,) probe logits
+
+    Mean-pooling 12 features across tokens is mathematically equivalent to
+    mean-pooling LR scores per token (LR is linear, so mean commutes). This
+    matches Bailey's "aggregate scores over layers and sequence dimensions
+    by taking a mean".
+
+    The is_gen_based attribute signals scoring code in flrt_attack.py /
+    adaptive_attack.py to extract gen-token activations rather than the last
+    input-token activation.
+    """
+    is_gen_based: bool = True
+
+    def __init__(self, lorentz_proj, weights, bias, scaler_mean, scaler_std,
+                 kappa: float = 0.1):
+        super().__init__()
+        self.lorentz_proj = lorentz_proj
+        self.register_buffer("weights", weights)
+        self.register_buffer("bias", bias)
+        self.register_buffer("scaler_mean", scaler_mean)
+        self.register_buffer("scaler_std", scaler_std)
+        self.kappa = kappa
+
+    def forward(self, layer_acts):
+        """layer_acts: (n_layers, batch, n_tokens, hidden_dim)
+        Returns: (batch,) probe logits
+        """
+        if layer_acts.dim() != 4:
+            raise ValueError(
+                f"HPSGenProbe expects 4D input (n_layers, batch, n_tokens, "
+                f"hidden_dim); got shape {tuple(layer_acts.shape)}"
+            )
+        n_layers, batch, n_tokens, hidden_dim = layer_acts.shape
+
+        # Project each (layer, token) activation through Lorentz hyperboloid.
+        # Reshape for batching: process layer-by-layer, flatten batch * n_tokens.
+        z_per_layer = []
+        for l in range(n_layers):
+            flat = layer_acts[l].reshape(batch * n_tokens, hidden_dim)
+            z_flat = self.lorentz_proj(flat)  # (batch * n_tokens, 1 + d_proj)
+            z_per_layer.append(z_flat)
+        # Stack into (n_layers, batch * n_tokens, 1 + d_proj)
+        z_btn = torch.stack(z_per_layer, dim=0)
+
+        # Extract 12 trajectory features per (batch, token) sample
+        # extract_hps_features expects (n_layers, B, dim) -> returns (B, 12)
+        feats_btn = extract_hps_features(z_btn, k=self.kappa)  # (batch * n_tokens, 12)
+        feats = feats_btn.reshape(batch, n_tokens, 12)
+
+        # Mean across tokens
+        feats_mean = feats.mean(dim=1)  # (batch, 12)
+
+        # Standardize and linear classifier
+        feats_std = (feats_mean - self.scaler_mean) / self.scaler_std
+        return feats_std @ self.weights + self.bias  # (batch,)
+
+
+# Mark the existing input-based probes as not gen-based (default)
+# (we set this as a class attribute via module-level assignment to avoid
+#  modifying their __init__ signatures)
+C4Probe.is_gen_based = False
+HPSProbe.is_gen_based = False
+HPSEuclideanProbe.is_gen_based = False
+
+
 # ============================================================
 #  PROBE TRAINING (from cached activations)
 # ============================================================
@@ -605,6 +681,166 @@ def train_hps_euc_probe(data, epochs=50, proj_dim=64):
         bias=torch.tensor(clf.intercept_[0], dtype=torch.float32, device=DEVICE),
         scaler_mean=torch.tensor(scaler.mean_, dtype=torch.float32, device=DEVICE),
         scaler_std=torch.tensor(scaler.scale_, dtype=torch.float32, device=DEVICE),
+    ).to(DEVICE)
+    return probe, auroc
+
+
+# ---- HPS-Gen (generation-based monitoring per Bailey) ----
+
+def load_gen_cache_arrays(cache_path: str, layers):
+    """Load activations across generation tokens.
+
+    Expected cache schema (from extract_generation_activations.py):
+      hs_train_ben_gen, hs_train_atk_gen, hs_test_ben_gen, hs_test_atk_gen
+      Each is a list of arrays. Each array is (n_layers_total, n_gen_tokens,
+      hidden_dim), with n_layers_total being the model's full layer count.
+
+    We slice to the requested `layers` (typically [0, 2, 17, 24, 28, 31]).
+    Returns dict of arrays shaped (n_samples, n_layers, n_gen_tokens, hidden_dim).
+    """
+    cache = np.load(cache_path, allow_pickle=True)
+
+    def to_arr(hs_list):
+        # hs_list is a list of dicts {layer_idx: (n_tokens, hidden_dim)}
+        # OR a list of (n_layers_total, n_tokens, hidden_dim) ndarrays.
+        # We extract requested layers, ensuring uniform n_tokens by truncating
+        # to the minimum length in the dataset.
+        if not hs_list:
+            return np.zeros((0, len(layers), 0, 0), dtype=np.float32)
+        sample = hs_list[0]
+        if isinstance(sample, dict):
+            n_tokens_min = min(
+                np.asarray(hs[next(iter(hs))]).shape[0] for hs in hs_list
+            )
+            arr = np.array([
+                [np.asarray(hs[l])[:n_tokens_min] for l in layers]
+                for hs in hs_list
+            ])  # (n_samples, n_layers, n_tokens_min, hidden_dim)
+        else:
+            sample = np.asarray(sample)
+            n_tokens_min = min(np.asarray(hs).shape[1] for hs in hs_list)
+            arr = np.array([
+                np.asarray(hs)[layers][:, :n_tokens_min, :]
+                for hs in hs_list
+            ])  # (n_samples, n_layers, n_tokens_min, hidden_dim)
+        return arr.astype(np.float32)
+
+    return {
+        "X_tr_ben_gen": to_arr(cache["hs_train_ben_gen"].tolist()),
+        "X_tr_atk_gen": to_arr(cache["hs_train_atk_gen"].tolist()),
+        "X_te_ben_gen": to_arr(cache["hs_test_ben_gen"].tolist()),
+        "X_te_atk_gen": to_arr(cache["hs_test_atk_gen"].tolist()),
+    }
+
+
+def train_hps_gen_probe(data_gen, kappa: float = 0.1, epochs: int = 50,
+                        proj_dim: int = 64):
+    """Train HPS-Gen probe on generation-token activations.
+
+    Pipeline:
+      1. Train Lorentz projection via per-token contrastive loss (each token
+         contributes to the contrastive loss). For computational efficiency
+         we mean-pool activations across tokens FIRST, then run the same
+         contrastive training as HPS-Input. The projection is the same (per-
+         token application is a forward of the same nn.Linear).
+      2. Extract HPS features per (sample, token), mean across tokens.
+      3. Standardize, fit LR on mean-pooled features.
+
+    data_gen: dict with keys X_tr_ben_gen, X_tr_atk_gen, X_te_ben_gen,
+              X_te_atk_gen, each of shape (N, n_layers, n_tokens, hidden_dim).
+
+    Returns (HPSGenProbe, AUROC).
+    """
+    print("  Training HPS-Gen probe...")
+    X_tr = np.concatenate([data_gen["X_tr_ben_gen"], data_gen["X_tr_atk_gen"]])
+    y_tr = np.concatenate([np.zeros(len(data_gen["X_tr_ben_gen"])),
+                           np.ones(len(data_gen["X_tr_atk_gen"]))])
+    X_te = np.concatenate([data_gen["X_te_ben_gen"], data_gen["X_te_atk_gen"]])
+    y_te = np.concatenate([np.zeros(len(data_gen["X_te_ben_gen"])),
+                           np.ones(len(data_gen["X_te_atk_gen"]))])
+
+    n_samples, n_layers, n_tokens, hidden_dim = X_tr.shape
+    print(f"    Train: {len(X_tr)} samples, layers={n_layers}, "
+          f"tokens={n_tokens}, hidden={hidden_dim}")
+
+    # Step 1: train Lorentz projection on mean-pooled activations.
+    # Mean-pool collapses (n_layers, n_tokens, hidden) -> (n_layers, hidden)
+    # per sample, giving the same shape as HPS-Input training data.
+    X_tr_mean = X_tr.mean(axis=2)  # (N, n_layers, hidden_dim)
+    X_te_mean = X_te.mean(axis=2)
+
+    proj = LorentzProjection(hidden_dim, proj_dim, k_init=kappa).to(DEVICE)
+    opt = torch.optim.Adam([p for p in proj.parameters() if p.requires_grad],
+                           lr=1e-3, weight_decay=1e-5)
+    Xt = torch.tensor(X_tr_mean, dtype=torch.float32, device=DEVICE)
+    yt = torch.tensor(y_tr, dtype=torch.long, device=DEVICE)
+
+    for epoch in range(epochs):
+        loss_total = torch.tensor(0.0, device=DEVICE)
+        for li in range(n_layers):
+            h = proj(Xt[:, li, :])
+            n = h.shape[0]
+            batch_idx = torch.randperm(n, device=DEVICE)[:512]
+            hb = h[batch_idx]
+            yb = yt[batch_idx]
+            d = lorentz_distance(hb.unsqueeze(0), hb.unsqueeze(1), k=proj.k.item())
+            same = (yb.unsqueeze(0) == yb.unsqueeze(1)).float()
+            triu = torch.triu(torch.ones_like(d), diagonal=1)
+            ns = (same * triu).sum().clamp(min=1)
+            nd = ((1 - same) * triu).sum().clamp(min=1)
+            loss = ((d ** 2 * same * triu).sum() / ns
+                    + (torch.clamp(2.0 - d, min=0) ** 2 * (1 - same) * triu).sum() / nd) / 2
+            loss_total = loss_total + loss
+        loss_total = loss_total / n_layers
+        opt.zero_grad()
+        loss_total.backward()
+        opt.step()
+    proj.eval()
+    for p in proj.parameters():
+        p.requires_grad_(False)
+
+    # Step 2: extract per-token HPS features, mean across tokens.
+    def extract_features_per_sample(X):
+        """X: (N, n_layers, n_tokens, hidden) -> features (N, 12) via per-token
+        feature extraction, then mean-pool across tokens."""
+        N = X.shape[0]
+        feats_list = []
+        with torch.no_grad():
+            for i in range(N):
+                xi = torch.tensor(X[i], dtype=torch.float32, device=DEVICE)
+                # xi: (n_layers, n_tokens, hidden)
+                # Project per layer per token
+                z_per_layer = []
+                for l in range(n_layers):
+                    flat = xi[l]  # (n_tokens, hidden)
+                    z = proj(flat)  # (n_tokens, 1+d_proj)
+                    z_per_layer.append(z)
+                z_stack = torch.stack(z_per_layer, dim=0)  # (n_layers, n_tokens, 1+d_proj)
+                # extract_hps_features expects (n_layers, B, dim); B = n_tokens
+                feats_per_token = extract_hps_features(z_stack, k=kappa)  # (n_tokens, 12)
+                feats_mean = feats_per_token.mean(dim=0)  # (12,)
+                feats_list.append(feats_mean.cpu().numpy())
+        return np.array(feats_list)  # (N, 12)
+
+    feats_tr = extract_features_per_sample(X_tr)
+    feats_te = extract_features_per_sample(X_te)
+
+    # Step 3: standardize and fit LR.
+    scaler = StandardScaler()
+    feats_tr_std = scaler.fit_transform(feats_tr)
+    feats_te_std = scaler.transform(feats_te)
+    clf = LogisticRegression(max_iter=2000, random_state=42)
+    clf.fit(feats_tr_std, y_tr)
+    auroc = roc_auc_score(y_te, clf.decision_function(feats_te_std))
+    print(f"    HPS-Gen AUROC = {auroc:.4f}")
+
+    probe = HPSGenProbe(
+        lorentz_proj=proj,
+        weights=torch.tensor(clf.coef_[0], dtype=torch.float32, device=DEVICE),
+        bias=torch.tensor(clf.intercept_[0], dtype=torch.float32, device=DEVICE),
+        scaler_mean=torch.tensor(scaler.mean_, dtype=torch.float32, device=DEVICE),
+        scaler_std=torch.tensor(scaler.scale_, dtype=torch.float32, device=DEVICE),
+        kappa=kappa,
     ).to(DEVICE)
     return probe, auroc
 

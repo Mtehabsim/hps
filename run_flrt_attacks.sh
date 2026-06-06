@@ -214,6 +214,34 @@ else
 fi
 
 # ============================================================
+#  PHASE 4: HPS-Gen direct (~2.5 hrs) — generation-based monitoring
+# ============================================================
+if [ "${SKIP_PHASE_4:-0}" -eq 0 ]; then
+  GEN_CACHE="${GEN_CACHE:-results/llama3_gen_activations_cache.npz}"
+  if [ ! -f "$GEN_CACHE" ]; then
+    echo "[SKIP] PHASE 4: generation activations cache not found ($GEN_CACHE)."
+    echo "       Run extract_generation_activations.py to populate it."
+  else
+    echo "─────────────────────────────────────────────────────────────"
+    echo " PHASE 4: FLRT vs HPS-Gen (Bailey-style generation-based monitor)"
+    echo " Started: $(date)"
+    echo "─────────────────────────────────────────────────────────────"
+    python flrt_attack.py \
+        --defender hps_gen \
+        $COMMON_ARGS \
+        --gen_cache "$GEN_CACHE" \
+        --suffix_save "$OUTPUT_DIR/suffix_hps_gen_flrt.json" \
+        --output "$OUTPUT_DIR/attack_hps_gen_flrt.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase4_hps_gen.txt"
+    ELAPSED=$(( ($(date +%s) - START) / 60 ))
+    echo "  Phase 4 done at $ELAPSED min from start"
+    echo ""
+  fi
+else
+  echo "[SKIP] PHASE 4 disabled by SKIP_PHASE_4=1"
+fi
+
+# ============================================================
 #  PHASE 3: Cross-method transfer (eval only, ~30 min)
 # ============================================================
 if [ "${SKIP_PHASE_3:-0}" -eq 0 ]; then
