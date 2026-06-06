@@ -269,8 +269,15 @@ def compute_candidates_loss(
                     dim=0,  # (n_layers, batch, hidden_dim)
                 ).float()
             probe_logit = probe(layer_acts).squeeze(-1)  # (batch,)
-            # We want LOW probe score (looks benign)
-            mon_loss = probe_logit  # higher = more harmful, want lower
+            # Bound monitor loss with softplus (= BCE-with-logits, target=benign).
+            # Mathematically: softplus(x) = log(1 + exp(x)).
+            # This prevents the degenerate optimization where probe_logit races
+            # to -infinity while behavior loss is ignored. Once probe_logit < 0
+            # (probe fooled), softplus saturates near 0, freeing the optimizer
+            # to focus on behavior loss. Matches Bailey's bounded monitor loss
+            # convention (their convergence check uses threshold 0.5, only
+            # meaningful if loss is bounded in [0, ~1]).
+            mon_loss = F.softplus(probe_logit)  # bounded in [0, +inf), saturates at 0
 
             total = generator_weight * gen_loss + monitor_weight * mon_loss
 
