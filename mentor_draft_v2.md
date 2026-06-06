@@ -443,6 +443,76 @@ We tested only 16-token suffixes. Bailey explored 8 / 16 / 32 / 64 token lengths
 
 **Recommendation:** TMLR submission with current findings, USENIX as stretch goal if Section 8.1 results are favorable.
 
+### 8.7 Generation-Based HPS (Strongest Future Direction)
+
+Bailey et al. (2024, Section 3.6) found that generation-based probes (using activations across output tokens, not just the last input token) are more robust against adaptive attacks than input-based probes. Our current HPS is input-based: it uses the last-token activation across 6 layers, ignoring all generated tokens. A generation-based variant would extend the architecture to use activations during the first K generated tokens (e.g., K=32-64).
+
+**Architectural sketch:**
+
+```
+input prompt → forward + generate K tokens → hidden_states ∈ ℝ^(K × n_layers × hidden_dim)
+
+For each (layer, token) cell:
+    z = LorentzProjection(hidden_states[token, layer])    # → Lorentz hyperboloid
+
+Trajectory features along TWO axes:
+    Layer-wise trajectory (current HPS): 12 features capturing hierarchical structure
+    Token-wise trajectory (new): 12 features capturing generation dynamics
+
+Aggregation:
+    Hyperbolic Fréchet mean of token activations per layer
+    OR mean of token-wise trajectory features
+
+Final: 12 (layer) + 12 (token) = 24 features → LR
+```
+
+**Why this is theoretically motivated:**
+
+1. **Two-axis trajectory unlocks the dead features.** In the current single-axis HPS (across 6 layers only), our feature ablation showed `mean_r` alone matches all 12 features — curvature and displacement are dead weight. With a token axis (K~32 generated tokens), the curvature features finally have a meaningful trajectory to characterize: mid-stream topic pivots, refusal-then-compliance patterns, abrupt distributional shifts in the generation.
+
+2. **More constraints for the attacker.** The obfuscation suffix must now produce activations that look benign across BOTH axes simultaneously. This is a higher-dimensional optimization problem than single-axis input-based probing.
+
+3. **Captures the harm commitment signal.** The first few generated tokens reveal whether the model committed to harmful output (the "Sure, here's how..." prefix tokens). An attacker can suppress the commitment signal in input activations but still has to produce harmful tokens during generation.
+
+**Why we expect modest, not dramatic, gains:**
+
+Bailey et al.'s strongest result on the obfuscation-performance tradeoff was on SQL code generation (Section 5.3), where obfuscating against probes degraded SQL correctness. Jailbreak generation is a SOFTER task than SQL — the attacker only needs the model to produce harmful text, not technically precise output. The tradeoff exists but is weaker for jailbreaks than for SQL.
+
+**Estimated improvements:**
+
+| Metric | Input-based HPS | Generation-based HPS (predicted) |
+|--------|----------------|-----------------------------------|
+| Adaptive recall (direct attack) | 0.000 | 0.20-0.40 |
+| Attack budget for recall < 0.1 | 256 steps | 1024-4096 steps |
+| Behavior loss at convergence | 0.04 (full jailbreak) | 0.30-0.60 (degraded coherence?) |
+
+These are speculative; experimental evaluation required.
+
+**Implementation considerations:**
+
+1. **Generation latency:** Each forward pass now produces K tokens (autoregressive). For K=32 with Llama-3-8B, this is ~30× slower than input-only forward.
+2. **Sampling determinism:** For reproducibility, use greedy decoding. For robustness analysis, also evaluate with temperature=0.7 sampling.
+3. **Hyperbolic Fréchet mean:** No closed-form solution in general; iterative algorithms exist but add compute. Approximation via tangent-space mean is acceptable for engineering simplicity.
+4. **Cache invalidation:** All current cached activations are input-only. Generation-based variant requires fresh extraction (~2-3 hours per LLM).
+
+**Implementation effort:** ~3-4 weeks (architecture, training, evaluation). Suitable as standalone follow-up paper at USENIX, NeurIPS Safety Workshop, or ICLR Workshop on Reliable and Responsible Foundation Models.
+
+**Caveat: deployment-context argument.**
+
+Bailey's "complex task forces tradeoff" argument is fundamentally about deployment context, not probe architecture. A defender protecting a system that requires the model to produce complex correct outputs (SQL queries, working code, accurate technical answers) gets the obfuscation-performance tradeoff for free regardless of probe design. A defender protecting a chatbot that only needs the model to "begin complying" with harmful requests gains less from any probe upgrade because the attacker's task is intrinsically simpler.
+
+For a research paper, this is a **discussion-section observation**, not a defensive contribution. Generation-based HPS is the right architectural step forward, but the deployment context bounds achievable robustness more than the probe architecture does.
+
+### 8.8 Decision Tree After Phase 6 Results
+
+The Phase 6 (adaptive ensemble attack) result will determine which of these paths is most promising:
+
+| Phase 6 outcome | Recommended path |
+|-----------------|------------------|
+| Ensemble adaptive recall → 0 | TMLR submission of current findings; generation-based HPS as separate follow-up |
+| Ensemble adaptive recall = 0.2-0.7 | Add Section 8.1 transfer-asymmetry-survives-ensemble framing; USENIX submission becomes viable; generation-based HPS as natural extension |
+| Ensemble adaptive recall > 0.7 | Major positive finding (unexpected); careful verification required before claim; strong USENIX/NeurIPS Safety; generation-based HPS as direct follow-up paper |
+
 ---
 
 ## 9. Appendices
