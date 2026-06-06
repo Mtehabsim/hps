@@ -382,8 +382,23 @@ class HPSEuclideanProbe(nn.Module):
 
 def load_cache_arrays(cache_path, layers):
     cache = np.load(cache_path, allow_pickle=True)
+
     def to_arr(hs_list):
-        return np.array([[hs[l][-1] for l in layers] for hs in hs_list])
+        # Detect format: full-sequence (original) vs last-token-only (alllayers extraction)
+        sample_hs = hs_list[0]
+        sample_layer = list(sample_hs.keys())[0] if isinstance(sample_hs, dict) else 0
+        sample_act = sample_hs[sample_layer]
+        sample_act = np.asarray(sample_act)
+
+        if sample_act.ndim == 1:
+            # Last-token-only format (extract_all_layers.py output)
+            return np.array([[hs[l] for l in layers] for hs in hs_list])
+        elif sample_act.ndim == 2:
+            # Full-sequence format (original cache); take last token
+            return np.array([[hs[l][-1] for l in layers] for hs in hs_list])
+        else:
+            raise ValueError(f"Unexpected activation shape: {sample_act.shape}")
+
     return {
         "X_tr_ben": to_arr(cache["hs_train_ben"].tolist()),
         "X_tr_atk": to_arr(cache["hs_train_atk"].tolist()),
