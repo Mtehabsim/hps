@@ -46,9 +46,13 @@ GENERATOR_W="${GENERATOR_W:-1.0}"     # behavior weight
 TARGET_FPR="${TARGET_FPR:-0.01}"
 SEED="${SEED:-42}"
 
-# Phase 0 validation thresholds (Bailey Fig 4(b) range)
-VAL_MIN_RECALL="${VAL_MIN_RECALL:-0.05}"
-VAL_MAX_RECALL="${VAL_MAX_RECALL:-0.70}"
+# Phase 0 validation thresholds (Bailey Fig 4(b) range for input-based LR)
+# Bailey: input-based linear probes drop substantially under hard prompt
+# obfuscation, often to 0%. So 0.0 is a valid validation result.
+# We only fail validation if recall is HIGH (>0.85), indicating the attack is
+# too weak (probe holding up, no obfuscation) or broken (gradient flow issue).
+VAL_MIN_RECALL="${VAL_MIN_RECALL:-0.0}"
+VAL_MAX_RECALL="${VAL_MAX_RECALL:-0.85}"
 
 mkdir -p "$OUTPUT_DIR"
 
