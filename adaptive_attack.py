@@ -250,7 +250,8 @@ def extract_hps_features(z, k=0.1):
     mean_r = radial.mean(0)
     max_r = radial.max(0).values
     min_r = radial.min(0).values
-    std_r = radial.std(0)
+    # unbiased=False to avoid NaN when n_layers is small
+    std_r = radial.std(0, unbiased=False) if n_layers >= 1 else torch.zeros_like(mean_r)
     range_r = max_r - min_r
 
     # Curvature features (4) — triangle inequality bending
@@ -268,7 +269,8 @@ def extract_hps_features(z, k=0.1):
         kappas = torch.stack(kappas, dim=0)
         max_kappa = kappas.max(0).values
         mean_kappa = kappas.mean(0)
-        std_kappa = kappas.std(0)
+        # unbiased=False handles n=1 case (n_layers=3 → 1 kappa)
+        std_kappa = kappas.std(0, unbiased=False)
         spike_loc = kappas.argmax(0).float() / max(kappas.shape[0] - 1, 1)
 
     # Displacement features (3)
@@ -350,7 +352,7 @@ class HPSEuclideanProbe(nn.Module):
         mean_r = norm.mean(0)
         max_r = norm.max(0).values
         min_r = norm.min(0).values
-        std_r = norm.std(0)
+        std_r = norm.std(0, unbiased=False)
         range_r = max_r - min_r
         n_layers = z.shape[0]
         if n_layers < 3:
@@ -366,7 +368,7 @@ class HPSEuclideanProbe(nn.Module):
             kappas = torch.stack(kappas, dim=0)
             max_kappa = kappas.max(0).values
             mean_kappa = kappas.mean(0)
-            std_kappa = kappas.std(0)
+            std_kappa = kappas.std(0, unbiased=False)
             spike_loc = kappas.argmax(0).float() / max(kappas.shape[0] - 1, 1)
         displacement = (z[-1] - z[0]).norm(dim=-1)
         path_len = sum((z[i + 1] - z[i]).norm(dim=-1) for i in range(n_layers - 1))
@@ -641,7 +643,7 @@ def train_hps_euc_probe(data, epochs=50, proj_dim=64):
                 # Compute the same 12 features but in Euclidean space
                 norm = z.norm(dim=-1)  # (n_layers,)
                 mean_r = norm.mean(); max_r = norm.max(); min_r = norm.min()
-                std_r = norm.std(); range_r = max_r - min_r
+                std_r = norm.std(unbiased=False); range_r = max_r - min_r
                 if n_layers >= 3:
                     kappas = []
                     for k in range(1, n_layers - 1):
@@ -651,7 +653,7 @@ def train_hps_euc_probe(data, epochs=50, proj_dim=64):
                         kappas.append((d_prev + d_next - d_skip).clamp(min=0))
                     kappas = torch.stack(kappas)
                     max_kappa = kappas.max(); mean_kappa = kappas.mean()
-                    std_kappa = kappas.std()
+                    std_kappa = kappas.std(unbiased=False)
                     spike_loc = torch.tensor(float(kappas.argmax().item()) / max(len(kappas) - 1, 1),
                                               device=DEVICE)
                 else:
