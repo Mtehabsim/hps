@@ -59,6 +59,7 @@ from adaptive_attack import (
     train_hps_probe,
     train_hps_euc_probe,
     train_hps_gen_probe,
+    train_hps_euc_gen_probe,
     load_cache_arrays,
     load_gen_cache_arrays,
     evaluate_attack,
@@ -546,11 +547,17 @@ def evaluate_with_string_suffix(
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--defender", required=True, choices=["c4", "hps", "hps_euc", "hps_gen"])
+    p.add_argument("--defender", required=True,
+                   choices=["c4", "hps", "hps_euc", "hps_gen", "hps_euc_gen"])
     p.add_argument("--model_name", default="meta-llama/Meta-Llama-3-8B-Instruct")
     p.add_argument("--cache", default="results/llama3_activations_cache_diverse_fixed.npz")
     p.add_argument("--gen_cache", default="results/llama3_gen_activations_cache.npz",
-                   help="Cache of activations across generation tokens (only used for hps_gen)")
+                   help="Cache of activations across generation tokens (only used for hps_gen/hps_euc_gen)")
+    p.add_argument("--gen_aggregation", default="both",
+                   choices=["mean", "trajectory", "both"],
+                   help="Generation feature axis for hps_gen/hps_euc_gen: "
+                        "mean=layer-axis (order-invariant), trajectory=token-axis "
+                        "(temporal), both=24-dim concat (default)")
     p.add_argument("--layers", type=int, nargs="+", default=[0, 2, 17, 24, 28, 31])
 
     # FLRT hyperparameters
@@ -599,14 +606,19 @@ def main():
 
     # ---- Load cache and train probe ----
     print("  Loading cache and training probe...")
-    if args.defender == "hps_gen":
+    if args.defender in ("hps_gen", "hps_euc_gen"):
         if not os.path.exists(args.gen_cache):
             raise FileNotFoundError(
                 f"Generation activations cache not found: {args.gen_cache}\n"
                 "Run extract_generation_activations.py first to populate it."
             )
         data_gen = load_gen_cache_arrays(args.gen_cache, args.layers)
-        probe, baseline_auroc = train_hps_gen_probe(data_gen, kappa=0.1, epochs=50)
+        if args.defender == "hps_gen":
+            probe, baseline_auroc = train_hps_gen_probe(
+                data_gen, kappa=0.1, epochs=50, aggregation=args.gen_aggregation)
+        else:
+            probe, baseline_auroc = train_hps_euc_gen_probe(
+                data_gen, epochs=50, aggregation=args.gen_aggregation)
     else:
         data = load_cache_arrays(args.cache, args.layers)
         if args.defender == "c4":

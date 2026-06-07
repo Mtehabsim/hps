@@ -287,6 +287,116 @@ def extract_hps_features(z, k=0.1):
 
 
 # ============================================================
+#  GENERATION-AXIS TRAJECTORY FEATURES (token axis — Gap A)
+# ============================================================
+# extract_hps_features() above reduces over axis 0. The original HPS-Gen probe
+# fed the LAYER axis as axis 0 and mean-pooled the token axis away, so the
+# temporal (token-order) structure of a generation was never used (token order
+# was irrelevant to the score). The helpers below add a TOKEN-axis trajectory:
+# per layer, the sequence of K generation-token projections is treated as a
+# trajectory and the same 12 features are computed ALONG tokens, then averaged
+# across layers. Aggregation modes:
+#   "mean"       -> layer-axis features per token, mean-pooled over tokens
+#                   (12-d, order-invariant; reproduces previous HPS-Gen)
+#   "trajectory" -> token-axis features per layer, mean-pooled over layers
+#                   (12-d, order-sensitive temporal shape)
+#   "both"       -> concatenation (24-d)
+
+GEN_FEATURE_DIM = {"mean": 12, "trajectory": 12, "both": 24}
+
+
+def extract_euclidean_features(z):
+    """Flat-space analogue of extract_hps_features.
+
+    z: (seq, batch, d_proj) — trajectory reduced over axis 0.
+    Returns: (batch, 12)
+    """
+    norm = z.norm(dim=-1)  # (seq, batch)
+    n = z.shape[0]
+    mean_r = norm.mean(0)
+    max_r = norm.max(0).values
+    min_r = norm.min(0).values
+    std_r = norm.std(0, unbiased=False)
+    range_r = max_r - min_r
+    if n < 3:
+        zero = torch.zeros_like(mean_r)
+        max_kappa = mean_kappa = std_kappa = spike_loc = zero
+    else:
+        kappas = []
+        for i in range(1, n - 1):
+            d_prev = (z[i] - z[i - 1]).norm(dim=-1)
+            d_next = (z[i + 1] - z[i]).norm(dim=-1)
+            d_skip = (z[i + 1] - z[i - 1]).norm(dim=-1)
+            kappas.append((d_prev + d_next - d_skip).clamp(min=0))
+        kappas = torch.stack(kappas, dim=0)
+        max_kappa = kappas.max(0).values
+        mean_kappa = kappas.mean(0)
+        std_kappa = kappas.std(0, unbiased=False)
+        spike_loc = kappas.argmax(0).float() / max(kappas.shape[0] - 1, 1)
+    displacement = (z[-1] - z[0]).norm(dim=-1)
+    path_len = sum((z[i + 1] - z[i]).norm(dim=-1) for i in range(n - 1))
+    progress = displacement / (path_len + 1e-9)
+    return torch.stack([mean_r, max_r, min_r, std_r, range_r,
+                        max_kappa, mean_kappa, std_kappa, spike_loc,
+                        displacement, path_len, progress], dim=-1)
+
+
+def gen_trajectory_features(z_lbnt, aggregation="mean", k=0.1, geometry="lorentz"):
+    """Compute generation-aware trajectory features.
+
+    z_lbnt:    (n_layers, batch, n_tokens, dim) projected coordinates
+               (Lorentz: dim = 1 + d_proj; Euclidean: dim = d_proj)
+    aggregation: "mean" | "trajectory" | "both"
+    geometry:  "lorentz" | "euclidean"
+    Returns:   (batch, GEN_FEATURE_DIM[aggregation])
+    """
+    if aggregation not in GEN_FEATURE_DIM:
+        raise ValueError(f"Unknown aggregation {aggregation!r}; "
+                         f"expected one of {list(GEN_FEATURE_DIM)}")
+    n_layers, batch, n_tokens, dim = z_lbnt.shape
+
+    def feat(z):  # z: (seq, B, dim) -> (B, 12)
+        return (extract_hps_features(z, k=k) if geometry == "lorentz"
+                else extract_euclidean_features(z))
+
+    parts = []
+    if aggregation in ("mean", "both"):
+        # Layer-axis trajectory, per token, then mean-pool over tokens.
+        z_btn = z_lbnt.reshape(n_layers, batch * n_tokens, dim)
+        f = feat(z_btn).reshape(batch, n_tokens, 12).mean(dim=1)
+        parts.append(f)
+    if aggregation in ("trajectory", "both"):
+        # Token-axis trajectory, per layer, then mean-pool over layers.
+        per_layer = [feat(z_lbnt[l].transpose(0, 1)) for l in range(n_layers)]
+        parts.append(torch.stack(per_layer, dim=0).mean(dim=0))
+    return torch.cat(parts, dim=-1)
+
+
+def gen_features_for_dataset(X, proj, aggregation, geometry, kappa=0.1, chunk=128):
+    """Batched feature extraction over a generation cache split.
+
+    X:  (N, n_layers, n_tokens, hidden) numpy array
+    Returns: (N, GEN_FEATURE_DIM[aggregation]) numpy array
+    """
+    N, n_layers, n_tokens, hidden = X.shape
+    out = []
+    with torch.no_grad():
+        for s in range(0, N, chunk):
+            xb = torch.tensor(X[s:s + chunk], dtype=torch.float32, device=DEVICE)
+            b = xb.shape[0]
+            z_layers = []
+            for l in range(n_layers):
+                flat = xb[:, l].reshape(b * n_tokens, hidden)
+                z = proj(flat)
+                z_layers.append(z.reshape(b, n_tokens, z.shape[-1]))
+            z_lbnt = torch.stack(z_layers, dim=0)  # (n_layers, b, n_tokens, dim)
+            f = gen_trajectory_features(z_lbnt, aggregation=aggregation,
+                                        k=kappa, geometry=geometry)
+            out.append(f.cpu().numpy())
+    return np.concatenate(out, axis=0)
+
+
+# ============================================================
 #  DIFFERENTIABLE PROBE WRAPPERS
 # ============================================================
 
@@ -403,7 +513,7 @@ class HPSGenProbe(nn.Module):
     is_gen_based: bool = True
 
     def __init__(self, lorentz_proj, weights, bias, scaler_mean, scaler_std,
-                 kappa: float = 0.1):
+                 kappa: float = 0.1, aggregation: str = "mean"):
         super().__init__()
         self.lorentz_proj = lorentz_proj
         self.register_buffer("weights", weights)
@@ -411,6 +521,7 @@ class HPSGenProbe(nn.Module):
         self.register_buffer("scaler_mean", scaler_mean)
         self.register_buffer("scaler_std", scaler_std)
         self.kappa = kappa
+        self.aggregation = aggregation
 
     def forward(self, layer_acts):
         """layer_acts: (n_layers, batch, n_tokens, hidden_dim)
@@ -423,26 +534,59 @@ class HPSGenProbe(nn.Module):
             )
         n_layers, batch, n_tokens, hidden_dim = layer_acts.shape
 
-        # Project each (layer, token) activation through Lorentz hyperboloid.
-        # Reshape for batching: process layer-by-layer, flatten batch * n_tokens.
+        # Project each (layer, token) activation through the Lorentz hyperboloid.
         z_per_layer = []
         for l in range(n_layers):
             flat = layer_acts[l].reshape(batch * n_tokens, hidden_dim)
-            z_flat = self.lorentz_proj(flat)  # (batch * n_tokens, 1 + d_proj)
-            z_per_layer.append(z_flat)
-        # Stack into (n_layers, batch * n_tokens, 1 + d_proj)
-        z_btn = torch.stack(z_per_layer, dim=0)
+            z = self.lorentz_proj(flat)  # (batch * n_tokens, 1 + d_proj)
+            z_per_layer.append(z.reshape(batch, n_tokens, z.shape[-1]))
+        z_lbnt = torch.stack(z_per_layer, dim=0)  # (n_layers, batch, n_tokens, 1+d_proj)
 
-        # Extract 12 trajectory features per (batch, token) sample
-        # extract_hps_features expects (n_layers, B, dim) -> returns (B, 12)
-        feats_btn = extract_hps_features(z_btn, k=self.kappa)  # (batch * n_tokens, 12)
-        feats = feats_btn.reshape(batch, n_tokens, 12)
+        # Layer-axis ("mean"), token-axis ("trajectory"), or both (24-d).
+        feats = gen_trajectory_features(
+            z_lbnt, aggregation=self.aggregation, k=self.kappa,
+            geometry="lorentz",
+        )
 
-        # Mean across tokens
-        feats_mean = feats.mean(dim=1)  # (batch, 12)
+        feats_std = (feats - self.scaler_mean) / self.scaler_std
+        return feats_std @ self.weights + self.bias
 
-        # Standardize and linear classifier
-        feats_std = (feats_mean - self.scaler_mean) / self.scaler_std
+
+class HPSEuclideanGenProbe(nn.Module):
+    """Generation-based HPS in FLAT geometry — parameter-matched control for
+    HPSGenProbe. Same token/layer trajectory feature pipeline, Euclidean
+    projection (no hyperboloid embedding). This is the control that attributes
+    any HPS-Gen gain to hyperbolic geometry vs. simply monitoring generation.
+    """
+    is_gen_based: bool = True
+
+    def __init__(self, proj, weights, bias, scaler_mean, scaler_std,
+                 aggregation: str = "mean"):
+        super().__init__()
+        self.proj = proj
+        self.aggregation = aggregation
+        self.register_buffer("weights", weights)
+        self.register_buffer("bias", bias)
+        self.register_buffer("scaler_mean", scaler_mean)
+        self.register_buffer("scaler_std", scaler_std)
+
+    def forward(self, layer_acts):
+        if layer_acts.dim() != 4:
+            raise ValueError(
+                f"HPSEuclideanGenProbe expects 4D input (n_layers, batch, "
+                f"n_tokens, hidden_dim); got shape {tuple(layer_acts.shape)}"
+            )
+        n_layers, batch, n_tokens, hidden_dim = layer_acts.shape
+        z_per_layer = []
+        for l in range(n_layers):
+            flat = layer_acts[l].reshape(batch * n_tokens, hidden_dim)
+            z = self.proj(flat)
+            z_per_layer.append(z.reshape(batch, n_tokens, z.shape[-1]))
+        z_lbnt = torch.stack(z_per_layer, dim=0)  # (n_layers, batch, n_tokens, d_proj)
+        feats = gen_trajectory_features(
+            z_lbnt, aggregation=self.aggregation, geometry="euclidean",
+        )
+        feats_std = (feats - self.scaler_mean) / self.scaler_std
         return feats_std @ self.weights + self.bias  # (batch,)
 
 
@@ -736,7 +880,7 @@ def load_gen_cache_arrays(cache_path: str, layers):
 
 
 def train_hps_gen_probe(data_gen, kappa: float = 0.1, epochs: int = 50,
-                        proj_dim: int = 64):
+                        proj_dim: int = 64, aggregation: str = "mean"):
     """Train HPS-Gen probe on generation-token activations.
 
     Pipeline:
@@ -801,31 +945,13 @@ def train_hps_gen_probe(data_gen, kappa: float = 0.1, epochs: int = 50,
     for p in proj.parameters():
         p.requires_grad_(False)
 
-    # Step 2: extract per-token HPS features, mean across tokens.
-    def extract_features_per_sample(X):
-        """X: (N, n_layers, n_tokens, hidden) -> features (N, 12) via per-token
-        feature extraction, then mean-pool across tokens."""
-        N = X.shape[0]
-        feats_list = []
-        with torch.no_grad():
-            for i in range(N):
-                xi = torch.tensor(X[i], dtype=torch.float32, device=DEVICE)
-                # xi: (n_layers, n_tokens, hidden)
-                # Project per layer per token
-                z_per_layer = []
-                for l in range(n_layers):
-                    flat = xi[l]  # (n_tokens, hidden)
-                    z = proj(flat)  # (n_tokens, 1+d_proj)
-                    z_per_layer.append(z)
-                z_stack = torch.stack(z_per_layer, dim=0)  # (n_layers, n_tokens, 1+d_proj)
-                # extract_hps_features expects (n_layers, B, dim); B = n_tokens
-                feats_per_token = extract_hps_features(z_stack, k=kappa)  # (n_tokens, 12)
-                feats_mean = feats_per_token.mean(dim=0)  # (12,)
-                feats_list.append(feats_mean.cpu().numpy())
-        return np.array(feats_list)  # (N, 12)
-
-    feats_tr = extract_features_per_sample(X_tr)
-    feats_te = extract_features_per_sample(X_te)
+    # Step 2: extract trajectory features (layer-axis, token-axis, or both).
+    print(f"    Aggregation: {aggregation} "
+          f"({GEN_FEATURE_DIM[aggregation]}-dim features)")
+    feats_tr = gen_features_for_dataset(X_tr, proj, aggregation, "lorentz",
+                                        kappa=kappa)
+    feats_te = gen_features_for_dataset(X_te, proj, aggregation, "lorentz",
+                                        kappa=kappa)
 
     # Step 3: standardize and fit LR.
     scaler = StandardScaler()
@@ -843,6 +969,81 @@ def train_hps_gen_probe(data_gen, kappa: float = 0.1, epochs: int = 50,
         scaler_mean=torch.tensor(scaler.mean_, dtype=torch.float32, device=DEVICE),
         scaler_std=torch.tensor(scaler.scale_, dtype=torch.float32, device=DEVICE),
         kappa=kappa,
+        aggregation=aggregation,
+    ).to(DEVICE)
+    return probe, auroc
+
+
+def train_hps_euc_gen_probe(data_gen, epochs: int = 50, proj_dim: int = 64,
+                            aggregation: str = "mean"):
+    """Train HPS-Euclidean-Gen: parameter-matched FLAT control for HPS-Gen.
+
+    Same generation-token pipeline and trajectory features as train_hps_gen_probe,
+    but with a Euclidean projection (no hyperboloid). Used to attribute any
+    HPS-Gen advantage to hyperbolic geometry vs. generation-monitoring per se.
+    """
+    print("  Training HPS-Euclidean-Gen probe...")
+    X_tr = np.concatenate([data_gen["X_tr_ben_gen"], data_gen["X_tr_atk_gen"]])
+    y_tr = np.concatenate([np.zeros(len(data_gen["X_tr_ben_gen"])),
+                           np.ones(len(data_gen["X_tr_atk_gen"]))])
+    X_te = np.concatenate([data_gen["X_te_ben_gen"], data_gen["X_te_atk_gen"]])
+    y_te = np.concatenate([np.zeros(len(data_gen["X_te_ben_gen"])),
+                           np.ones(len(data_gen["X_te_atk_gen"]))])
+
+    n_samples, n_layers, n_tokens, hidden_dim = X_tr.shape
+    print(f"    Train: {len(X_tr)} samples, layers={n_layers}, "
+          f"tokens={n_tokens}, hidden={hidden_dim}")
+    print(f"    Aggregation: {aggregation} "
+          f"({GEN_FEATURE_DIM[aggregation]}-dim features)")
+
+    # Step 1: train Euclidean projection on token-mean-pooled activations
+    # (mirrors train_hps_gen_probe Step 1, flat contrastive loss per layer).
+    X_tr_mean = X_tr.mean(axis=2)  # (N, n_layers, hidden_dim)
+    proj = EuclideanProjection(hidden_dim, proj_dim).to(DEVICE)
+    opt = torch.optim.Adam(proj.parameters(), lr=1e-3, weight_decay=1e-5)
+    Xt = torch.tensor(X_tr_mean, dtype=torch.float32, device=DEVICE)
+    yt = torch.tensor(y_tr, dtype=torch.long, device=DEVICE)
+    for epoch in range(epochs):
+        loss_total = torch.tensor(0.0, device=DEVICE)
+        for li in range(n_layers):
+            h = proj(Xt[:, li, :])
+            n = h.shape[0]
+            batch_idx = torch.randperm(n, device=DEVICE)[:512]
+            hb = h[batch_idx]; yb = yt[batch_idx]
+            d = torch.cdist(hb.unsqueeze(0), hb.unsqueeze(0)).squeeze(0)
+            same = (yb.unsqueeze(0) == yb.unsqueeze(1)).float()
+            triu = torch.triu(torch.ones_like(d), diagonal=1)
+            ns = (same * triu).sum().clamp(min=1)
+            nd = ((1 - same) * triu).sum().clamp(min=1)
+            loss = ((d ** 2 * same * triu).sum() / ns
+                    + (torch.clamp(2.0 - d, min=0) ** 2 * (1 - same) * triu).sum() / nd) / 2
+            loss_total = loss_total + loss
+        loss_total = loss_total / n_layers
+        opt.zero_grad(); loss_total.backward(); opt.step()
+    proj.eval()
+    for p in proj.parameters():
+        p.requires_grad_(False)
+
+    # Step 2: extract trajectory features (flat geometry).
+    feats_tr = gen_features_for_dataset(X_tr, proj, aggregation, "euclidean")
+    feats_te = gen_features_for_dataset(X_te, proj, aggregation, "euclidean")
+
+    # Step 3: standardize and fit LR.
+    scaler = StandardScaler()
+    feats_tr_std = scaler.fit_transform(feats_tr)
+    feats_te_std = scaler.transform(feats_te)
+    clf = LogisticRegression(max_iter=2000, random_state=42)
+    clf.fit(feats_tr_std, y_tr)
+    auroc = roc_auc_score(y_te, clf.decision_function(feats_te_std))
+    print(f"    HPS-Euclidean-Gen AUROC = {auroc:.4f}")
+
+    probe = HPSEuclideanGenProbe(
+        proj=proj,
+        weights=torch.tensor(clf.coef_[0], dtype=torch.float32, device=DEVICE),
+        bias=torch.tensor(clf.intercept_[0], dtype=torch.float32, device=DEVICE),
+        scaler_mean=torch.tensor(scaler.mean_, dtype=torch.float32, device=DEVICE),
+        scaler_std=torch.tensor(scaler.scale_, dtype=torch.float32, device=DEVICE),
+        aggregation=aggregation,
     ).to(DEVICE)
     return probe, auroc
 

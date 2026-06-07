@@ -234,6 +234,7 @@ if [ "${SKIP_PHASE_4:-0}" -eq 0 ]; then
         --defender hps_gen \
         $COMMON_ARGS \
         --gen_cache "$GEN_CACHE" \
+        --gen_aggregation "${GEN_AGG:-both}" \
         --suffix_save "$OUTPUT_DIR/suffix_hps_gen_flrt.json" \
         --output "$OUTPUT_DIR/attack_hps_gen_flrt.json" \
         2>&1 | tee "$OUTPUT_DIR/log_phase4_hps_gen.txt"
@@ -243,6 +244,38 @@ if [ "${SKIP_PHASE_4:-0}" -eq 0 ]; then
   fi
 else
   echo "[SKIP] PHASE 4 disabled by SKIP_PHASE_4=1"
+fi
+
+# ============================================================
+#  PHASE 5: HPS-Euclidean-Gen control (~2.5 hrs)
+#  Parameter-matched FLAT generation-based probe. This is the control that
+#  attributes any HPS-Gen advantage to HYPERBOLIC GEOMETRY vs. simply
+#  monitoring generation. Compare adapt recall: HPS-Gen vs HPS-Euclidean-Gen.
+# ============================================================
+if [ "${SKIP_PHASE_5:-0}" -eq 0 ]; then
+  GEN_CACHE="${GEN_CACHE:-results/llama3_gen_activations_cache.npz}"
+  if [ ! -f "$GEN_CACHE" ]; then
+    echo "[SKIP] PHASE 5: generation activations cache not found ($GEN_CACHE)."
+    echo "       Run extract_generation_activations.py to populate it."
+  else
+    echo "─────────────────────────────────────────────────────────────"
+    echo " PHASE 5: FLRT vs HPS-Euclidean-Gen (flat geometric control)"
+    echo " Started: $(date)"
+    echo "─────────────────────────────────────────────────────────────"
+    python flrt_attack.py \
+        --defender hps_euc_gen \
+        $COMMON_ARGS \
+        --gen_cache "$GEN_CACHE" \
+        --gen_aggregation "${GEN_AGG:-both}" \
+        --suffix_save "$OUTPUT_DIR/suffix_hps_euc_gen_flrt.json" \
+        --output "$OUTPUT_DIR/attack_hps_euc_gen_flrt.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase5_hps_euc_gen.txt"
+    ELAPSED=$(( ($(date +%s) - START) / 60 ))
+    echo "  Phase 5 done at $ELAPSED min from start"
+    echo ""
+  fi
+else
+  echo "[SKIP] PHASE 5 disabled by SKIP_PHASE_5=1"
 fi
 
 # ============================================================
@@ -308,7 +341,9 @@ echo ""
 echo "  Direct attack summary (recall @ ${TARGET_FPR} FPR):"
 for f in "$OUTPUT_DIR/attack_c4_flrt.json" \
          "$OUTPUT_DIR/attack_hps_flrt.json" \
-         "$OUTPUT_DIR/attack_hps_euc_flrt.json"; do
+         "$OUTPUT_DIR/attack_hps_euc_flrt.json" \
+         "$OUTPUT_DIR/attack_hps_gen_flrt.json" \
+         "$OUTPUT_DIR/attack_hps_euc_gen_flrt.json"; do
   if [ -f "$f" ]; then
     python3 -c "
 import json
