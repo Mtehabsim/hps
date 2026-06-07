@@ -14,3 +14,62 @@
   Loading model...
 Loading weights:   0%|                                                                                                                                       | 0/291 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                              | 1/291 [00:00<02:03,  2.35it/s]Loading weights:   1%|▊                                                                                                                              | 2/291 [00:00<01:15,  3.85it/s]Loading weights:   5%|██████                                                                                                                        | 14/291 [00:00<00:09, 29.93it/s]Loading weights:   8%|█████████▉                                                                                                                    | 23/291 [00:00<00:06, 41.38it/s]Loading weights:  11%|█████████████▊                                                                                                                | 32/291 [00:00<00:05, 46.31it/s]Loading weights:  14%|█████████████████▊                                                                                                            | 41/291 [00:01<00:04, 54.60it/s]Loading weights:  17%|█████████████████████▋                                                                                                        | 50/291 [00:01<00:03, 61.97it/s]Loading weights:  20%|█████████████████████████                                                                                                     | 58/291 [00:01<00:03, 64.26it/s]Loading weights:  23%|█████████████████████████████                                                                                                 | 67/291 [00:01<00:03, 57.77it/s]Loading weights:  26%|████████████████████████████████▉                                                                                             | 76/291 [00:01<00:03, 60.75it/s]Loading weights:  29%|████████████████████████████████████▊                                                                                         | 85/291 [00:01<00:03, 58.84it/s]Loading weights:  33%|█████████████████████████████████████████▏                                                                                    | 95/291 [00:01<00:03, 61.90it/s]Loading weights:  35%|████████████████████████████████████████████▏                                                                                | 103/291 [00:02<00:03, 62.55it/s]Loading weights:  39%|████████████████████████████████████████████████▌                                                                            | 113/291 [00:02<00:02, 65.82it/s]Loading weights:  42%|███████████████████████████████████████████████████▉                                                                         | 121/291 [00:02<00:02, 65.03it/s]Loading weights:  45%|███████████████████████████████████████████████████████▊                                                                     | 130/291 [00:02<00:02, 69.29it/s]Loading weights:  48%|███████████████████████████████████████████████████████████▋                                                                 | 139/291 [00:02<00:02, 66.59it/s]Loading weights:  51%|███████████████████████████████████████████████████████████████▌                                                             | 148/291 [00:02<00:02, 68.33it/s]Loading weights:  54%|███████████████████████████████████████████████████████████████████▍                                                         | 157/291 [00:02<00:01, 70.81it/s]Loading weights:  57%|███████████████████████████████████████████████████████████████████████▎                                                     | 166/291 [00:02<00:01, 74.62it/s]Loading weights:  60%|███████████████████████████████████████████████████████████████████████████▏                                                 | 175/291 [00:03<00:01, 70.92it/s]Loading weights:  63%|███████████████████████████████████████████████████████████████████████████████                                              | 184/291 [00:03<00:01, 65.08it/s]Loading weights:  67%|███████████████████████████████████████████████████████████████████████████████████▎                                         | 194/291 [00:03<00:01, 64.74it/s]Loading weights:  70%|███████████████████████████████████████████████████████████████████████████████████████▏                                     | 203/291 [00:03<00:01, 67.46it/s]Loading weights:  73%|███████████████████████████████████████████████████████████████████████████████████████████                                  | 212/291 [00:03<00:01, 65.35it/s]Loading weights:  76%|██████████████████████████████████████████████████████████████████████████████████████████████▉                              | 221/291 [00:03<00:01, 66.52it/s]Loading weights:  79%|██████████████████████████████████████████████████████████████████████████████████████████████████▊                          | 230/291 [00:03<00:00, 67.69it/s]Loading weights:  82%|███████████████████████████████████████████████████████████████████████████████████████████████████████                      | 240/291 [00:04<00:00, 71.93it/s]Loading weights:  85%|██████████████████████████████████████████████████████████████████████████████████████████████████████████▌                  | 248/291 [00:04<00:00, 67.33it/s]Loading weights:  88%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████▉               | 256/291 [00:04<00:00, 63.74it/s]Loading weights:  91%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊           | 265/291 [00:04<00:00, 66.66it/s]Loading weights:  94%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▋       | 274/291 [00:04<00:00, 66.07it/s]Loading weights:  98%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉   | 284/291 [00:04<00:00, 69.44it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 291/291 [00:04<00:00, 61.19it/s]
 [transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer TokenizersBackend. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+  Loaded. Hidden size: 4096, layers: 32
+
+  Loading attack prompts...
+  Loading attacks from results/jbshield_llama3_attacks.json...
+    Loaded 0 attacks across 0 methods
+    Split: 0 train, 0 test (seed=42)
+
+  Loading benign prompts...
+  Loaded 5905 benign prompts; using 5000 train + 500 test
+
+  Final counts:
+    train_ben: 5000
+    train_atk: 0
+    test_ben:  500
+    test_atk:  0
+
+──────────────────────────────────────────────────────────────────────
+  Extracting train_ben...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+    [200/5000] elapsed=0.3min eta=7.5min
+    [400/5000] elapsed=0.6min eta=6.5min
+    [600/5000] elapsed=0.9min eta=6.3min
+    [800/5000] elapsed=1.1min eta=5.8min
+    [1000/5000] elapsed=1.4min eta=5.4min
+    [1200/5000] elapsed=1.6min eta=5.1min
+    [1400/5000] elapsed=1.9min eta=4.8min
+    [1600/5000] elapsed=2.1min eta=4.5min
+    [1800/5000] elapsed=2.4min eta=4.2min
+    [2000/5000] elapsed=2.6min eta=4.0min
+    [2200/5000] elapsed=2.9min eta=3.7min
+    [2400/5000] elapsed=3.2min eta=3.4min
+    [2600/5000] elapsed=3.5min eta=3.2min
+    [2800/5000] elapsed=3.8min eta=3.0min
+    [3000/5000] elapsed=4.1min eta=2.7min
+    [3200/5000] elapsed=4.4min eta=2.4min
+    [3400/5000] elapsed=4.6min eta=2.2min
+    [3600/5000] elapsed=4.9min eta=1.9min
+    [3800/5000] elapsed=5.2min eta=1.6min
+    [4000/5000] elapsed=5.5min eta=1.4min
+    [4200/5000] elapsed=5.7min eta=1.1min
+    [4400/5000] elapsed=6.0min eta=0.8min
+    [4600/5000] elapsed=6.3min eta=0.5min
+    [4800/5000] elapsed=6.6min eta=0.3min
+    [5000/5000] elapsed=6.9min eta=0.0min
+
+  Extracting train_atk...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+
+  Extracting test_ben...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+    [200/500] elapsed=0.2min eta=0.4min
+    [400/500] elapsed=0.5min eta=0.1min
+    [500/500] elapsed=0.7min eta=0.0min
+
+  Extracting test_atk...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+
+  Saving to results/llama3_gen_activations_cache.npz ...
+  Done. File size: 3.81 GB
