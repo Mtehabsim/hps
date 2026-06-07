@@ -279,6 +279,36 @@ else
 fi
 
 # ============================================================
+#  PHASE 6: C4-Gen control (~2.5 hrs)
+#  Full-dim mean-pool over generation tokens (no projection, no trajectory).
+#  The key control: if C4-Gen also resists, robustness comes from generation
+#  monitoring itself, not hyperbolic geometry or the trajectory representation.
+# ============================================================
+if [ "${SKIP_PHASE_6:-0}" -eq 0 ]; then
+  GEN_CACHE="${GEN_CACHE:-results/llama3_gen_activations_cache.npz}"
+  if [ ! -f "$GEN_CACHE" ]; then
+    echo "[SKIP] PHASE 6: generation activations cache not found ($GEN_CACHE)."
+  else
+    echo "─────────────────────────────────────────────────────────────"
+    echo " PHASE 6: FLRT vs C4-Gen (full-space generation control)"
+    echo " Started: $(date)"
+    echo "─────────────────────────────────────────────────────────────"
+    python flrt_attack.py \
+        --defender c4_gen \
+        $COMMON_ARGS \
+        --gen_cache "$GEN_CACHE" \
+        --suffix_save "$OUTPUT_DIR/suffix_c4_gen_flrt.json" \
+        --output "$OUTPUT_DIR/attack_c4_gen_flrt.json" \
+        2>&1 | tee "$OUTPUT_DIR/log_phase6_c4_gen.txt"
+    ELAPSED=$(( ($(date +%s) - START) / 60 ))
+    echo "  Phase 6 done at $ELAPSED min from start"
+    echo ""
+  fi
+else
+  echo "[SKIP] PHASE 6 disabled by SKIP_PHASE_6=1"
+fi
+
+# ============================================================
 #  PHASE 3: Cross-method transfer (eval only, ~30 min)
 # ============================================================
 if [ "${SKIP_PHASE_3:-0}" -eq 0 ]; then
@@ -343,7 +373,8 @@ for f in "$OUTPUT_DIR/attack_c4_flrt.json" \
          "$OUTPUT_DIR/attack_hps_flrt.json" \
          "$OUTPUT_DIR/attack_hps_euc_flrt.json" \
          "$OUTPUT_DIR/attack_hps_gen_flrt.json" \
-         "$OUTPUT_DIR/attack_hps_euc_gen_flrt.json"; do
+         "$OUTPUT_DIR/attack_hps_euc_gen_flrt.json" \
+         "$OUTPUT_DIR/attack_c4_gen_flrt.json"; do
   if [ -f "$f" ]; then
     python3 -c "
 import json

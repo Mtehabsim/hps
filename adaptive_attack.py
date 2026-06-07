@@ -590,6 +590,34 @@ class HPSEuclideanGenProbe(nn.Module):
         return feats_std @ self.weights + self.bias  # (batch,)
 
 
+class C4GenProbe(nn.Module):
+    """C4 over generation tokens: full-dim mean-pool across BOTH layers and
+    tokens (no projection, no trajectory features). This is the mentor's
+    'full hidden space, no projection' probe, made generation-based. It is the
+    key control: if C4-Gen resists adaptive attack too, the robustness comes
+    from generation-based monitoring itself, not from hyperbolic geometry or
+    the trajectory representation.
+    """
+    is_gen_based: bool = True
+
+    def __init__(self, weights, bias, scaler_mean, scaler_std):
+        super().__init__()
+        self.register_buffer("weights", weights)
+        self.register_buffer("bias", bias)
+        self.register_buffer("scaler_mean", scaler_mean)
+        self.register_buffer("scaler_std", scaler_std)
+
+    def forward(self, layer_acts):
+        if layer_acts.dim() != 4:
+            raise ValueError(
+                f"C4GenProbe expects 4D input (n_layers, batch, n_tokens, "
+                f"hidden_dim); got shape {tuple(layer_acts.shape)}"
+            )
+        feats = layer_acts.mean(dim=(0, 2))  # mean over layers + tokens -> (batch, hidden)
+        feats_std = (feats - self.scaler_mean) / self.scaler_std
+        return feats_std @ self.weights + self.bias
+
+
 # Mark the existing input-based probes as not gen-based (default)
 # (we set this as a class attribute via module-level assignment to avoid
 #  modifying their __init__ signatures)
@@ -1044,6 +1072,39 @@ def train_hps_euc_gen_probe(data_gen, epochs: int = 50, proj_dim: int = 64,
         scaler_mean=torch.tensor(scaler.mean_, dtype=torch.float32, device=DEVICE),
         scaler_std=torch.tensor(scaler.scale_, dtype=torch.float32, device=DEVICE),
         aggregation=aggregation,
+    ).to(DEVICE)
+    return probe, auroc
+
+
+def train_c4_gen_probe(data_gen):
+    """Train C4-Gen: full-dim mean-pool over generation tokens + layers, LR.
+
+    Mirrors train_c4_probe but pools the (n_layers, n_tokens, hidden) gen
+    activations over both layers and tokens. The control that tests whether
+    a simple full-space probe also gains robustness from generation monitoring.
+    """
+    print("  Training C4-Gen probe (full-dim mean-pool over layers+tokens)...")
+    X_tr = np.concatenate([data_gen["X_tr_ben_gen"], data_gen["X_tr_atk_gen"]])
+    y_tr = np.concatenate([np.zeros(len(data_gen["X_tr_ben_gen"])),
+                           np.ones(len(data_gen["X_tr_atk_gen"]))])
+    X_te = np.concatenate([data_gen["X_te_ben_gen"], data_gen["X_te_atk_gen"]])
+    y_te = np.concatenate([np.zeros(len(data_gen["X_te_ben_gen"])),
+                           np.ones(len(data_gen["X_te_atk_gen"]))])
+    # mean over layers (axis 1) and tokens (axis 2) -> (N, hidden)
+    feats_tr = X_tr.mean(axis=(1, 2))
+    feats_te = X_te.mean(axis=(1, 2))
+    scaler = StandardScaler()
+    feats_tr_std = scaler.fit_transform(feats_tr)
+    feats_te_std = scaler.transform(feats_te)
+    clf = LogisticRegression(max_iter=2000, random_state=42)
+    clf.fit(feats_tr_std, y_tr)
+    auroc = roc_auc_score(y_te, clf.decision_function(feats_te_std))
+    print(f"    C4-Gen AUROC = {auroc:.4f}")
+    probe = C4GenProbe(
+        weights=torch.tensor(clf.coef_[0], dtype=torch.float32, device=DEVICE),
+        bias=torch.tensor(clf.intercept_[0], dtype=torch.float32, device=DEVICE),
+        scaler_mean=torch.tensor(scaler.mean_, dtype=torch.float32, device=DEVICE),
+        scaler_std=torch.tensor(scaler.scale_, dtype=torch.float32, device=DEVICE),
     ).to(DEVICE)
     return probe, auroc
 

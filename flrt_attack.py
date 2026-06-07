@@ -60,6 +60,7 @@ from adaptive_attack import (
     train_hps_euc_probe,
     train_hps_gen_probe,
     train_hps_euc_gen_probe,
+    train_c4_gen_probe,
     load_cache_arrays,
     load_gen_cache_arrays,
     evaluate_attack,
@@ -548,7 +549,7 @@ def evaluate_with_string_suffix(
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--defender", required=True,
-                   choices=["c4", "hps", "hps_euc", "hps_gen", "hps_euc_gen"])
+                   choices=["c4", "hps", "hps_euc", "hps_gen", "hps_euc_gen", "c4_gen"])
     p.add_argument("--model_name", default="meta-llama/Meta-Llama-3-8B-Instruct")
     p.add_argument("--cache", default="results/llama3_activations_cache_diverse_fixed.npz")
     p.add_argument("--gen_cache", default="results/llama3_gen_activations_cache.npz",
@@ -606,7 +607,7 @@ def main():
 
     # ---- Load cache and train probe ----
     print("  Loading cache and training probe...")
-    if args.defender in ("hps_gen", "hps_euc_gen"):
+    if args.defender in ("hps_gen", "hps_euc_gen", "c4_gen"):
         if not os.path.exists(args.gen_cache):
             raise FileNotFoundError(
                 f"Generation activations cache not found: {args.gen_cache}\n"
@@ -616,9 +617,11 @@ def main():
         if args.defender == "hps_gen":
             probe, baseline_auroc = train_hps_gen_probe(
                 data_gen, kappa=0.1, epochs=50, aggregation=args.gen_aggregation)
-        else:
+        elif args.defender == "hps_euc_gen":
             probe, baseline_auroc = train_hps_euc_gen_probe(
                 data_gen, epochs=50, aggregation=args.gen_aggregation)
+        else:  # c4_gen
+            probe, baseline_auroc = train_c4_gen_probe(data_gen)
     else:
         data = load_cache_arrays(args.cache, args.layers)
         if args.defender == "c4":
