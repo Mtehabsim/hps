@@ -1353,6 +1353,10 @@ def main():
                         "activation -> proj_dim). Default 64. Sweep this to "
                         "test the projection bottleneck (proj_dim -> 4096 "
                         "removes the per-layer compression). Ignored for c4.")
+    p.add_argument("--epochs", type=int, default=50,
+                   help="Contrastive training epochs for HPS/HPS-Euclidean. "
+                        "Default 50. Raise this to rule out under-training at "
+                        "large proj_dim. Ignored for c4.")
     p.add_argument("--n_train_queries", type=int, default=20,
                    help="Number of harmful queries for attack training")
     p.add_argument("--n_eval_queries", type=int, default=30,
@@ -1382,6 +1386,7 @@ def main():
     print(f"  Layers:       {args.layers}")
     if args.defender in ("hps", "hps_euc"):
         print(f"  Proj dim:     {args.proj_dim}")
+        print(f"  Epochs:       {args.epochs}")
     print(f"  Train n:      {args.n_train_queries}")
     print(f"  Eval n:       {args.n_eval_queries}")
     print(f"  Steps:        {args.steps}")
@@ -1403,10 +1408,11 @@ def main():
     if args.defender == "c4":
         probe, baseline_auroc = train_c4_probe(data)
     elif args.defender == "hps":
-        probe, baseline_auroc = train_hps_probe(data, kappa=0.1, epochs=50,
+        probe, baseline_auroc = train_hps_probe(data, kappa=0.1,
+                                                epochs=args.epochs,
                                                 proj_dim=args.proj_dim)
     elif args.defender == "hps_euc":
-        probe, baseline_auroc = train_hps_euc_probe(data, epochs=50,
+        probe, baseline_auroc = train_hps_euc_probe(data, epochs=args.epochs,
                                                     proj_dim=args.proj_dim)
     elif args.defender == "ensemble":
         probe, baseline_auroc = train_ensemble_probe(data)
