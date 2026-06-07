@@ -1,0 +1,65 @@
+{
+  "config": {
+    "epsilons": [
+      0.001,
+      0.01,
+      0.05,
+      0.1,
+      0.5,
+      1.0,
+      2.0,
+      5.0
+    ],
+    "pgd_steps": 50
+  },
+  "baseline": {
+    "hps_tpr": 0.671875,
+    "euclidean_tpr": 0.140625,
+    "rtv_tpr": 0.0,
+    "hps_threshold": 0.9747514814138412,
+    "euclidean_threshold": 0.8079095572233199,
+    "rtv_threshold": 20.568087863922116
+  },
+  "attack_results": {
+    "eps_0.001": {
+      "hps_evasion_rate": 0.359375,
+      "euclidean_evasion_rate": 0.859375,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_0.01": {
+      "hps_evasion_rate": 0.765625,
+      "euclidean_evasion_rate": 0.984375,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_0.05": {
+      "hps_evasion_rate": 1.0,
+      "euclidean_evasion_rate": 1.0,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_0.1": {
+      "hps_evasion_rate": 1.0,
+      "euclidean_evasion_rate": 1.0,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_0.5": {
+      "hps_evasion_rate": 1.0,
+      "euclidean_evasion_rate": 1.0,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_1.0": {
+      "hps_evasion_rate": 0.984375,
+      "euclidean_evasion_rate": 1.0,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_2.0": {
+      "hps_evasion_rate": 0.78125,
+      "euclidean_evasion_rate": 1.0,
+      "rtv_evasion_rate": 1.0
+    },
+    "eps_5.0": {
+      "hps_evasion_rate": 0.671875,
+      "euclidean_evasion_rate": 1.0,
+      "rtv_evasion_rate": 0.59375
+    }
+  }
+}
