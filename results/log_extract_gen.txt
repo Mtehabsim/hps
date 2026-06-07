@@ -14,3 +14,95 @@
   Loading model...
 Loading weights:   0%|                                                                             | 0/291 [00:00<?, ?it/s]Loading weights:   0%|▏                                                                    | 1/291 [00:00<03:04,  1.57it/s]Loading weights:   5%|███▎                                                                | 14/291 [00:00<00:12, 22.02it/s]Loading weights:   9%|██████▎                                                             | 27/291 [00:00<00:06, 41.27it/s]Loading weights:  12%|████████▏                                                           | 35/291 [00:01<00:05, 46.70it/s]Loading weights:  15%|██████████▌                                                         | 45/291 [00:01<00:04, 56.02it/s]Loading weights:  19%|████████████▌                                                       | 54/291 [00:01<00:03, 60.91it/s]Loading weights:  22%|██████████████▋                                                     | 63/291 [00:01<00:03, 67.02it/s]Loading weights:  25%|████████████████▊                                                   | 72/291 [00:01<00:03, 68.78it/s]Loading weights:  27%|██████████████████▋                                                 | 80/291 [00:01<00:03, 64.85it/s]Loading weights:  30%|████████████████████▌                                               | 88/291 [00:01<00:03, 65.18it/s]Loading weights:  33%|██████████████████████▏                                             | 95/291 [00:01<00:03, 63.14it/s]Loading weights:  36%|███████████████████████▉                                           | 104/291 [00:02<00:02, 64.09it/s]Loading weights:  38%|█████████████████████████▊                                         | 112/291 [00:02<00:02, 65.43it/s]Loading weights:  42%|████████████████████████████                                       | 122/291 [00:02<00:02, 70.29it/s]Loading weights:  45%|█████████████████████████████▉                                     | 130/291 [00:02<00:02, 68.85it/s]Loading weights:  48%|████████████████████████████████▏                                  | 140/291 [00:02<00:02, 71.53it/s]Loading weights:  51%|██████████████████████████████████                                 | 148/291 [00:02<00:02, 67.66it/s]Loading weights:  55%|████████████████████████████████████▌                              | 159/291 [00:02<00:01, 73.82it/s]Loading weights:  57%|██████████████████████████████████████▍                            | 167/291 [00:02<00:01, 75.26it/s]Loading weights:  60%|████████████████████████████████████████▌                          | 176/291 [00:02<00:01, 78.84it/s]Loading weights:  63%|██████████████████████████████████████████▎                        | 184/291 [00:03<00:01, 78.06it/s]Loading weights:  66%|████████████████████████████████████████████▍                      | 193/291 [00:03<00:01, 67.11it/s]Loading weights:  70%|██████████████████████████████████████████████▋                    | 203/291 [00:03<00:01, 72.73it/s]Loading weights:  73%|████████████████████████████████████████████████▊                  | 212/291 [00:03<00:01, 74.60it/s]Loading weights:  76%|██████████████████████████████████████████████████▉                | 221/291 [00:03<00:00, 72.56it/s]Loading weights:  79%|████████████████████████████████████████████████████▉              | 230/291 [00:03<00:00, 69.62it/s]Loading weights:  82%|███████████████████████████████████████████████████████            | 239/291 [00:03<00:00, 69.01it/s]Loading weights:  85%|█████████████████████████████████████████████████████████          | 248/291 [00:04<00:00, 67.28it/s]Loading weights:  88%|███████████████████████████████████████████████████████████▏       | 257/291 [00:04<00:00, 70.11it/s]Loading weights:  91%|█████████████████████████████████████████████████████████████      | 265/291 [00:04<00:00, 71.00it/s]Loading weights:  94%|██████████████████████████████████████████████████████████████▊    | 273/291 [00:04<00:00, 71.08it/s]Loading weights:  97%|████████████████████████████████████████████████████████████████▋  | 281/291 [00:04<00:00, 69.44it/s]Loading weights: 100%|███████████████████████████████████████████████████████████████████| 291/291 [00:04<00:00, 63.28it/s]
 [transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer TokenizersBackend. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+  Loaded. Hidden size: 4096, layers: 32
+
+  Loading attack prompts...
+  Loading attacks from results/jbshield_llama3_attacks.json...
+    Found 0 prompts across 0 methods
+  Loading attacks from results/validated_attacks_categorized.json...
+    Found 316 prompts across 4 methods
+  Using results/validated_attacks_categorized.json as the attack source.
+  Total: 316 prompts from results/validated_attacks_categorized.json
+    GCG: 68
+    JBC: 84
+    PAIR: 66
+    prompt_with_random_search: 98
+  Split: 252 train, 64 test (seed=42)
+
+  Loading benign prompts...
+  Loaded 5905 benign prompts; using 5000 train + 500 test
+
+  Final counts:
+    train_ben: 5000
+    train_atk: 252
+    test_ben:  500
+    test_atk:  64
+
+──────────────────────────────────────────────────────────────────────
+  Extracting train_ben...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+    [200/5000] elapsed=0.2min eta=6.0min
+    [400/5000] elapsed=0.5min eta=5.3min
+    [600/5000] elapsed=0.7min eta=5.3min
+    [800/5000] elapsed=0.9min eta=4.9min
+    [1000/5000] elapsed=1.1min eta=4.5min
+    [1200/5000] elapsed=1.4min eta=4.3min
+    [1400/5000] elapsed=1.6min eta=4.1min
+    [1600/5000] elapsed=1.8min eta=3.8min
+    [1800/5000] elapsed=2.0min eta=3.6min
+    [2000/5000] elapsed=2.3min eta=3.4min
+    [2200/5000] elapsed=2.5min eta=3.1min
+    [2400/5000] elapsed=2.7min eta=2.9min
+    [2600/5000] elapsed=2.9min eta=2.7min
+    [2800/5000] elapsed=3.1min eta=2.4min
+    [3000/5000] elapsed=3.3min eta=2.2min
+    [3200/5000] elapsed=3.5min eta=2.0min
+    [3400/5000] elapsed=3.9min eta=1.8min
+    [3600/5000] elapsed=4.2min eta=1.6min
+    [3800/5000] elapsed=4.4min eta=1.4min
+    [4000/5000] elapsed=4.6min eta=1.2min
+    [4200/5000] elapsed=4.9min eta=0.9min
+    [4400/5000] elapsed=5.1min eta=0.7min
+    [4600/5000] elapsed=5.3min eta=0.5min
+    [4800/5000] elapsed=5.5min eta=0.2min
+    [5000/5000] elapsed=5.7min eta=0.0min
+
+  Extracting train_atk...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+    [200/252] elapsed=0.2min eta=0.1min
+    [252/252] elapsed=0.3min eta=0.0min
+
+  Extracting test_ben...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+    [200/500] elapsed=0.2min eta=0.3min
+    [400/500] elapsed=0.4min eta=0.1min
+    [500/500] elapsed=0.5min eta=0.0min
+
+  Extracting test_atk...
+  Target tokens: 12  ('Sure, here are detailed step-by-step instructions:\n\n1.')
+    [64/64] elapsed=0.1min eta=0.0min
+
+  Saving to results/llama3_gen_activations_cache.npz ...
+Traceback (most recent call last):
+  File "/mnt/lab/Mo/hps/hps2/hps/extract_generation_activations.py", line 361, in <module>
+    main()
+  File "/mnt/lab/Mo/hps/hps2/hps/extract_generation_activations.py", line 348, in main
+    np.savez_compressed(
+  File "/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/numpy/lib/npyio.py", line 710, in savez_compressed
+    _savez(file, args, kwds, True)
+  File "/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/numpy/lib/npyio.py", line 743, in _savez
+    format.write_array(fid, val,
+  File "/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/numpy/lib/format.py", line 719, in write_array
+    pickle.dump(array, fp, protocol=3, **pickle_kwargs)
+  File "/usr/lib/python3.12/zipfile/__init__.py", line 1216, in write
+    self._fileobj.write(data)
+OSError: [Errno 28] No space left on device
+Exception ignored in: <function ZipFile.__del__ at 0x155415c6aa20>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/zipfile/__init__.py", line 1940, in __del__
+    self.close()
+  File "/usr/lib/python3.12/zipfile/__init__.py", line 1962, in close
+    self._fpclose(fp)
+  File "/usr/lib/python3.12/zipfile/__init__.py", line 2062, in _fpclose
+    fp.close()
+OSError: [Errno 28] No space left on device
