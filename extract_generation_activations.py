@@ -53,41 +53,97 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adaptive_attack import HARMFUL_TARGET
 
 
-def load_attack_prompts(attacks_json_path, seed=42, train_frac=0.8):
-    """Load JBShield attack prompts and split train/test using the same
-    convention as extract_jbshield_activations.py (seed=42, 80/20 split).
+def load_attack_prompts(attacks_json_path, seed=42, train_frac=0.8,
+                         fallback_paths=None):
+    """Load attack prompts and split train/test.
 
-    The attacks_json file is expected to be a dict {attack_name: [prompts...]}.
-    This is the canonical format used to build the existing activation caches.
+    Tries the primary attacks_json_path first. If it has 0 prompts (empty
+    stub), iterates through fallback_paths and uses the first one with
+    >= 50 prompts.
+
+    Files are expected to be dict {attack_name: [prompts...]} (the JBShield
+    convention used by extract_jbshield_activations.py).
     """
-    if not os.path.exists(attacks_json_path):
-        raise FileNotFoundError(
-            f"Attack prompts JSON not found: {attacks_json_path}\n"
-            "Pass --attacks_json with a path to a JBShield-style dict\n"
-            "(e.g., results/jbshield_llama3_attacks.json)."
-        )
+    if fallback_paths is None:
+        fallback_paths = [
+            "results/validated_attacks_categorized.json",
+            "results/novel_attacks_2025.json",
+            "data/extra_attacks.json",
+        ]
 
-    print(f"  Loading attacks from {attacks_json_path}...")
-    with open(attacks_json_path) as f:
-        data = json.load(f)
-    if not isinstance(data, dict):
-        raise ValueError(
-            f"Expected dict[attack_name -> list[str]] in {attacks_json_path}, "
-            f"got {type(data).__name__}"
-        )
+    paths_to_try = [attacks_json_path] + fallback_paths
 
     flat = []
     methods = []
-    for attack_name, prompts in data.items():
-        for p in prompts:
-            if isinstance(p, str) and len(p.strip()) >= 5:
-                flat.append(p)
-                methods.append(attack_name)
-    print(f"    Loaded {len(flat)} attacks across "
-          f"{len(set(methods))} methods")
+    used_path = None
+
+    for path in paths_to_try:
+        if not os.path.exists(path):
+            print(f"  Skipping {path}: not found")
+            continue
+
+        print(f"  Loading attacks from {path}...")
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"    Error: {e}")
+            continue
+
+        if not isinstance(data, dict):
+            print(f"    Not a dict (got {type(data).__name__}); skipping")
+            continue
+
+        # Try direct {name: [prompts]} format first
+        candidates_flat = []
+        candidates_methods = []
+        for attack_name, prompts in data.items():
+            if not isinstance(prompts, list):
+                continue
+            for p in prompts:
+                if isinstance(p, str) and len(p.strip()) >= 5:
+                    candidates_flat.append(p)
+                    candidates_methods.append(attack_name)
+
+        # Handle nested format like validated_attacks.json:
+        # {validated_attacks: [{prompt: ..., method: ...}, ...]}
+        if not candidates_flat and "validated_attacks" in data:
+            va = data["validated_attacks"]
+            if isinstance(va, list):
+                for item in va:
+                    if isinstance(item, dict):
+                        prompt = item.get("prompt") or item.get("attack_prompt")
+                        method = item.get("method") or item.get("attack") or "unknown"
+                        if isinstance(prompt, str) and len(prompt.strip()) >= 5:
+                            candidates_flat.append(prompt)
+                            candidates_methods.append(method)
+
+        n_loaded = len(candidates_flat)
+        print(f"    Found {n_loaded} prompts across "
+              f"{len(set(candidates_methods))} methods")
+
+        if n_loaded >= 50:
+            flat = candidates_flat
+            methods = candidates_methods
+            used_path = path
+            print(f"  Using {path} as the attack source.")
+            break
+        elif n_loaded > 0:
+            print(f"    Too few prompts ({n_loaded} < 50); trying next source...")
+
+    if not flat:
+        raise FileNotFoundError(
+            "No usable attack prompt source found. Tried:\n  - "
+            + "\n  - ".join(paths_to_try)
+            + "\nEach was either missing, empty, or had <50 prompts.\n"
+            "Either rebuild jbshield_llama3_attacks.json (build_jbshield_attacks.py)\n"
+            "or pass --attacks_json with a valid JBShield-style dict file."
+        )
+
     counts = {m: methods.count(m) for m in sorted(set(methods))}
+    print(f"  Total: {len(flat)} prompts from {used_path}")
     for m, n in counts.items():
-        print(f"      {m}: {n}")
+        print(f"    {m}: {n}")
 
     # Same split convention as extract_jbshield_activations.py: seed=42, 80/20
     rng = np.random.RandomState(seed)
@@ -95,7 +151,7 @@ def load_attack_prompts(attacks_json_path, seed=42, train_frac=0.8):
     n_train = int(train_frac * len(flat))
     train = [flat[i] for i in perm[:n_train]]
     test = [flat[i] for i in perm[n_train:]]
-    print(f"    Split: {len(train)} train, {len(test)} test (seed={seed})")
+    print(f"  Split: {len(train)} train, {len(test)} test (seed={seed})")
     return train, test
 
 
