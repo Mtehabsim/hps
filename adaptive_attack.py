@@ -1228,15 +1228,23 @@ def run_adaptive_attack(model, tokenizer, probe, layers,
             token_lp = log_probs.gather(-1, target_ids.unsqueeze(-1)).squeeze(-1)
             behavior_loss = -token_lp.mean()
 
-            # ---- Obfuscation loss: probe score at last INPUT token ----
-            # Last input token = position (input_len - 1)
-            last_pos = input_len - 1
-            layer_acts = torch.stack([
-                outputs.hidden_states[l + 1][0, last_pos]  # +1 because [0] is embeddings
-                for l in layers
-            ]).unsqueeze(1)  # (n_layers, 1, hidden_dim)
-            # Cast acts to fp32 for the probe (probe is fp32, more numerically stable)
-            layer_acts_fp32 = layer_acts.float()
+            # ---- Obfuscation loss: probe score ----
+            if getattr(probe, "is_gen_based", False):
+                # Gen-based probe: read activations across the teacher-forced
+                # target token positions [input_len : input_len + T_t].
+                gen_acts = torch.stack([
+                    outputs.hidden_states[l + 1][0, input_len:input_len + T_t]
+                    for l in layers
+                ]).unsqueeze(1)  # (n_layers, 1, T_t, hidden)
+                layer_acts_fp32 = gen_acts.float()
+            else:
+                # Input-based probe: last input token = position (input_len - 1)
+                last_pos = input_len - 1
+                layer_acts = torch.stack([
+                    outputs.hidden_states[l + 1][0, last_pos]  # +1 because [0] is embeddings
+                    for l in layers
+                ]).unsqueeze(1)  # (n_layers, 1, hidden_dim)
+                layer_acts_fp32 = layer_acts.float()
             probe_logit = probe(layer_acts_fp32).squeeze()  # log-odds (positive = attack)
 
             obf_loss = probe_logit  # we want this LOW (looks benign)
@@ -1268,15 +1276,21 @@ def run_adaptive_attack(model, tokenizer, probe, layers,
 # ============================================================
 
 def evaluate_attack(model, tokenizer, probe, layers,
-                     queries, suffix=None, n_max=None, is_chat=True):
+                     queries, suffix=None, n_max=None, is_chat=True,
+                     harmful_target=None):
     """
     Compute probe scores on queries.
 
     is_chat: if True, applies chat template (matches probe's training distribution).
     suffix:  if not None, append this embedding suffix into the user content position.
+    harmful_target: for gen-based probes, the teacher-forced target appended after
+                    the input; activations are read across its token positions.
     """
     embed = model.get_input_embeddings()
     model_dtype = next(model.parameters()).dtype
+    is_gen = getattr(probe, "is_gen_based", False)
+    if is_gen and harmful_target is None:
+        harmful_target = HARMFUL_TARGET
     scores = []
     if n_max:
         queries = queries[:n_max]
@@ -1316,13 +1330,27 @@ def evaluate_attack(model, tokenizer, probe, layers,
                 else:
                     full_embeds = q_embeds.unsqueeze(0)
 
+            input_len = full_embeds.shape[1]
+            if is_gen:
+                tgt_ids = tokenizer(harmful_target, return_tensors="pt",
+                                    add_special_tokens=False).input_ids.to(DEVICE).squeeze(0)
+                tgt_embeds = embed(tgt_ids).to(model_dtype)
+                full_embeds = torch.cat([full_embeds, tgt_embeds.unsqueeze(0)], dim=1)
+
             outputs = model(inputs_embeds=full_embeds, output_hidden_states=True,
                              return_dict=True, use_cache=False)
-            last_pos = full_embeds.shape[1] - 1
-            layer_acts = torch.stack([
-                outputs.hidden_states[l + 1][0, last_pos]
-                for l in layers
-            ]).unsqueeze(1).float()  # cast to fp32 for probe
+            if is_gen:
+                T_t = tgt_ids.shape[0]
+                layer_acts = torch.stack([
+                    outputs.hidden_states[l + 1][0, input_len:input_len + T_t]
+                    for l in layers
+                ]).unsqueeze(1).float()  # (n_layers, 1, T_t, hidden)
+            else:
+                last_pos = full_embeds.shape[1] - 1
+                layer_acts = torch.stack([
+                    outputs.hidden_states[l + 1][0, last_pos]
+                    for l in layers
+                ]).unsqueeze(1).float()  # cast to fp32 for probe
             probe_logit = probe(layer_acts).squeeze().item()
             scores.append(probe_logit)
 
@@ -1343,10 +1371,17 @@ def compute_recall_at_fpr(benign_scores, attack_scores, target_fpr=0.01):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--defender", required=True, choices=["c4", "hps", "hps_euc", "ensemble"],
+    p.add_argument("--defender", required=True,
+                   choices=["c4", "hps", "hps_euc", "ensemble",
+                            "hps_gen", "hps_euc_gen", "c4_gen"],
                    help="Which probe to attack")
     p.add_argument("--model_name", default="meta-llama/Meta-Llama-3-8B-Instruct")
     p.add_argument("--cache", default="results/llama3_activations_cache_diverse_fixed.npz")
+    p.add_argument("--gen_cache", default="results/llama3_gen_activations_cache.npz",
+                   help="Generation-activations cache (for hps_gen/hps_euc_gen/c4_gen)")
+    p.add_argument("--gen_aggregation", default="both",
+                   choices=["mean", "trajectory", "both"],
+                   help="Feature axis for hps_gen/hps_euc_gen")
     p.add_argument("--layers", type=int, nargs="+", default=[0, 2, 17, 24, 28, 31])
     p.add_argument("--proj_dim", type=int, default=64,
                    help="HPS/HPS-Euclidean projection dimension (4096-dim "
@@ -1397,25 +1432,45 @@ def main():
     print()
 
     # ---- Load activation cache and train probe ----
-    print("  Loading activation cache...")
-    if not os.path.exists(args.cache):
-        print(f"  ERROR: cache not found at {args.cache}")
-        sys.exit(1)
-    data = load_cache_arrays(args.cache, args.layers)
-    print(f"    Train: {len(data['X_tr_ben'])} ben + {len(data['X_tr_atk'])} atk")
-    print(f"    Test:  {len(data['X_te_ben'])} ben + {len(data['X_te_atk'])} atk")
+    GEN_DEFENDERS = ("hps_gen", "hps_euc_gen", "c4_gen")
+    if args.defender in GEN_DEFENDERS:
+        print("  Loading generation-activation cache...")
+        if not os.path.exists(args.gen_cache):
+            print(f"  ERROR: gen cache not found at {args.gen_cache}")
+            sys.exit(1)
+        data_gen = load_gen_cache_arrays(args.gen_cache, args.layers)
+        print(f"    Train: {len(data_gen['X_tr_ben_gen'])} ben + "
+              f"{len(data_gen['X_tr_atk_gen'])} atk")
+        if args.defender == "hps_gen":
+            probe, baseline_auroc = train_hps_gen_probe(
+                data_gen, kappa=0.1, epochs=args.epochs,
+                proj_dim=args.proj_dim, aggregation=args.gen_aggregation)
+        elif args.defender == "hps_euc_gen":
+            probe, baseline_auroc = train_hps_euc_gen_probe(
+                data_gen, epochs=args.epochs, proj_dim=args.proj_dim,
+                aggregation=args.gen_aggregation)
+        else:  # c4_gen
+            probe, baseline_auroc = train_c4_gen_probe(data_gen)
+    else:
+        print("  Loading activation cache...")
+        if not os.path.exists(args.cache):
+            print(f"  ERROR: cache not found at {args.cache}")
+            sys.exit(1)
+        data = load_cache_arrays(args.cache, args.layers)
+        print(f"    Train: {len(data['X_tr_ben'])} ben + {len(data['X_tr_atk'])} atk")
+        print(f"    Test:  {len(data['X_te_ben'])} ben + {len(data['X_te_atk'])} atk")
 
-    if args.defender == "c4":
-        probe, baseline_auroc = train_c4_probe(data)
-    elif args.defender == "hps":
-        probe, baseline_auroc = train_hps_probe(data, kappa=0.1,
-                                                epochs=args.epochs,
-                                                proj_dim=args.proj_dim)
-    elif args.defender == "hps_euc":
-        probe, baseline_auroc = train_hps_euc_probe(data, epochs=args.epochs,
+        if args.defender == "c4":
+            probe, baseline_auroc = train_c4_probe(data)
+        elif args.defender == "hps":
+            probe, baseline_auroc = train_hps_probe(data, kappa=0.1,
+                                                    epochs=args.epochs,
                                                     proj_dim=args.proj_dim)
-    elif args.defender == "ensemble":
-        probe, baseline_auroc = train_ensemble_probe(data)
+        elif args.defender == "hps_euc":
+            probe, baseline_auroc = train_hps_euc_probe(data, epochs=args.epochs,
+                                                        proj_dim=args.proj_dim)
+        elif args.defender == "ensemble":
+            probe, baseline_auroc = train_ensemble_probe(data)
     probe.eval()
     for p_ in probe.parameters():
         p_.requires_grad_(False)
