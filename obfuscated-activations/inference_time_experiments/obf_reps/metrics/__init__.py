@@ -991,6 +991,8 @@ class HPSMetric(ObfMetric):
         layers = list(self.config.layers)
         sel = reps[:, layers, :, :].to(torch.float32)   # [b, n_sel, seq, hidden]
         X = sel.mean(dim=2)                              # [b, n_sel, hidden] (layer-axis HPS)
+        X = torch.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        X = (X - self.act_mean) / self.act_std           # same standardization as fit
         feats = self._features_from_X(X)                 # [b, 12]
         feats = (feats - self.scaler_mean) / self.scaler_std
         return feats @ self.lr_weight + self.lr_bias     # [b]
@@ -1005,6 +1007,14 @@ class HPSMetric(ObfMetric):
         X = X.to(device)
         y = y.to(device)
         N, n_sel, hidden = X.shape
+
+        # Sanitize fp16 overflow / outliers, then standardize per (layer, dim).
+        # Llama-3 has massive activations that can be inf in fp16 and have huge
+        # dynamic range; the Lorentz math needs well-scaled inputs.
+        X = torch.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        self.act_mean = X.mean(dim=0)                                  # [n_sel, hidden]
+        self.act_std = X.std(dim=0, unbiased=False).clamp(min=1e-6)    # [n_sel, hidden]
+        X = (X - self.act_mean) / self.act_std
 
         # ---- Train Lorentz projection via per-layer contrastive loss ----
         proj = LorentzProjection(hidden, proj_dim, k_init=kappa).to(device)
@@ -1043,7 +1053,8 @@ class HPSMetric(ObfMetric):
         from sklearn.linear_model import LogisticRegression as SkLR
         from sklearn.preprocessing import StandardScaler
 
-        feats = self._features_from_X(X).detach().cpu().numpy()
+        feats = self._features_from_X(X)
+        feats = torch.nan_to_num(feats).detach().cpu().numpy()
         scaler = StandardScaler()
         feats_std = scaler.fit_transform(feats)
         clf = SkLR(max_iter=2000, random_state=42)
@@ -1094,6 +1105,8 @@ class HPSMetric(ObfMetric):
             p.requires_grad_(False)
         self.proj = proj
         self.kappa = float(state["kappa"])
+        self.act_mean = state["act_mean"].to(self.device)
+        self.act_std = state["act_std"].to(self.device)
         self.scaler_mean = state["scaler_mean"].to(self.device)
         self.scaler_std = state["scaler_std"].to(self.device)
         self.lr_weight = state["lr_weight"].to(self.device)
@@ -1105,6 +1118,8 @@ class HPSMetric(ObfMetric):
             "kappa": self.kappa,
             "d_in": self.proj.proj.in_features,
             "proj_dim": self.proj.proj.out_features,
+            "act_mean": self.act_mean,
+            "act_std": self.act_std,
             "scaler_mean": self.scaler_mean,
             "scaler_std": self.scaler_std,
             "lr_weight": self.lr_weight,
