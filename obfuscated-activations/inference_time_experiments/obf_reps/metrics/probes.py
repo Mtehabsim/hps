@@ -211,8 +211,10 @@ def lorentz_distance(x, y, k: float):
     """Geodesic distance on the Lorentz hyperboloid. Broadcasts over leading dims.
     x, y: (..., 1 + d_proj) Lorentz coordinates. k: scalar float."""
     inner = -(x[..., 0] * y[..., 0]) + (x[..., 1:] * y[..., 1:]).sum(dim=-1)
-    inner = torch.clamp(inner, max=-1.0 / k - 1e-6)
-    return (1.0 / math.sqrt(k)) * torch.acosh(-k * inner)
+    # acosh domain is [1, inf). Clamp the ARGUMENT (not `inner`) to 1+eps with an
+    # fp32-safe margin, otherwise rounding can push it just below 1.0 -> NaN.
+    arg = torch.clamp(-k * inner, min=1.0 + 1e-5)
+    return (1.0 / math.sqrt(k)) * torch.acosh(arg)
 
 
 def hps_trajectory_features(z, k: float):

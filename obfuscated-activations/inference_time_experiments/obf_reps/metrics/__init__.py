@@ -994,6 +994,7 @@ class HPSMetric(ObfMetric):
         X = torch.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         X = (X - self.act_mean) / self.act_std           # same standardization as fit
         feats = self._features_from_X(X)                 # [b, 12]
+        feats = torch.nan_to_num(feats)                  # defensive (eval-time safety)
         feats = (feats - self.scaler_mean) / self.scaler_std
         return feats @ self.lr_weight + self.lr_bias     # [b]
 
