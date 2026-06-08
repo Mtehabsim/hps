@@ -1,0 +1,9 @@
+defaults:
+    - z-jailbreak
+
+# C4 = their per-layer logistic regression + mean aggregation, restricted to the
+# SAME layers as HPS for a fair head-to-head (transformer [0,6,12,18,24,31]).
+metric: "LogisticRegressionMetric"
+
+metric_config:
+    layers: [1, 7, 13, 19, 25, 32]

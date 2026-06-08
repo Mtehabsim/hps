@@ -1,0 +1,10 @@
+# Python build/cache artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+
+# Experiment/runtime outputs
+wandb/
