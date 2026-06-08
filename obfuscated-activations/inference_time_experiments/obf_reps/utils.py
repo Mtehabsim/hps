@@ -45,7 +45,7 @@ from obf_reps.data import (
     SQLObfusDataModule,
     TruthfulConceptDataModule,
 )
-from obf_reps.logging import DummyLogger, WAndBLogger
+from obf_reps.logging import DummyLogger, PrintLogger, WAndBLogger
 from obf_reps.metrics import (
     GemmaScopeClassifierMetric,
     GemmaScopeFeatureMetric,
@@ -394,6 +394,8 @@ def validate_and_create_experiment_config(cfg: DictConfig) -> ExperimentConfig:
     match cfg.logger:
         case "DummyLogger":
             logger = DummyLogger()
+        case "PrintLogger":
+            logger = PrintLogger()
         case "WAndBLogger":
             dict_cfg: Dict = OmegaConf.to_container(cfg, resolve=True)  # type: ignore
             logger = WAndBLogger(log_file=cfg.log_file, username=cfg.username, metadata=dict_cfg)

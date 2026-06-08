@@ -72,6 +72,61 @@ class DummyLogger(Logger):
         pass
 
 
+class PrintLogger(Logger):
+    """Logs metrics to stdout. No wandb / account needed — use for local runs."""
+
+    def __init__(
+        self,
+        log_file: Optional[str] = None,
+        username: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+    ) -> None:
+        self.tables: Dict[str, List] = {}
+        self._columns: Dict[str, List[str]] = {}
+
+    @staticmethod
+    def _san(v):
+        import numbers
+
+        if isinstance(v, bool) or isinstance(v, numbers.Number) or isinstance(v, str):
+            return v
+        return f"<{type(v).__name__}>"
+
+    def log(self, data: Dict[str, "LoggingData"]) -> None:
+        msg = {k: self._san(v) for k, v in data.items()}
+        print(f"[LOG] {msg}", flush=True)
+
+    def log_to_table(self, data: List["LoggingData"], table_name: str) -> None:
+        cols = self._columns.get(table_name)
+        row = [self._san(v) for v in data]
+        printable = dict(zip(cols, row)) if cols else row
+        print(f"[TABLE:{table_name}] {printable}", flush=True)
+        self.tables.setdefault(table_name, []).append(row)
+
+    def create_table(self, table_name: str, columns: List[str]) -> None:
+        self._columns[table_name] = columns
+        self.tables[table_name] = []
+
+    def log_tables(self) -> None:
+        for name, rows in self.tables.items():
+            if rows:
+                print(f"\n===== TABLE {name} =====", flush=True)
+                cols = self._columns.get(name)
+                if cols:
+                    print(cols, flush=True)
+                for r in rows:
+                    print(r, flush=True)
+
+    def log_table_name(self, table_name: str) -> None:
+        rows = self.tables.get(table_name, [])
+        print(f"\n===== TABLE {table_name} =====", flush=True)
+        cols = self._columns.get(table_name)
+        if cols:
+            print(cols, flush=True)
+        for r in rows:
+            print(r, flush=True)
+
+
 class WAndBLogger(Logger):
 
     def __init__(
