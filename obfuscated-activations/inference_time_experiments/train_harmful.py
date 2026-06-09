@@ -136,7 +136,7 @@ def train_attack(
             who_just_went="attacker",
             gen_len=experiment_cfg.gen_len,
             params_last_train_epoch=params_last_train_epoch,
-            evaluate_metric_on_gens=False,
+            evaluate_metric_on_gens=True,
             evaluate_behavior=True,
             cached_reps=test_cached_reps,
             batch_size=experiment_cfg.eval_batch_size,
