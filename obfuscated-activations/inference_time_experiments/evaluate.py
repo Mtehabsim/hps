@@ -607,6 +607,31 @@ def evaluate_model_and_metric_harmful(
                 model=model,
             )
             behavior_scores.extend(behavior_score_batch)
+            # --- Dump prompt / attacked response / clean response / score ---
+            # One JSONL per process (PID) so the lambda-sweep runs don't collide.
+            try:
+                import os as _os
+                import json as _json
+
+                _os.makedirs("runs", exist_ok=True)
+                _dump = f"runs/gens_{metric.__class__.__name__}_{who_just_went}_{_os.getpid()}.jsonl"
+                with open(_dump, "a") as _f:
+                    for _p, _att, _cln, _s in zip(
+                        input_text, tuned_gen_text, standard_gen_text, behavior_score_batch
+                    ):
+                        _f.write(
+                            _json.dumps(
+                                {
+                                    "behavior_score": float(_s),
+                                    "prompt": _p,
+                                    "attacked_response": _att,
+                                    "clean_response": _cln,
+                                }
+                            )
+                            + "\n"
+                        )
+            except Exception as _e:
+                print(f"[dump-warn] could not write generations: {_e}", flush=True)
             end = time.time()
             beh_eval_time = end - start
 
