@@ -1082,8 +1082,13 @@ class HPSMetric(ObfMetric):
         if reps.ndim == 3:
             reps = reps.unsqueeze(2)
         b, layers, seq_len, _ = reps.shape
-        logits = self._logits(reps)  # [b]
-        return logits.view(b, 1, 1).expand(b, layers, seq_len).to(torch.float16)
+        # Return sigmoid(logit) -> probability in (0,1), matching C4's
+        # (TrainableMetric) probe scale. The raw HPS logit is unbounded/signed
+        # (O(50)), which dominates the obf-weighted attack loss and makes the
+        # lambda sweep incomparable to C4. Sigmoid is monotonic, so detection
+        # AUROC / recall@1%FPR are unchanged; only the attack scale is fixed.
+        scores = torch.sigmoid(self._logits(reps))  # [b]
+        return scores.view(b, 1, 1).expand(b, layers, seq_len).to(torch.float16)
 
     def predict(
         self,
@@ -1092,7 +1097,9 @@ class HPSMetric(ObfMetric):
         layer_reduction: str = "mean",
         **kwargs,
     ) -> Float[Tensor, "b"]:
-        return self._logits(reps)
+        # Bounded (0,1) score to match C4's probability-scale obf, so the
+        # obf-weighted attack loss is comparable across probes (see evaluate()).
+        return torch.sigmoid(self._logits(reps))
 
     def load_pretrained(self, path: Optional[str] = None, probe_state: Optional[Any] = None):
         assert path is not None or probe_state is not None
