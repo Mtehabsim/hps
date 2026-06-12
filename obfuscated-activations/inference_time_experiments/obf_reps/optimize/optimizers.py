@@ -188,6 +188,19 @@ class ContinuousGradientOptimizer(OptimizerBase, ABC):
 
         self.logger.log({"loss": loss.item()})
 
+        # Localization instrumentation: print the first few steps' behavior loss
+        # and soft-prompt norm with a distinctive marker (survives tqdm). Lets us
+        # see whether C4 and HPS diverge at step 0 (model-state/structural) or
+        # only later (accumulation).
+        if getattr(self, "_dbg_step", 0) < 3:
+            _sp = torch.norm(self.model.tunable_params.params).item()
+            print(
+                f"[STEPDBG {getattr(self, '_dbg_step', 0)}] loss={loss.item():.8f} "
+                f"softprompt_norm={_sp:.8f}",
+                flush=True,
+            )
+            self._dbg_step = getattr(self, "_dbg_step", 0) + 1
+
         loss.backward()
 
         # Log softprompt and grad norms
