@@ -41,7 +41,7 @@ metric_config:
   layers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
 
 # Logging
-logger: "WAndBLogger"
+logger: "DummyLogger"
 log_file: "obfuscated-representations"
 tag: "jailbreak"
 
@@ -55,4 +55,5 @@ tag: "jailbreak"
 
 #-----FIELDS TO FILL IN-----#
 username: "<your-wandb-username>"
-model_path: "/path/to/llama3-8b-model"
+model_path: "/mnt/lab/Mo/hf_cache/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/8afb486c1db24fe5011ec46dfbe5b5dccdb575c2/"
+
