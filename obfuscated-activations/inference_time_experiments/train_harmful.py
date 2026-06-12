@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import tqdm
 from matplotlib import pyplot as plt
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from torch.utils.data import DataLoader
 
 from evaluate import evaluate_metric, evaluate_model, evaluate_model_and_metric_harmful
@@ -196,6 +196,21 @@ def main(cfg: DictConfig):
         )
 
     print(OmegaConf.to_yaml(cfg))
+    # validate_and_create_experiment_config reads everything from cfg.experiment.
+    # Hydra overrides passed at the root (e.g. ++loss=X, ++lambda_=Y, ++logger=Z)
+    # land as siblings of `experiment` and are therefore SILENTLY IGNORED. Promote
+    # any root override matching an existing experiment key so ++key=value works.
+    if "experiment" in cfg:
+        promoted = []
+        with open_dict(cfg.experiment):
+            for k in list(cfg.keys()):
+                if k == "experiment":
+                    continue
+                if k in cfg.experiment and cfg.get(k) not in (None, ""):
+                    cfg.experiment[k] = cfg.get(k)
+                    promoted.append(f"{k}={cfg.get(k)}")
+        if promoted:
+            print(f"[CONFIG] promoted root overrides into experiment: {promoted}", flush=True)
     experiment_cfg = validate_and_create_experiment_config(cfg)
 
     # Log information about the dataset
