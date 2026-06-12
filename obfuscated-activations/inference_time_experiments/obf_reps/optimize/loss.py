@@ -125,15 +125,19 @@ class ProbePredictLoss(LossFunctionBase):
             b_size,
         ), f"Expected shape {(b_size,)}, got {behavior_loss.shape}"
 
-        # Different to FlexibleLossFunctionBase.compute_loss
-        reps, attention_mask = self.obf_metric.data_module.train_reps_reduce(
-            input_reps=input_reps,
-            target_reps=target_reps,
-            target_mask=target_rep_loss_mask,
-        )
-
-        obf_loss: Float[Tensor, "b"] = self.obf_metric.predict(reps, attention_mask)
-        assert obf_loss.shape == (b_size,), f"Expected shape {(b_size,)}, got {obf_loss.shape}"
+        # Different to FlexibleLossFunctionBase.compute_loss. Skip the metric
+        # entirely when its weight is 0 (don't run it inside the attack loop
+        # when it contributes nothing — avoids memory/kernel side effects).
+        if lambda_obf != 0:
+            reps, attention_mask = self.obf_metric.data_module.train_reps_reduce(
+                input_reps=input_reps,
+                target_reps=target_reps,
+                target_mask=target_rep_loss_mask,
+            )
+            obf_loss: Float[Tensor, "b"] = self.obf_metric.predict(reps, attention_mask)
+            assert obf_loss.shape == (b_size,), f"Expected shape {(b_size,)}, got {obf_loss.shape}"
+        else:
+            obf_loss = torch.zeros(b_size, device=behavior_loss.device)
 
         self.logger.log(
             {
@@ -194,12 +198,20 @@ class FlexibleLossFunctionBase(LossFunctionBase, ABC):
             b_size,
         ), f"Expected shape {(b_size,)}, got {behavior_loss.shape}"
 
-        # Compute obfuscation loss
-        obf_metrics: Float[Tensor, "b_size layers rep_seq_len"] = self.obf_metric.evaluate(
-            target_reps
-        )
-        obf_loss: Float[Tensor, "b"] = self.aggregate_obf_loss(obf_metrics, target_rep_loss_mask)
-        assert obf_loss.shape == (b_size,), f"Expected shape {(b_size,)}, got {obf_loss.shape}"
+        # Compute obfuscation loss. Skip the (expensive, possibly numerically
+        # unstable) metric call entirely when its weight is 0 — otherwise the
+        # metric runs inside the attack loop even when it contributes nothing,
+        # which can perturb the run via memory/kernel side effects.
+        if lambda_obf != 0:
+            obf_metrics: Float[Tensor, "b_size layers rep_seq_len"] = self.obf_metric.evaluate(
+                target_reps
+            )
+            obf_loss: Float[Tensor, "b"] = self.aggregate_obf_loss(
+                obf_metrics, target_rep_loss_mask
+            )
+            assert obf_loss.shape == (b_size,), f"Expected shape {(b_size,)}, got {obf_loss.shape}"
+        else:
+            obf_loss = torch.zeros(b_size, device=behavior_loss.device)
 
         self.logger.log(
             {
