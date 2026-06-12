@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple, Type, TypeVar, Union
@@ -178,9 +179,14 @@ class HFModelBase(ModelBase, ABC):
             requires_grad: whether to compute gradients for model params
         """
 
-        model = AutoModelForCausalLM.from_pretrained(
-            path, device_map=config.device, torch_dtype=config.model_dtype
-        )
+        # Opt-in deterministic mode (set OBF_DETERMINISTIC=1): force the eager
+        # attention backend so the model's forward/backward is bit-reproducible
+        # regardless of GPU memory/algorithm state. flash/sdpa are nondeterministic
+        # and let pre-attack work (e.g. metric scoring) perturb the attack numerics.
+        _model_kwargs = dict(device_map=config.device, torch_dtype=config.model_dtype)
+        if os.environ.get("OBF_DETERMINISTIC") == "1":
+            _model_kwargs["attn_implementation"] = "eager"
+        model = AutoModelForCausalLM.from_pretrained(path, **_model_kwargs)
         model.eval()
 
         if not config.requires_grad:

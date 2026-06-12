@@ -1,4 +1,5 @@
 import gc
+import os
 import pickle
 import time
 from pathlib import Path
@@ -170,6 +171,16 @@ def train_attack(
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig):
+    # Opt-in deterministic harness (set OBF_DETERMINISTIC=1). Makes the model's
+    # forward/backward reproducible so pre-attack metric work (which differs
+    # between probes) cannot perturb the attack's numerics. Pair with eager
+    # attention (handled in hf.py) and CUBLAS_WORKSPACE_CONFIG=:4096:8.
+    if os.environ.get("OBF_DETERMINISTIC") == "1":
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        torch.use_deterministic_algorithms(True, warn_only=True)
+        print("[DETERMINISTIC] cudnn.benchmark=False, deterministic algos on, eager attention", flush=True)
+
     print(OmegaConf.to_yaml(cfg))
     experiment_cfg = validate_and_create_experiment_config(cfg)
 
