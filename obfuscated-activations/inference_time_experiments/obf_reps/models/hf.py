@@ -184,7 +184,7 @@ class HFModelBase(ModelBase, ABC):
         # regardless of GPU memory/algorithm state. flash/sdpa are nondeterministic
         # and let pre-attack work (e.g. metric scoring) perturb the attack numerics.
         _model_kwargs = dict(device_map=config.device, torch_dtype=config.model_dtype)
-        if os.environ.get("OBF_DETERMINISTIC") == "1":
+        if os.environ.get("OBF_DETERMINISTIC") in ("1", "2"):
             _model_kwargs["attn_implementation"] = "eager"
         model = AutoModelForCausalLM.from_pretrained(path, **_model_kwargs)
         model.eval()

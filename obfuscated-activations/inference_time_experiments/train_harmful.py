@@ -107,6 +107,15 @@ def train_attack(
             print("\n========================================================")
             print(f"Training attack defence {at_def_epoch}")
             print("========================================================\n")
+            # Reseed immediately before the attack loop so the optimization
+            # starts from an identical RNG state regardless of any metric/eval
+            # work done since the optimizer's ctor reseed.
+            if os.environ.get("OBF_DETERMINISTIC") in ("1", "2"):
+                from transformers import set_seed
+
+                _seed = getattr(getattr(optimizer, "config", None), "seed", 0) or 0
+                set_seed(_seed)
+                print(f"[DETERMINISTIC] reseeded to {_seed} before attack loop", flush=True)
             for epoch in tqdm.tqdm(range(epochs)):
                 for batch in tqdm.tqdm(train_dataloader, leave=False):
                     optimizer.step(batch)
@@ -171,15 +180,20 @@ def train_attack(
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig):
-    # Opt-in deterministic harness (set OBF_DETERMINISTIC=1). Makes the model's
-    # forward/backward reproducible so pre-attack metric work (which differs
-    # between probes) cannot perturb the attack's numerics. Pair with eager
-    # attention (handled in hf.py) and CUBLAS_WORKSPACE_CONFIG=:4096:8.
-    if os.environ.get("OBF_DETERMINISTIC") == "1":
+    # Opt-in deterministic harness. OBF_DETERMINISTIC=1 -> enforce determinism
+    # but only warn on unsupported ops (safe, won't crash). OBF_DETERMINISTIC=2
+    # -> hard enforce (raises on any nondeterministic op so you find it). Pair
+    # with eager attention (hf.py) and CUBLAS_WORKSPACE_CONFIG=:4096:8 in the env.
+    _det = os.environ.get("OBF_DETERMINISTIC")
+    if _det in ("1", "2"):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
-        torch.use_deterministic_algorithms(True, warn_only=True)
-        print("[DETERMINISTIC] cudnn.benchmark=False, deterministic algos on, eager attention", flush=True)
+        torch.use_deterministic_algorithms(True, warn_only=(_det == "1"))
+        print(
+            f"[DETERMINISTIC] mode={_det} cudnn.benchmark=False, deterministic algos "
+            f"({'warn_only' if _det == '1' else 'HARD'}), eager attention",
+            flush=True,
+        )
 
     print(OmegaConf.to_yaml(cfg))
     experiment_cfg = validate_and_create_experiment_config(cfg)
