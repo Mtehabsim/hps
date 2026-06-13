@@ -1010,6 +1010,11 @@ class HPSMetric(ObfMetric):
                 x0 = torch.sqrt(1.0 / k + (xp**2).sum(dim=-1, keepdim=True))
                 pts.append(torch.cat([x0, xp], dim=-1))  # [b, 1+hidden]
             return torch.stack(pts, dim=0).mean(dim=0)  # [b, 1+hidden]
+        if fs == "raw_proj_full_nox0":
+            # Apple-to-apple control for raw_proj_full: same mean-pool-then-LR
+            # architecture, but WITHOUT the x0 lift. Difference from raw_proj_full
+            # = exactly the hyperbolic radial coordinate.
+            return X.mean(dim=1)  # [b, hidden]
         feats = self._features_from_X(X)  # [b, 12]
         return feats[:, self._feat_idx()]
 
