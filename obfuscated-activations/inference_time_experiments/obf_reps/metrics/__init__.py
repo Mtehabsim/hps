@@ -983,6 +983,36 @@ class HPSMetric(ObfMetric):
         name = str(getattr(self.config, "feature_set", "all"))
         return self._FEATURE_SETS.get(name, list(range(12)))
 
+    def _repr(self, X: Tensor) -> Tensor:
+        """Representation fed to the scaler + LR, selected by config.feature_set.
+        X: [b, n_sel, hidden], already standardized.
+
+        - raw_proj      : drop the 12 features, keep the 4096->proj_dim Lorentz
+                          projection; mean-pool the projected points over layers.
+                          Isolates the compression step.
+        - raw_proj_full : drop the 12 features AND the compression; lift the full
+                          activation onto the hyperboloid (no projection matrix),
+                          mean-pool over layers. Difference from C4 = the single x0
+                          radial coordinate.
+        - otherwise     : the 12 trajectory features (optionally a subset).
+        """
+        fs = str(getattr(self.config, "feature_set", "all"))
+        if fs == "raw_proj":
+            z = torch.stack(
+                [self.proj(X[:, l, :]) for l in range(X.shape[1])], dim=0
+            )  # [n_sel, b, 1+proj_dim]
+            return z.mean(dim=0)  # [b, 1+proj_dim]
+        if fs == "raw_proj_full":
+            k = float(getattr(self, "kappa", None) or getattr(self.config, "kappa", 0.1) or 0.1)
+            pts = []
+            for l in range(X.shape[1]):
+                xp = X[:, l, :]
+                x0 = torch.sqrt(1.0 / k + (xp**2).sum(dim=-1, keepdim=True))
+                pts.append(torch.cat([x0, xp], dim=-1))  # [b, 1+hidden]
+            return torch.stack(pts, dim=0).mean(dim=0)  # [b, 1+hidden]
+        feats = self._features_from_X(X)  # [b, 12]
+        return feats[:, self._feat_idx()]
+
     def _gather_train(self, reps_dataset) -> Tuple[Tensor, Tensor]:
         """reps_dataset -> X [N, n_sel, hidden] (mean over seq), y [N]."""
         layers = list(self.config.layers)
@@ -1009,8 +1039,7 @@ class HPSMetric(ObfMetric):
         X = sel.mean(dim=2)                              # [b, n_sel, hidden] (layer-axis HPS)
         X = torch.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         X = (X - self.act_mean) / self.act_std           # same standardization as fit
-        feats = self._features_from_X(X)                 # [b, 12]
-        feats = feats[:, self._feat_idx()]               # feature-set flag
+        feats = self._repr(X)                            # feature_set-dependent representation
         feats = torch.nan_to_num(feats)                  # defensive (eval-time safety)
         feats = (feats - self.scaler_mean) / self.scaler_std
         return feats @ self.lr_weight + self.lr_bias     # [b]
@@ -1071,11 +1100,10 @@ class HPSMetric(ObfMetric):
         from sklearn.linear_model import LogisticRegression as SkLR
         from sklearn.preprocessing import StandardScaler
 
-        feats = self._features_from_X(X)
-        feats = feats[:, self._feat_idx()]               # feature-set flag (must match _logits)
+        feats = self._repr(X)                            # feature_set-dependent representation
         print(
             f"    HPS feature_set={getattr(self.config, 'feature_set', 'all')} "
-            f"({feats.shape[1]} of 12 features)",
+            f"({feats.shape[1]} features)",
             flush=True,
         )
         feats = torch.nan_to_num(feats).detach().cpu().numpy()

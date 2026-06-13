@@ -1,0 +1,14 @@
+defaults:
+    - z-jailbreak
+
+metric: "HPSMetric"
+
+# raw_proj: drop the 12 trajectory features, KEEP the 4096->64 Lorentz projection;
+# logistic regression on the mean-pooled projected points. Isolates the compression
+# step (difference from C4 = the 4096->64 projection).
+metric_config:
+    layers: [1, 7, 13, 19, 25, 32]
+    kappa: 0.1
+    proj_dim: 64
+    hps_epochs: 50
+    feature_set: "raw_proj"
