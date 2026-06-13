@@ -1,0 +1,11 @@
+defaults:
+    - zc-gcg-prompt
+
+# Hard-token (GCG) attack against the C4 linear probe.
+# Inherits zc-gcg-prompt: GCGOptimizer + Llama3HardPrompted + discrete-token search
+# (search_width=512, topk=256), ProbePredictLoss, single-behavior data modules.
+metric: "LogisticRegressionMetric"
+tag: "gcg-c4"
+
+metric_config:
+    layers: [1, 7, 13, 19, 25, 32]
