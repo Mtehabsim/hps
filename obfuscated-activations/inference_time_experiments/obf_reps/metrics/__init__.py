@@ -1073,6 +1073,11 @@ class HPSMetric(ObfMetric):
 
         feats = self._features_from_X(X)
         feats = feats[:, self._feat_idx()]               # feature-set flag (must match _logits)
+        print(
+            f"    HPS feature_set={getattr(self.config, 'feature_set', 'all')} "
+            f"({feats.shape[1]} of 12 features)",
+            flush=True,
+        )
         feats = torch.nan_to_num(feats).detach().cpu().numpy()
         scaler = StandardScaler()
         feats_std = scaler.fit_transform(feats)
