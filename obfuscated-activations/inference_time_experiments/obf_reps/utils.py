@@ -196,6 +196,11 @@ def validate_and_create_metric_config(cfg: DictConfig) -> MetricConfig:
         layers=cfg.layers,
         feature_list_filepath=cfg.get("feature_list_filepath", None),
         results_dir=cfg.get("results_dir", None),
+        n_components=cfg.get("n_components", 1),
+        kappa=cfg.get("kappa", 0.1),
+        proj_dim=cfg.get("proj_dim", 64),
+        hps_epochs=cfg.get("hps_epochs", 50),
+        feature_set=cfg.get("feature_set", "all"),
     )
 
 

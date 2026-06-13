@@ -98,6 +98,7 @@ class MetricConfig:
     kappa: float = 0.1          # Lorentz curvature
     proj_dim: int = 64          # projection dim (hidden -> proj_dim)
     hps_epochs: int = 50        # contrastive training epochs
+    feature_set: str = "all"    # which trajectory features to use: all | mean_r | radial | radial_disp_8
 
 
 def transfer_to_cpu(tensor_pair):
@@ -967,6 +968,21 @@ class HPSMetric(ObfMetric):
         """rep_layers: tensor indexed [..., layers, ...]; return list of layer indices."""
         return list(self.config.layers)
 
+    # Trajectory-feature subsets (column indices into the 12-feature vector:
+    # [mean_r,max_r,min_r,std_r,range_r, max_k,mean_k,std_k,spike, disp,path,prog]).
+    # Lets us test whether the 12 features matter (ablation showed mean_r alone
+    # matches all 12 on clean detection). Selected via config.feature_set.
+    _FEATURE_SETS = {
+        "all": list(range(12)),
+        "mean_r": [0],
+        "radial": [0, 1, 2, 3, 4],
+        "radial_disp_8": [0, 1, 2, 3, 4, 9, 10, 11],
+    }
+
+    def _feat_idx(self):
+        name = str(getattr(self.config, "feature_set", "all"))
+        return self._FEATURE_SETS.get(name, list(range(12)))
+
     def _gather_train(self, reps_dataset) -> Tuple[Tensor, Tensor]:
         """reps_dataset -> X [N, n_sel, hidden] (mean over seq), y [N]."""
         layers = list(self.config.layers)
@@ -994,6 +1010,7 @@ class HPSMetric(ObfMetric):
         X = torch.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         X = (X - self.act_mean) / self.act_std           # same standardization as fit
         feats = self._features_from_X(X)                 # [b, 12]
+        feats = feats[:, self._feat_idx()]               # feature-set flag
         feats = torch.nan_to_num(feats)                  # defensive (eval-time safety)
         feats = (feats - self.scaler_mean) / self.scaler_std
         return feats @ self.lr_weight + self.lr_bias     # [b]
@@ -1055,6 +1072,7 @@ class HPSMetric(ObfMetric):
         from sklearn.preprocessing import StandardScaler
 
         feats = self._features_from_X(X)
+        feats = feats[:, self._feat_idx()]               # feature-set flag (must match _logits)
         feats = torch.nan_to_num(feats).detach().cpu().numpy()
         scaler = StandardScaler()
         feats_std = scaler.fit_transform(feats)
