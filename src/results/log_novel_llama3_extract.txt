@@ -1,0 +1,169 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+======================================================================
+JBShield Activation Extraction
+======================================================================
+  Model:          meta-llama/Meta-Llama-3-8B-Instruct
+  Attacks JSON:   results/novel_attacks_2025.json
+  Diverse benign: results/data_harmless_diverse.csv
+  Output:         results/llama3_activations_cache_novel.npz
+  Layers:         [0, 2, 17, 24, 28, 31]
+  Cache format:   dict
+  Device:         cuda
+
+Loading model: meta-llama/Meta-Llama-3-8B-Instruct
+Loading weights:   0%|                                                                                                         | 0/291 [00:00<?, ?it/s]Loading weights:   0%|▎                                                                                                | 1/291 [00:01<05:19,  1.10s/it]Loading weights:   8%|███████▎                                                                                        | 22/291 [00:01<00:11, 24.24it/s]Loading weights:  11%|██████████▉                                                                                     | 33/291 [00:01<00:08, 31.45it/s]Loading weights:  14%|█████████████▌                                                                                  | 41/291 [00:01<00:06, 36.27it/s]Loading weights:  17%|████████████████▏                                                                               | 49/291 [00:01<00:05, 42.65it/s]Loading weights:  20%|███████████████████▏                                                                            | 58/291 [00:01<00:05, 46.28it/s]Loading weights:  23%|██████████████████████                                                                          | 67/291 [00:01<00:04, 51.64it/s]Loading weights:  26%|█████████████████████████                                                                       | 76/291 [00:02<00:03, 55.72it/s]Loading weights:  29%|███████████████████████████▍                                                                    | 83/291 [00:02<00:03, 57.69it/s]Loading weights:  31%|█████████████████████████████▋                                                                  | 90/291 [00:02<00:03, 53.27it/s]Loading weights:  33%|███████████████████████████████▋                                                                | 96/291 [00:02<00:03, 53.05it/s]Loading weights:  35%|█████████████████████████████████▋                                                             | 103/291 [00:02<00:03, 51.40it/s]Loading weights:  38%|████████████████████████████████████▌                                                          | 112/291 [00:02<00:03, 59.42it/s]Loading weights:  42%|███████████████████████████████████████▌                                                       | 121/291 [00:02<00:02, 62.30it/s]Loading weights:  45%|██████████████████████████████████████████▍                                                    | 130/291 [00:02<00:02, 66.78it/s]Loading weights:  48%|█████████████████████████████████████████████▍                                                 | 139/291 [00:03<00:02, 57.52it/s]Loading weights:  51%|████████████████████████████████████████████████▎                                              | 148/291 [00:03<00:02, 55.27it/s]Loading weights:  54%|███████████████████████████████████████████████████▎                                           | 157/291 [00:03<00:02, 54.10it/s]Loading weights:  57%|██████████████████████████████████████████████████████▏                                        | 166/291 [00:03<00:02, 60.07it/s]Loading weights:  59%|████████████████████████████████████████████████████████▍                                      | 173/291 [00:03<00:02, 50.62it/s]Loading weights:  62%|██████████████████████████████████████████████████████████▍                                    | 179/291 [00:03<00:02, 50.14it/s]Loading weights:  64%|████████████████████████████████████████████████████████████▍                                  | 185/291 [00:04<00:02, 46.59it/s]Loading weights:  66%|███████████████████████████████████████████████████████████████                                | 193/291 [00:04<00:01, 50.10it/s]Loading weights:  69%|█████████████████████████████████████████████████████████████████▉                             | 202/291 [00:04<00:01, 57.64it/s]Loading weights:  73%|████████████████████████████████████████████████████████████████████▉                          | 211/291 [00:04<00:01, 58.79it/s]Loading weights:  76%|███████████████████████████████████████████████████████████████████████▊                       | 220/291 [00:04<00:01, 60.25it/s]Loading weights:  79%|██████████████████████████████████████████████████████████████████████████▊                    | 229/291 [00:04<00:01, 55.06it/s]Loading weights:  82%|██████████████████████████████████████████████████████████████████████████████                 | 239/291 [00:05<00:00, 55.46it/s]Loading weights:  85%|████████████████████████████████████████████████████████████████████████████████▋              | 247/291 [00:05<00:00, 55.18it/s]Loading weights:  88%|███████████████████████████████████████████████████████████████████████████████████▌           | 256/291 [00:05<00:00, 62.02it/s]Loading weights:  90%|█████████████████████████████████████████████████████████████████████████████████████▊         | 263/291 [00:05<00:00, 61.21it/s]Loading weights:  93%|████████████████████████████████████████████████████████████████████████████████████████▏      | 270/291 [00:05<00:00, 58.11it/s]Loading weights:  95%|██████████████████████████████████████████████████████████████████████████████████████████     | 276/291 [00:05<00:00, 51.06it/s]Loading weights:  97%|████████████████████████████████████████████████████████████████████████████████████████████▍  | 283/291 [00:05<00:00, 52.47it/s]Loading weights: 100%|███████████████████████████████████████████████████████████████████████████████████████████████| 291/291 [00:05<00:00, 49.49it/s]
+  Loaded. Hidden size: 4096, Layers: 32
+
+  Loading attacks from results/novel_attacks_2025.json...
+    400 attacks across 8 methods
+      flipattack_fcs: 50
+      flipattack_fcw: 50
+      flipattack_fmm: 50
+      flipattack_fwo: 50
+      jbb_dan: 50
+      jbb_direct: 50
+      jbb_roleplay: 50
+      jbb_rot13: 50
+    Train: 320  Test: 80
+
+  Loading diverse benign from results/data_harmless_diverse.csv...
+    5000 benign prompts (train 4000, test 1000)
+
+  Extracting train benign (4000)...
+    [50/4000] 10.0 prompts/sec, ETA 6.6 min
+    [100/4000] 11.0 prompts/sec, ETA 5.9 min
+    [150/4000] 12.4 prompts/sec, ETA 5.2 min
+    [200/4000] 13.0 prompts/sec, ETA 4.9 min
+    [250/4000] 13.5 prompts/sec, ETA 4.6 min
+    [300/4000] 13.5 prompts/sec, ETA 4.6 min
+    [350/4000] 13.8 prompts/sec, ETA 4.4 min
+    [400/4000] 14.1 prompts/sec, ETA 4.3 min
+    [450/4000] 14.2 prompts/sec, ETA 4.2 min
+    [500/4000] 14.2 prompts/sec, ETA 4.1 min
+    [550/4000] 13.8 prompts/sec, ETA 4.2 min
+    [600/4000] 13.7 prompts/sec, ETA 4.1 min
+    [650/4000] 13.9 prompts/sec, ETA 4.0 min
+    [700/4000] 14.1 prompts/sec, ETA 3.9 min
+    [750/4000] 14.0 prompts/sec, ETA 3.9 min
+    [800/4000] 14.1 prompts/sec, ETA 3.8 min
+    [850/4000] 14.3 prompts/sec, ETA 3.7 min
+    [900/4000] 14.4 prompts/sec, ETA 3.6 min
+    [950/4000] 14.4 prompts/sec, ETA 3.5 min
+    [1000/4000] 14.6 prompts/sec, ETA 3.4 min
+    [1050/4000] 14.6 prompts/sec, ETA 3.4 min
+    [1100/4000] 14.5 prompts/sec, ETA 3.3 min
+    [1150/4000] 14.5 prompts/sec, ETA 3.3 min
+    [1200/4000] 14.5 prompts/sec, ETA 3.2 min
+    [1250/4000] 14.6 prompts/sec, ETA 3.1 min
+    [1300/4000] 14.5 prompts/sec, ETA 3.1 min
+    [1350/4000] 14.6 prompts/sec, ETA 3.0 min
+    [1400/4000] 14.7 prompts/sec, ETA 3.0 min
+    [1450/4000] 14.7 prompts/sec, ETA 2.9 min
+    [1500/4000] 14.8 prompts/sec, ETA 2.8 min
+    [1550/4000] 14.8 prompts/sec, ETA 2.8 min
+    [1600/4000] 14.8 prompts/sec, ETA 2.7 min
+    [1650/4000] 14.7 prompts/sec, ETA 2.7 min
+    [1700/4000] 14.8 prompts/sec, ETA 2.6 min
+    [1750/4000] 14.9 prompts/sec, ETA 2.5 min
+    [1800/4000] 14.7 prompts/sec, ETA 2.5 min
+    [1850/4000] 14.7 prompts/sec, ETA 2.4 min
+    [1900/4000] 14.7 prompts/sec, ETA 2.4 min
+    [1950/4000] 14.7 prompts/sec, ETA 2.3 min
+    [2000/4000] 14.6 prompts/sec, ETA 2.3 min
+    [2050/4000] 14.7 prompts/sec, ETA 2.2 min
+    [2100/4000] 14.8 prompts/sec, ETA 2.1 min
+    [2150/4000] 14.9 prompts/sec, ETA 2.1 min
+    [2200/4000] 14.7 prompts/sec, ETA 2.0 min
+    [2250/4000] 14.7 prompts/sec, ETA 2.0 min
+    [2300/4000] 14.6 prompts/sec, ETA 1.9 min
+    [2350/4000] 14.7 prompts/sec, ETA 1.9 min
+    [2400/4000] 14.7 prompts/sec, ETA 1.8 min
+    [2450/4000] 14.7 prompts/sec, ETA 1.8 min
+    [2500/4000] 14.5 prompts/sec, ETA 1.7 min
+    [2550/4000] 14.4 prompts/sec, ETA 1.7 min
+    [2600/4000] 14.4 prompts/sec, ETA 1.6 min
+    [2650/4000] 14.5 prompts/sec, ETA 1.6 min
+    [2700/4000] 14.4 prompts/sec, ETA 1.5 min
+    [2750/4000] 14.2 prompts/sec, ETA 1.5 min
+    [2800/4000] 14.1 prompts/sec, ETA 1.4 min
+    [2850/4000] 14.1 prompts/sec, ETA 1.4 min
+    [2900/4000] 14.0 prompts/sec, ETA 1.3 min
+    [2950/4000] 13.9 prompts/sec, ETA 1.3 min
+    [3000/4000] 13.9 prompts/sec, ETA 1.2 min
+    [3050/4000] 13.7 prompts/sec, ETA 1.2 min
+    [3100/4000] 13.7 prompts/sec, ETA 1.1 min
+    [3150/4000] 13.6 prompts/sec, ETA 1.0 min
+    [3200/4000] 13.6 prompts/sec, ETA 1.0 min
+    [3250/4000] 13.5 prompts/sec, ETA 0.9 min
+    [3300/4000] 13.4 prompts/sec, ETA 0.9 min
+    [3350/4000] 13.3 prompts/sec, ETA 0.8 min
+    [3400/4000] 13.3 prompts/sec, ETA 0.8 min
+    [3450/4000] 13.3 prompts/sec, ETA 0.7 min
+    [3500/4000] 13.2 prompts/sec, ETA 0.6 min
+    [3550/4000] 13.1 prompts/sec, ETA 0.6 min
+    [3600/4000] 13.0 prompts/sec, ETA 0.5 min
+    [3650/4000] 13.0 prompts/sec, ETA 0.4 min
+    [3700/4000] 13.0 prompts/sec, ETA 0.4 min
+    [3750/4000] 12.9 prompts/sec, ETA 0.3 min
+    [3800/4000] 12.9 prompts/sec, ETA 0.3 min
+    [3850/4000] 12.8 prompts/sec, ETA 0.2 min
+    [3900/4000] 12.8 prompts/sec, ETA 0.1 min
+    [3950/4000] 12.8 prompts/sec, ETA 0.1 min
+    [4000/4000] 12.7 prompts/sec, ETA 0.0 min
+    Done: 4000 prompts in 5.2 min (12.7 prompts/sec)
+
+  Extracting test benign (1000)...
+    [50/1000] 16.2 prompts/sec, ETA 1.0 min
+    [100/1000] 13.9 prompts/sec, ETA 1.1 min
+    [150/1000] 10.7 prompts/sec, ETA 1.3 min
+    [200/1000] 10.7 prompts/sec, ETA 1.2 min
+    [250/1000] 11.2 prompts/sec, ETA 1.1 min
+    [300/1000] 10.6 prompts/sec, ETA 1.1 min
+    [350/1000] 9.9 prompts/sec, ETA 1.1 min
+    [400/1000] 10.3 prompts/sec, ETA 1.0 min
+    [450/1000] 10.2 prompts/sec, ETA 0.9 min
+    [500/1000] 10.2 prompts/sec, ETA 0.8 min
+    [550/1000] 9.9 prompts/sec, ETA 0.8 min
+    [600/1000] 9.6 prompts/sec, ETA 0.7 min
+    [650/1000] 9.4 prompts/sec, ETA 0.6 min
+    [700/1000] 9.2 prompts/sec, ETA 0.5 min
+    [750/1000] 9.2 prompts/sec, ETA 0.5 min
+    [800/1000] 9.1 prompts/sec, ETA 0.4 min
+    [850/1000] 9.1 prompts/sec, ETA 0.3 min
+    [900/1000] 9.1 prompts/sec, ETA 0.2 min
+    [950/1000] 9.1 prompts/sec, ETA 0.1 min
+    [1000/1000] 9.3 prompts/sec, ETA 0.0 min
+    Done: 1000 prompts in 1.8 min (9.3 prompts/sec)
+
+  Extracting train attacks (320)...
+    [50/320] 25.1 prompts/sec, ETA 0.2 min
+    [100/320] 25.1 prompts/sec, ETA 0.1 min
+    [150/320] 25.0 prompts/sec, ETA 0.1 min
+    [200/320] 24.8 prompts/sec, ETA 0.1 min
+    [250/320] 25.0 prompts/sec, ETA 0.0 min
+    [300/320] 25.0 prompts/sec, ETA 0.0 min
+    Done: 320 prompts in 0.2 min (24.9 prompts/sec)
+
+  Extracting test attacks (80)...
+    [50/80] 23.9 prompts/sec, ETA 0.0 min
+    Done: 80 prompts in 0.1 min (24.0 prompts/sec)
+
+  Saving combined cache to: results/llama3_activations_cache_novel.npz
+Traceback (most recent call last):
+  File "/mnt/lab/Mo/hps/hps2/hps/extract_jbshield_activations.py", line 469, in <module>
+    main()
+  File "/mnt/lab/Mo/hps/hps2/hps/extract_jbshield_activations.py", line 441, in main
+    build_dict_cache(
+  File "/mnt/lab/Mo/hps/hps2/hps/extract_jbshield_activations.py", line 284, in build_dict_cache
+    save_dict_cache(output_path, hs_train_ben, hs_train_atk,
+  File "/mnt/lab/Mo/hps/hps2/hps/extract_jbshield_activations.py", line 116, in save_dict_cache
+    np.savez(
+  File "/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/numpy/lib/npyio.py", line 639, in savez
+    _savez(file, args, kwds, False)
+  File "/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/numpy/lib/npyio.py", line 743, in _savez
+    format.write_array(fid, val,
+  File "/network/rit/home/balhousani_alhussien/.local/lib/python3.12/site-packages/numpy/lib/format.py", line 719, in write_array
+    pickle.dump(array, fp, protocol=3, **pickle_kwargs)
+  File "/usr/lib/python3.12/zipfile/__init__.py", line 1216, in write
+    self._fileobj.write(data)
+OSError: [Errno 28] No space left on device

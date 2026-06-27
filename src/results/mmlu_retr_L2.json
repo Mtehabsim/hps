@@ -1,0 +1,427 @@
+{
+  "config": {
+    "harmful_npz": "results/mmlu_taxonomy_L2_reps.npz",
+    "dims": [
+      16,
+      32
+    ],
+    "curvatures": [
+      1.0
+    ],
+    "seeds": 5,
+    "epochs": 300,
+    "beta": 0.0,
+    "novel_leaf": false,
+    "baselines": "cosine,whitened",
+    "stats": true,
+    "output": "results/mmlu_retr_L2",
+    "selftest": false,
+    "build_benign_topic": null,
+    "label_noise": null,
+    "drop_leaves": "",
+    "merge_leaves": "",
+    "_drop_leaves": [],
+    "_merge_groups": []
+  },
+  "leaves": [
+    "humanities/formal_logic",
+    "humanities/high_school_european_history",
+    "humanities/high_school_us_history",
+    "humanities/high_school_world_history",
+    "humanities/international_law",
+    "humanities/jurisprudence",
+    "humanities/logical_fallacies",
+    "humanities/moral_disputes",
+    "humanities/moral_scenarios",
+    "humanities/philosophy",
+    "humanities/prehistory",
+    "humanities/professional_law",
+    "humanities/world_religions",
+    "other/business_ethics",
+    "other/clinical_knowledge",
+    "other/college_medicine",
+    "other/global_facts",
+    "other/human_aging",
+    "other/management",
+    "other/marketing",
+    "other/medical_genetics",
+    "other/miscellaneous",
+    "other/nutrition",
+    "other/professional_accounting",
+    "other/professional_medicine",
+    "other/virology",
+    "social_sciences/econometrics",
+    "social_sciences/high_school_geography",
+    "social_sciences/high_school_government_and_politics",
+    "social_sciences/high_school_macroeconomics",
+    "social_sciences/high_school_microeconomics",
+    "social_sciences/high_school_psychology",
+    "social_sciences/human_sexuality",
+    "social_sciences/professional_psychology",
+    "social_sciences/public_relations",
+    "social_sciences/security_studies",
+    "social_sciences/sociology",
+    "social_sciences/us_foreign_policy",
+    "stem/abstract_algebra",
+    "stem/anatomy",
+    "stem/astronomy",
+    "stem/college_biology",
+    "stem/college_chemistry",
+    "stem/college_computer_science",
+    "stem/college_mathematics",
+    "stem/college_physics",
+    "stem/computer_security",
+    "stem/conceptual_physics",
+    "stem/electrical_engineering",
+    "stem/elementary_mathematics",
+    "stem/high_school_biology",
+    "stem/high_school_chemistry",
+    "stem/high_school_computer_science",
+    "stem/high_school_mathematics",
+    "stem/high_school_physics",
+    "stem/high_school_statistics",
+    "stem/machine_learning"
+  ],
+  "cats": [
+    "humanities",
+    "other",
+    "social_sciences",
+    "stem"
+  ],
+  "by_dim": {
+    "d16_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.3824177054738404,
+          0.029791165971469507
+        ],
+        "mAP_parent": [
+          0.5053080942372861,
+          0.02424479978849722
+        ],
+        "nn_leaf_acc": [
+          0.33070175438596494,
+          0.16557403207364343
+        ],
+        "nn_parent_acc": [
+          0.6222222222222222,
+          0.1447578105196386
+        ],
+        "recall@1": [
+          0.33070175438596494,
+          0.16557403207364343
+        ],
+        "recall@5": [
+          0.7885964912280702,
+          0.020584463048886628
+        ],
+        "recall@10": [
+          0.8871345029239766,
+          0.011891637080504548
+        ],
+        "typed_acc": [
+          0.6456140350877193,
+          0.004944893136049067
+        ],
+        "tree_distortion": [
+          0.691044224449524,
+          0.00016138623963871283
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.3221983441224438,
+          0.013437500156067792
+        ],
+        "mAP_parent": [
+          0.36731829978882014,
+          0.03060376043194541
+        ],
+        "nn_leaf_acc": [
+          0.5277777777777777,
+          0.01697418160666665
+        ],
+        "nn_parent_acc": [
+          0.7678362573099415,
+          0.02066322777082427
+        ],
+        "recall@1": [
+          0.5277777777777777,
+          0.01697418160666665
+        ],
+        "recall@5": [
+          0.7769005847953216,
+          0.0103212646752765
+        ],
+        "recall@10": [
+          0.8570175438596491,
+          0.017529233669382315
+        ],
+        "typed_acc": [
+          0.6318713450292398,
+          0.07825885603732823
+        ],
+        "tree_distortion": [
+          0.6543995720128605,
+          0.008544075672475929
+        ]
+      },
+      "baseline_cosine": {
+        "mAP_leaf": [
+          0.2466528211927888,
+          0.0065273835699473015
+        ],
+        "mAP_parent": [
+          0.4102787268071374,
+          0.00816794735781037
+        ],
+        "nn_leaf_acc": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "nn_parent_acc": [
+          0.713157894736842,
+          0.020202964526461628
+        ],
+        "recall@1": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "recall@5": [
+          0.706140350877193,
+          0.01778585535174917
+        ],
+        "recall@10": [
+          0.7976608187134503,
+          0.009591356413366506
+        ]
+      },
+      "baseline_whitened": {
+        "mAP_leaf": [
+          0.0386886069768544,
+          0.0017584430617436505
+        ],
+        "mAP_parent": [
+          0.27115447298330964,
+          0.003941963582579011
+        ],
+        "nn_leaf_acc": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "nn_parent_acc": [
+          0.3093567251461989,
+          0.05829356395442763
+        ],
+        "recall@1": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "recall@5": [
+          0.093859649122807,
+          0.014892200676312098
+        ],
+        "recall@10": [
+          0.1216374269005848,
+          0.017333041327811615
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0602,
+        "mAP_parent": 0.138,
+        "nn_parent_acc": -0.1456,
+        "typed_acc": 0.0137,
+        "tree_distortion": 0.0366
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.13798979444846587,
+          "ci_low": 0.132396891269189,
+          "ci_high": 0.1436461799463475,
+          "p_value": 0.0,
+          "n": 3420
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.06021936135139661,
+          "ci_low": 0.05446359974103266,
+          "ci_high": 0.06605105373467973,
+          "p_value": 0.0,
+          "n": 3420
+        }
+      },
+      "H_minus_best_baseline_mAP_parent": {
+        "best_baseline": "cosine",
+        "best_baseline_mAP_parent": 0.4103,
+        "H_mAP_parent": 0.5053,
+        "gap": 0.095
+      }
+    },
+    "d32_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.4514870584901211,
+          0.015117213410073637
+        ],
+        "mAP_parent": [
+          0.5380653052459594,
+          0.006534478591449817
+        ],
+        "nn_leaf_acc": [
+          0.5976608187134504,
+          0.019514121302296586
+        ],
+        "nn_parent_acc": [
+          0.8421052631578947,
+          0.01792948504883732
+        ],
+        "recall@1": [
+          0.5976608187134504,
+          0.019514121302296586
+        ],
+        "recall@5": [
+          0.8453216374269006,
+          0.010103597978462565
+        ],
+        "recall@10": [
+          0.9090643274853802,
+          0.006230197588497825
+        ],
+        "typed_acc": [
+          0.6675438596491228,
+          0.023908761516677934
+        ],
+        "tree_distortion": [
+          0.691319088673693,
+          0.00010394158730660733
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.3864051055888357,
+          0.01309996483219424
+        ],
+        "mAP_parent": [
+          0.37979030724722296,
+          0.02361545891267184
+        ],
+        "nn_leaf_acc": [
+          0.5988304093567252,
+          0.01748528232482581
+        ],
+        "nn_parent_acc": [
+          0.8289473684210525,
+          0.013238867161019605
+        ],
+        "recall@1": [
+          0.5988304093567252,
+          0.01748528232482581
+        ],
+        "recall@5": [
+          0.8254385964912281,
+          0.016607569381477106
+        ],
+        "recall@10": [
+          0.8903508771929826,
+          0.013431209447784625
+        ],
+        "typed_acc": [
+          0.6918128654970761,
+          0.031101546258654366
+        ],
+        "tree_distortion": [
+          0.6637685221371197,
+          0.011411521227357564
+        ]
+      },
+      "baseline_cosine": {
+        "mAP_leaf": [
+          0.2466528211927888,
+          0.0065273835699473015
+        ],
+        "mAP_parent": [
+          0.4102787268071374,
+          0.00816794735781037
+        ],
+        "nn_leaf_acc": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "nn_parent_acc": [
+          0.713157894736842,
+          0.020202964526461628
+        ],
+        "recall@1": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "recall@5": [
+          0.706140350877193,
+          0.01778585535174917
+        ],
+        "recall@10": [
+          0.7976608187134503,
+          0.009591356413366506
+        ]
+      },
+      "baseline_whitened": {
+        "mAP_leaf": [
+          0.0386886069768544,
+          0.0017584430617436505
+        ],
+        "mAP_parent": [
+          0.27115447298330964,
+          0.003941963582579011
+        ],
+        "nn_leaf_acc": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "nn_parent_acc": [
+          0.3093567251461989,
+          0.05829356395442763
+        ],
+        "recall@1": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "recall@5": [
+          0.093859649122807,
+          0.014892200676312098
+        ],
+        "recall@10": [
+          0.1216374269005848,
+          0.017333041327811615
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0651,
+        "mAP_parent": 0.1583,
+        "nn_parent_acc": 0.0132,
+        "typed_acc": -0.0243,
+        "tree_distortion": 0.0276
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.1582749979987365,
+          "ci_low": 0.15240068318199776,
+          "ci_high": 0.16426228134678036,
+          "p_value": 0.0,
+          "n": 3420
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.06508195290128554,
+          "ci_low": 0.05923974611031956,
+          "ci_high": 0.07103933371333443,
+          "p_value": 0.0,
+          "n": 3420
+        }
+      },
+      "H_minus_best_baseline_mAP_parent": {
+        "best_baseline": "cosine",
+        "best_baseline_mAP_parent": 0.4103,
+        "H_mAP_parent": 0.5381,
+        "gap": 0.1278
+      }
+    }
+  }
+}

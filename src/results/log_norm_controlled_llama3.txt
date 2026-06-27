@@ -1,0 +1,87 @@
+======================================================================
+NORM-CONTROLLED EVALUATION
+======================================================================
+  Cache:      results/llama3_activations_cache_diverse_fixed.npz
+  Layers:     [0, 2, 17, 24, 28, 31]
+  Hidden dim: 4096
+  Device:     cuda
+
+  Train: 5216 ben + 5179 atk
+  Test:  689 ben + 1295 atk
+
+======================================================================
+BASELINE: raw activations (no norm control)
+======================================================================
+
+  Condition: baseline_raw
+    Train: 5216 ben + 5179 atk
+    Test:  689 ben + 1295 atk
+    HPS training failed: contrastive_loss() got an unexpected keyword argument 'kappa'
+    Method      AUROC      TPR@5%FPR
+    norm-only   0.7611   0.2950
+    C4          0.9982   0.9954
+    HPS         nan   nan
+
+======================================================================
+CONTROL 1: per-prompt L2 normalization
+======================================================================
+  Each (n_layers, d) → unit norm per layer. Removes magnitude.
+
+  Condition: L2_normalized
+    Train: 5216 ben + 5179 atk
+    Test:  689 ben + 1295 atk
+    HPS training failed: contrastive_loss() got an unexpected keyword argument 'kappa'
+    Method      AUROC      TPR@5%FPR
+    norm-only   0.5515   0.0811
+    C4          0.9984   0.9954
+    HPS         nan   nan
+
+======================================================================
+CONTROL 2: standardize per-layer using train-mean/std
+======================================================================
+  Removes additive bias but keeps directional signal.
+
+  Condition: standardized
+    Train: 5216 ben + 5179 atk
+    Test:  689 ben + 1295 atk
+    HPS training failed: contrastive_loss() got an unexpected keyword argument 'kappa'
+    Method      AUROC      TPR@5%FPR
+    norm-only   0.7291   0.3459
+    C4          0.9980   0.9954
+    HPS         nan   nan
+
+======================================================================
+CONTROL 3: standardize + unit-norm
+======================================================================
+  Most aggressive control: removes both bias and magnitude.
+
+  Condition: std+L2norm
+    Train: 5216 ben + 5179 atk
+    Test:  689 ben + 1295 atk
+    HPS training failed: contrastive_loss() got an unexpected keyword argument 'kappa'
+    Method      AUROC      TPR@5%FPR
+    norm-only   0.5480   0.0394
+    C4          0.9985   0.9961
+    HPS         nan   nan
+
+======================================================================
+DIAGNOSIS
+======================================================================
+
+  Norm-only AUROC across conditions:
+    baseline:        0.7611
+    L2-normalized:   0.5515
+    standardized:    0.7291
+    std + L2-norm:   0.5480
+
+  C4 TPR @ 5%FPR across conditions:
+    baseline:        0.9954
+    L2-normalized:   0.9954
+    standardized:    0.9954
+    std + L2-norm:   0.9961
+
+  Verdict: REAL_SIGNAL
+  Norm confound disappears with L2-normalization, but C4 still achieves high TPR. Real semantic signal exists beyond norm.
+
+Results saved: results/norm_controlled_eval_llama3.json
+  saved results/figs/norm_controlled_eval.png

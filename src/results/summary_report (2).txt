@@ -1,0 +1,30 @@
+
+=================================================================
+  HPS SENTINEL — VALIDATION SUMMARY
+=================================================================
+
+TEST 3 — TRACED Space & Trajectory Kinematics
+  Status: PASS
+  Euclidean  AUROC: 0.733
+  Hyperbolic AUROC: 0.760
+  Δ AUROC: +0.027  (Hyperbolic adds signal ✓)
+
+TEST 4 — Probe Baseline Comparison
+  Status: PASS
+  euclidean   : AUROC=0.958  FPR@95=0.160  F1=0.958
+  hyperbolic  : AUROC=0.986  FPR@95=0.080  F1=0.894
+  combined    : AUROC=0.986  FPR@95=0.000  F1=0.958
+  Dual-use FPR:
+    Euclidean: 0.278 (HIGH)
+    Hyperbolic: 0.389 (HIGH)
+  Hyperbolic geometry adds marginal signal. Further work needed.
+
+=================================================================
+OVERALL VERDICT
+─────────────────────────────────────────────────────────────────
+  ✓ Hyperbolic trajectory signal present (AUROC>0.7)
+  ✗ Geometry not clearly adding value over Euclidean baseline
+
+  1/2 core claims validated
+  → Recommended next step: revisit layer selection and projection strategy before proceeding
+=================================================================

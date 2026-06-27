@@ -1,0 +1,15 @@
+defaults:
+    - z-jailbreak
+
+metric: "HPSMetric"
+
+# raw_proj_full: drop the 12 trajectory features AND the compression. Lift the full
+# 4096-dim activation onto the hyperboloid (no projection matrix), mean-pool over
+# layers, logistic regression. Difference from C4 = the single x0 radial coordinate
+# (i.e., "C4 + the hyperbolic radial feature").
+metric_config:
+    layers: [1, 7, 13, 19, 25, 32]
+    kappa: 0.1
+    proj_dim: 64
+    hps_epochs: 50
+    feature_set: "raw_proj_full"

@@ -1,0 +1,53 @@
+{
+  "input": "llama3_attacks.json",
+  "total_prompts": 6520,
+  "within_category_duplicates": 46,
+  "cross_category_duplicates": 44,
+  "train_test_overlaps": 15,
+  "after_dedup_count": 6474,
+  "dropped": 46,
+  "after_dedup_overlaps": 0,
+  "method_pair_overlaps": {
+    "ijp__ijp": 8,
+    "saa__saa": 6,
+    "zulu__zulu": 1
+  },
+  "per_category_dedup": {
+    "autodan": {
+      "original": 850,
+      "after_dedup": 850
+    },
+    "base64": {
+      "original": 850,
+      "after_dedup": 850
+    },
+    "drattack": {
+      "original": 520,
+      "after_dedup": 520
+    },
+    "gcg": {
+      "original": 850,
+      "after_dedup": 850
+    },
+    "ijp": {
+      "original": 850,
+      "after_dedup": 821
+    },
+    "pair": {
+      "original": 850,
+      "after_dedup": 850
+    },
+    "puzzler": {
+      "original": 50,
+      "after_dedup": 50
+    },
+    "saa": {
+      "original": 850,
+      "after_dedup": 834
+    },
+    "zulu": {
+      "original": 850,
+      "after_dedup": 849
+    }
+  }
+}

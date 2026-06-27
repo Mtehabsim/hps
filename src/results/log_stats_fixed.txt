@@ -1,0 +1,56 @@
+==============================================================================
+STATISTICAL SIGNIFICANCE TESTS — HPS vs C4 (Llama-3-8B)
+==============================================================================
+  Cache:                results/llama3_activations_cache_diverse_fixed.npz
+  Number of seeds:      5
+  Bootstrap iterations: 10000
+  Significance level:   α = 0.05
+  Device:               cuda
+
+Loading activation cache...
+  Train benign: (5216, 6, 4096), attacks: (5179, 6, 4096)
+  Test  benign: (689, 6, 4096), attacks: (1295, 6, 4096)
+
+Running 5 seeds for HPS + C4...
+  seed=42  HPS AUROC=0.9971 TPR5=0.9915  C4 AUROC=0.9981 TPR5=0.9931
+  seed=43  HPS AUROC=0.9973 TPR5=0.9915  C4 AUROC=0.9981 TPR5=0.9931
+  seed=44  HPS AUROC=0.9975 TPR5=0.9915  C4 AUROC=0.9981 TPR5=0.9931
+  seed=45  HPS AUROC=0.9972 TPR5=0.9907  C4 AUROC=0.9981 TPR5=0.9931
+  seed=46  HPS AUROC=0.9973 TPR5=0.9915  C4 AUROC=0.9981 TPR5=0.9931
+
+Computing bootstrap 95% CIs (n_bootstrap=10000)...
+
+AUROC bootstrap 95% CIs:
+  HPS:  0.9971  [CI: 0.9954, 0.9985]
+  C4:   0.9981  [CI: 0.9969, 0.9991]
+TPR @ 5% FPR bootstrap 95% CIs:
+  HPS:  0.9915  [CI: 0.9856, 0.9962]
+  C4:   0.9934  [CI: 0.9881, 0.9978]
+
+Paired bootstrap: HPS - C4 difference
+  ΔAUROC = -0.0010  [CI: -0.0020, -0.0001], p=0.0360 (SIGNIFICANT)
+  ΔTPR5  = -0.0019  [CI: -0.0076, +0.0038], p=0.6008 (NOT SIG)
+
+McNemar's test on per-example binary correctness:
+  HPS correct only: 22, C4 correct only: 19
+  test type: chi_squared_continuity_correction
+  p-value: 0.7548 (NOT SIG)
+
+Cohen's d (HPS - C4 score distributions): -0.0388 (negligible)
+
+==============================================================================
+SUMMARY
+==============================================================================
+
+HPS vs C4 on Llama-3-8B (n_seeds=5):
+  AUROC: HPS = 0.9973 ± 0.0001   C4 = 0.9981 ± 0.0000
+  TPR5 : HPS = 0.9914 ± 0.0003   C4 = 0.9931 ± 0.0000
+
+  ΔAUROC = -0.0010 [95% CI: -0.0020, -0.0001]  p = 0.0360
+  ΔTPR5  = -0.0019 [95% CI: -0.0076, +0.0038]  p = 0.6008
+  McNemar's p = 0.7548
+
+  CONCLUSION: Some metrics show statistical significance.
+  Inspect per-metric details above.
+
+Saved full results to results/statistical_tests.json

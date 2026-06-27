@@ -1,0 +1,20 @@
+==============================================================================
+STATISTICAL SIGNIFICANCE TESTS — HPS vs C4 (Llama-3-8B)
+==============================================================================
+  Cache:                results/vicuna_activations_cache_jbshield.npz
+  Number of seeds:      5
+  Bootstrap iterations: 10000
+  Significance level:   α = 0.05
+  Device:               cuda
+
+Loading activation cache...
+Traceback (most recent call last):
+  File "/mnt/lab/Mo/hps/hps2/hps/statistical_tests.py", line 642, in <module>
+    main()
+  File "/mnt/lab/Mo/hps/hps2/hps/statistical_tests.py", line 423, in main
+    X_tr_ben = to_hps_array(hs_train_ben)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/lab/Mo/hps/hps2/hps/statistical_tests.py", line 218, in to_hps_array
+    return np.array([[hs[l][-1] for l in layers] for hs in hs_list])
+                      ~~^^^
+KeyError: 17

@@ -1,0 +1,208 @@
+{
+  "config": {
+    "attacks_json": "results/validated_attacks.json",
+    "attacks_reps_npz": null,
+    "benign_csv": "obfuscated-activations/inference_time_experiments/datasets/harmful_dataset/benign_train_no_spec_tokens.csv",
+    "benign_reps_npz": null,
+    "model_path": "/mnt/lab/Mo/hf_cache/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/8afb486c1db24fe5011ec46dfbe5b5dccdb575c2/",
+    "layer": 24,
+    "n_benign": 1500,
+    "min_family": 20,
+    "d_emb": 32,
+    "c": 1.0,
+    "k": 10,
+    "seeds": 5,
+    "epochs": 300,
+    "output": "results/openset_attacks",
+    "selftest": false
+  },
+  "by_heldout_family": {
+    "0": {
+      "knn_hyperbolic": {
+        "auroc": [
+          0.9964351851851851,
+          0.0012553042466727372
+        ],
+        "tpr": [
+          0.9740740740740742,
+          0.014814814814814836
+        ]
+      },
+      "knn_euclidean": {
+        "auroc": [
+          0.9495648148148147,
+          0.007219170770372242
+        ],
+        "tpr": [
+          0.3259259259259259,
+          0.0833127546607555
+        ]
+      },
+      "c4_linear": {
+        "auroc": [
+          0.9950185185185184,
+          0.0005513731455910627
+        ],
+        "tpr": [
+          0.9814814814814815,
+          0.0
+        ]
+      },
+      "format_only": {
+        "auroc": [
+          0.4073564814814815,
+          0.0178744622066499
+        ],
+        "tpr": [
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "1": {
+      "knn_hyperbolic": {
+        "auroc": [
+          0.9999407894736843,
+          0.00011842105263153435
+        ],
+        "tpr": [
+          1.0,
+          0.0
+        ]
+      },
+      "knn_euclidean": {
+        "auroc": [
+          0.9919802631578947,
+          0.007306317230188161
+        ],
+        "tpr": [
+          0.6,
+          0.48989794855663565
+        ]
+      },
+      "c4_linear": {
+        "auroc": [
+          1.0,
+          0.0
+        ],
+        "tpr": [
+          1.0,
+          0.0
+        ]
+      },
+      "format_only": {
+        "auroc": [
+          0.9961052631578948,
+          0.0013654446375345394
+        ],
+        "tpr": [
+          0.9973684210526315,
+          0.0052631578947368585
+        ]
+      }
+    },
+    "2": {
+      "knn_hyperbolic": {
+        "auroc": [
+          0.9891964285714285,
+          0.0027587696440587043
+        ],
+        "tpr": [
+          0.8249999999999998,
+          0.007142857142857162
+        ]
+      },
+      "knn_euclidean": {
+        "auroc": [
+          0.9698660714285714,
+          0.004973863448270447
+        ],
+        "tpr": [
+          0.6071428571428571,
+          0.04072055089639781
+        ]
+      },
+      "c4_linear": {
+        "auroc": [
+          0.9984999999999999,
+          0.0003948811497766942
+        ],
+        "tpr": [
+          0.95,
+          0.007142857142857162
+        ]
+      },
+      "format_only": {
+        "auroc": [
+          0.666955357142857,
+          0.012585134193903957
+        ],
+        "tpr": [
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "3": {
+      "knn_hyperbolic": {
+        "auroc": [
+          0.9991896551724138,
+          0.0007788151547809061
+        ],
+        "tpr": [
+          0.9977011494252874,
+          0.004597701149425282
+        ]
+      },
+      "knn_euclidean": {
+        "auroc": [
+          0.5177011494252873,
+          0.11270629710353744
+        ],
+        "tpr": [
+          0.011494252873563218,
+          0.0
+        ]
+      },
+      "c4_linear": {
+        "auroc": [
+          1.0,
+          0.0
+        ],
+        "tpr": [
+          1.0,
+          0.0
+        ]
+      },
+      "format_only": {
+        "auroc": [
+          0.9999425287356323,
+          0.00011494252873558431
+        ],
+        "tpr": [
+          1.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "macro": {
+    "knn_hyperbolic": {
+      "auroc": 0.996190514600678,
+      "tpr": 0.9491938058748404
+    },
+    "knn_euclidean": {
+      "auroc": 0.8572780747066421,
+      "tpr": 0.38614075898558653
+    },
+    "c4_linear": {
+      "auroc": 0.9983796296296296,
+      "tpr": 0.9828703703703703
+    },
+    "format_only": {
+      "auroc": 0.7675899076294663,
+      "tpr": 0.49934210526315786
+    }
+  },
+  "verdict": "no win: linear probe >= retrieval on unseen attacks -> the 'is-an-attack' direction is technique-general; negative extends to novel attacks"
+}

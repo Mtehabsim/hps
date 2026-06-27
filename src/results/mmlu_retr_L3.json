@@ -1,0 +1,437 @@
+{
+  "config": {
+    "harmful_npz": "results/mmlu_taxonomy_L3_reps.npz",
+    "dims": [
+      16,
+      32
+    ],
+    "curvatures": [
+      1.0
+    ],
+    "seeds": 5,
+    "epochs": 300,
+    "beta": 0.0,
+    "novel_leaf": false,
+    "baselines": "cosine,whitened",
+    "stats": true,
+    "output": "results/mmlu_retr_L3",
+    "selftest": false,
+    "build_benign_topic": null,
+    "label_noise": null,
+    "drop_leaves": "",
+    "merge_leaves": "",
+    "_drop_leaves": [],
+    "_merge_groups": []
+  },
+  "leaves": [
+    "humanities/history/high_school_european_history",
+    "humanities/history/high_school_us_history",
+    "humanities/history/high_school_world_history",
+    "humanities/history/prehistory",
+    "humanities/law/international_law",
+    "humanities/law/jurisprudence",
+    "humanities/law/professional_law",
+    "humanities/philosophy_ethics/formal_logic",
+    "humanities/philosophy_ethics/logical_fallacies",
+    "humanities/philosophy_ethics/moral_disputes",
+    "humanities/philosophy_ethics/moral_scenarios",
+    "humanities/philosophy_ethics/philosophy",
+    "humanities/philosophy_ethics/world_religions",
+    "other/business/business_ethics",
+    "other/business/management",
+    "other/business/marketing",
+    "other/business/professional_accounting",
+    "other/medicine/clinical_knowledge",
+    "other/medicine/college_medicine",
+    "other/medicine/human_aging",
+    "other/medicine/medical_genetics",
+    "other/medicine/nutrition",
+    "other/medicine/professional_medicine",
+    "other/medicine/virology",
+    "other/misc/global_facts",
+    "other/misc/miscellaneous",
+    "social_sciences/economics/econometrics",
+    "social_sciences/economics/high_school_macroeconomics",
+    "social_sciences/economics/high_school_microeconomics",
+    "social_sciences/politics_geo/high_school_geography",
+    "social_sciences/politics_geo/high_school_government_and_politics",
+    "social_sciences/politics_geo/public_relations",
+    "social_sciences/politics_geo/security_studies",
+    "social_sciences/politics_geo/us_foreign_policy",
+    "social_sciences/psych_socio/high_school_psychology",
+    "social_sciences/psych_socio/human_sexuality",
+    "social_sciences/psych_socio/professional_psychology",
+    "social_sciences/psych_socio/sociology",
+    "stem/biology/anatomy",
+    "stem/biology/college_biology",
+    "stem/biology/high_school_biology",
+    "stem/chemistry/college_chemistry",
+    "stem/chemistry/high_school_chemistry",
+    "stem/cs_eng/college_computer_science",
+    "stem/cs_eng/computer_security",
+    "stem/cs_eng/electrical_engineering",
+    "stem/cs_eng/high_school_computer_science",
+    "stem/cs_eng/machine_learning",
+    "stem/math/abstract_algebra",
+    "stem/math/college_mathematics",
+    "stem/math/elementary_mathematics",
+    "stem/math/high_school_mathematics",
+    "stem/math/high_school_statistics",
+    "stem/physics/astronomy",
+    "stem/physics/college_physics",
+    "stem/physics/conceptual_physics",
+    "stem/physics/high_school_physics"
+  ],
+  "cats": [
+    "humanities/history",
+    "humanities/law",
+    "humanities/philosophy_ethics",
+    "other/business",
+    "other/medicine",
+    "other/misc",
+    "social_sciences/economics",
+    "social_sciences/politics_geo",
+    "social_sciences/psych_socio",
+    "stem/biology",
+    "stem/chemistry",
+    "stem/cs_eng",
+    "stem/math",
+    "stem/physics"
+  ],
+  "by_dim": {
+    "d16_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.39977478619686735,
+          0.03544210932691979
+        ],
+        "mAP_parent": [
+          0.49693843625933737,
+          0.01858455282165535
+        ],
+        "nn_leaf_acc": [
+          0.4087719298245614,
+          0.17991748656886225
+        ],
+        "nn_parent_acc": [
+          0.5760233918128654,
+          0.23048096076211555
+        ],
+        "recall@1": [
+          0.4087719298245614,
+          0.17991748656886225
+        ],
+        "recall@5": [
+          0.8134502923976609,
+          0.01932038425342899
+        ],
+        "recall@10": [
+          0.8935672514619885,
+          0.005578591821151722
+        ],
+        "typed_acc": [
+          0.6333333333333333,
+          0.015483277537863997
+        ],
+        "tree_distortion": [
+          0.7989317935405114,
+          0.00026998837628180756
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.32438843310781207,
+          0.03661330813020405
+        ],
+        "mAP_parent": [
+          0.28335582255557534,
+          0.02093474762927815
+        ],
+        "nn_leaf_acc": [
+          0.5032163742690058,
+          0.04831556155727451
+        ],
+        "nn_parent_acc": [
+          0.6926900584795321,
+          0.047305206537713515
+        ],
+        "recall@1": [
+          0.5032163742690058,
+          0.04831556155727451
+        ],
+        "recall@5": [
+          0.7695906432748537,
+          0.030254328174848754
+        ],
+        "recall@10": [
+          0.8538011695906432,
+          0.0215661858650126
+        ],
+        "typed_acc": [
+          0.6535087719298246,
+          0.02876812602631309
+        ],
+        "tree_distortion": [
+          0.7782605414228659,
+          0.004176540492514428
+        ]
+      },
+      "baseline_cosine": {
+        "mAP_leaf": [
+          0.2466528211927888,
+          0.0065273835699473015
+        ],
+        "mAP_parent": [
+          0.2794030839236875,
+          0.009871315408872702
+        ],
+        "nn_leaf_acc": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "nn_parent_acc": [
+          0.6134502923976608,
+          0.01900809703291812
+        ],
+        "recall@1": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "recall@5": [
+          0.706140350877193,
+          0.01778585535174917
+        ],
+        "recall@10": [
+          0.7976608187134503,
+          0.009591356413366506
+        ]
+      },
+      "baseline_whitened": {
+        "mAP_leaf": [
+          0.0386886069768544,
+          0.0017584430617436505
+        ],
+        "mAP_parent": [
+          0.10265554180859615,
+          0.002810957169551762
+        ],
+        "nn_leaf_acc": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "nn_parent_acc": [
+          0.10614035087719298,
+          0.025298734966459967
+        ],
+        "recall@1": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "recall@5": [
+          0.093859649122807,
+          0.014892200676312098
+        ],
+        "recall@10": [
+          0.1216374269005848,
+          0.017333041327811615
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0754,
+        "mAP_parent": 0.2136,
+        "nn_parent_acc": -0.1167,
+        "typed_acc": -0.0202,
+        "tree_distortion": 0.0207
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.21358261370376191,
+          "ci_low": 0.20719288525785606,
+          "ci_high": 0.2201145317304668,
+          "p_value": 0.0,
+          "n": 3420
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.07538635308905521,
+          "ci_low": 0.06950398592994658,
+          "ci_high": 0.08132954237065997,
+          "p_value": 0.0,
+          "n": 3420
+        }
+      },
+      "H_minus_best_baseline_mAP_parent": {
+        "best_baseline": "cosine",
+        "best_baseline_mAP_parent": 0.2794,
+        "H_mAP_parent": 0.4969,
+        "gap": 0.2175
+      }
+    },
+    "d32_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.4488572696240866,
+          0.0160493787986273
+        ],
+        "mAP_parent": [
+          0.5366573646940621,
+          0.018032137790958337
+        ],
+        "nn_leaf_acc": [
+          0.5815789473684211,
+          0.024277811408943965
+        ],
+        "nn_parent_acc": [
+          0.8008771929824562,
+          0.02537971271944764
+        ],
+        "recall@1": [
+          0.5815789473684211,
+          0.024277811408943965
+        ],
+        "recall@5": [
+          0.8423976608187134,
+          0.015945728894077194
+        ],
+        "recall@10": [
+          0.9073099415204677,
+          0.01064745114387902
+        ],
+        "typed_acc": [
+          0.6576023391812865,
+          0.02278826639578797
+        ],
+        "tree_distortion": [
+          0.7992162830461991,
+          0.00014594863317722391
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.39460639640314443,
+          0.058248488673682305
+        ],
+        "mAP_parent": [
+          0.34566844586116413,
+          0.04109212685583641
+        ],
+        "nn_leaf_acc": [
+          0.5956140350877193,
+          0.04311849419411985
+        ],
+        "nn_parent_acc": [
+          0.7646198830409356,
+          0.024965349948697733
+        ],
+        "recall@1": [
+          0.5956140350877193,
+          0.04311849419411985
+        ],
+        "recall@5": [
+          0.8426900584795322,
+          0.03178404267064607
+        ],
+        "recall@10": [
+          0.9096491228070175,
+          0.023725687456258242
+        ],
+        "typed_acc": [
+          0.6850877192982455,
+          0.09223558959290998
+        ],
+        "tree_distortion": [
+          0.7794167997556248,
+          0.00677236364588596
+        ]
+      },
+      "baseline_cosine": {
+        "mAP_leaf": [
+          0.2466528211927888,
+          0.0065273835699473015
+        ],
+        "mAP_parent": [
+          0.2794030839236875,
+          0.009871315408872702
+        ],
+        "nn_leaf_acc": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "nn_parent_acc": [
+          0.6134502923976608,
+          0.01900809703291812
+        ],
+        "recall@1": [
+          0.45701754385964916,
+          0.0067060496732045125
+        ],
+        "recall@5": [
+          0.706140350877193,
+          0.01778585535174917
+        ],
+        "recall@10": [
+          0.7976608187134503,
+          0.009591356413366506
+        ]
+      },
+      "baseline_whitened": {
+        "mAP_leaf": [
+          0.0386886069768544,
+          0.0017584430617436505
+        ],
+        "mAP_parent": [
+          0.10265554180859615,
+          0.002810957169551762
+        ],
+        "nn_leaf_acc": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "nn_parent_acc": [
+          0.10614035087719298,
+          0.025298734966459967
+        ],
+        "recall@1": [
+          0.04269005847953217,
+          0.0085947008518708
+        ],
+        "recall@5": [
+          0.093859649122807,
+          0.014892200676312098
+        ],
+        "recall@10": [
+          0.1216374269005848,
+          0.017333041327811615
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0543,
+        "mAP_parent": 0.191,
+        "nn_parent_acc": 0.0363,
+        "typed_acc": -0.0275,
+        "tree_distortion": 0.0198
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.19098891883289792,
+          "ci_low": 0.18468057476264615,
+          "ci_high": 0.19723808772905102,
+          "p_value": 0.0,
+          "n": 3420
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.05425087322094215,
+          "ci_low": 0.04788606599426634,
+          "ci_high": 0.06065131388634109,
+          "p_value": 0.0,
+          "n": 3420
+        }
+      },
+      "H_minus_best_baseline_mAP_parent": {
+        "best_baseline": "cosine",
+        "best_baseline_mAP_parent": 0.2794,
+        "H_mAP_parent": 0.5367,
+        "gap": 0.2573
+      }
+    }
+  }
+}

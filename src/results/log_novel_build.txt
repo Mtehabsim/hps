@@ -1,0 +1,54 @@
+======================================================================
+Novel Attack Builder (FlipAttack + JailbreakBench-style)
+======================================================================
+  HuggingFace AdvBench load failed: To use optimized download using Xet storage, you need to install the hf_xet package. Try `pip install "huggingface_hub[hf_xet]"` or `pip install hf_xet`.
+  Falling back to the 50-prompt sample baked into this script
+
+  Source AdvBench: 50 harmful behaviors
+  Source mean length: 72.4 chars
+
+  Generating FlipAttack variants...
+    flipattack_fcs: n=  50  mean_len=  318.4 chars
+    flipattack_fcw: n=  50  mean_len=  444.4 chars
+    flipattack_fwo: n=  50  mean_len=  282.4 chars
+    flipattack_fmm: n=  50  mean_len=  444.4 chars
+
+  Generating JailbreakBench-style variants...
+    jbb_direct: n=  50  mean_len=   72.4 chars
+    jbb_roleplay: n=  50  mean_len=  321.4 chars
+    jbb_dan: n=  50  mean_len=  420.4 chars
+    jbb_rot13: n=  50  mean_len=  126.4 chars
+
+  Saved 400 novel attack prompts → results/novel_attacks_2025.json
+  Across 8 attack categories
+
+  Stats saved: results/novel_attacks_2025_stats.json
+
+======================================================================
+Next steps
+======================================================================
+
+  Extract activations on novel attacks (use diverse benign):
+
+  Llama-3-8B-Instruct (~3 hrs GPU):
+  python extract_jbshield_activations.py \
+    --model meta-llama/Meta-Llama-3-8B-Instruct \
+    --attacks_json results/novel_attacks_2025.json \
+    --diverse_benign results/data_harmless_diverse.csv \
+    --output results/llama3_activations_cache_novel.npz \
+    --layers 0 2 17 24 28 31 \
+    --cache_format dict
+
+  Vicuna-13B-v1.5 (~3 hrs GPU):
+  python extract_jbshield_activations.py \
+    --model lmsys/vicuna-13b-v1.5 \
+    --attacks_json results/novel_attacks_2025.json \
+    --diverse_benign results/data_harmless_diverse.csv \
+    --output results/vicuna_activations_cache_novel.npz \
+    --layers 0 2 22 31 35 39 \
+    --cache_format array
+
+  Then run the OOD evaluation:
+    python evaluate_ood_attacks.py \
+      --train_cache results/llama3_activations_cache_diverse.npz \
+      --test_cache results/llama3_activations_cache_novel.npz

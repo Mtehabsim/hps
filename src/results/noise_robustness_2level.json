@@ -1,0 +1,227 @@
+{
+  "config": {
+    "harmful_npz": "results/harm_taxonomy_deep_llm_reps.npz",
+    "dims": [
+      16,
+      32
+    ],
+    "curvatures": [
+      1.0
+    ],
+    "seeds": 5,
+    "epochs": 300,
+    "beta": 0.0,
+    "novel_leaf": false,
+    "baselines": "",
+    "stats": false,
+    "output": "results/noise_robustness_2level",
+    "selftest": false,
+    "build_benign_topic": null,
+    "label_noise": [
+      0.0,
+      0.05,
+      0.1,
+      0.2,
+      0.3,
+      0.4
+    ]
+  },
+  "leaves": [
+    "controlled_substances/synthesis",
+    "cyber/intrusion",
+    "cyber/malware",
+    "fraud_theft/coercion",
+    "fraud_theft/financial_fraud",
+    "fraud_theft/theft",
+    "hate_harassment/discrimination",
+    "hate_harassment/harassment",
+    "misinformation/fake_content",
+    "privacy/surveillance",
+    "regulatory_evasion/illegal_operation",
+    "self_harm/self_harm",
+    "violence/physical_harm",
+    "violence/weapons"
+  ],
+  "by_level": {
+    "noise0.0_d16_c1.0": {
+      "frac": 0.0,
+      "dim": 16,
+      "c": 1.0,
+      "H_mAP_parent": 0.5808505747883668,
+      "E_mAP_parent": 0.4817725721879252,
+      "gap": 0.09907800260044158,
+      "bootstrap": {
+        "mean": 0.09907800260044149,
+        "ci_low": 0.08943444921704988,
+        "ci_high": 0.10851872233105138,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.0_d32_c1.0": {
+      "frac": 0.0,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.6213183936880096,
+      "E_mAP_parent": 0.49153469217588885,
+      "gap": 0.1297837015121207,
+      "bootstrap": {
+        "mean": 0.12978370151212068,
+        "ci_low": 0.1208814624500835,
+        "ci_high": 0.1388444094998622,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.05_d16_c1.0": {
+      "frac": 0.05,
+      "dim": 16,
+      "c": 1.0,
+      "H_mAP_parent": 0.4978870495182283,
+      "E_mAP_parent": 0.4617040414375497,
+      "gap": 0.03618300808067865,
+      "bootstrap": {
+        "mean": 0.0361830080806787,
+        "ci_low": 0.02786823944462228,
+        "ci_high": 0.04442617873855626,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.05_d32_c1.0": {
+      "frac": 0.05,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.5297839340064241,
+      "E_mAP_parent": 0.44126679773687216,
+      "gap": 0.08851713626955193,
+      "bootstrap": {
+        "mean": 0.08851713626955186,
+        "ci_low": 0.08073725589296114,
+        "ci_high": 0.09640991413955616,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.1_d16_c1.0": {
+      "frac": 0.1,
+      "dim": 16,
+      "c": 1.0,
+      "H_mAP_parent": 0.406004272156963,
+      "E_mAP_parent": 0.3628310718990738,
+      "gap": 0.04317320025788918,
+      "bootstrap": {
+        "mean": 0.04317320025788913,
+        "ci_low": 0.03622744709350344,
+        "ci_high": 0.049971178189675204,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.1_d32_c1.0": {
+      "frac": 0.1,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.44218869909013864,
+      "E_mAP_parent": 0.37315484197842175,
+      "gap": 0.06903385711171689,
+      "bootstrap": {
+        "mean": 0.06903385711171688,
+        "ci_low": 0.06203786855803983,
+        "ci_high": 0.07607984809127817,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.2_d16_c1.0": {
+      "frac": 0.2,
+      "dim": 16,
+      "c": 1.0,
+      "H_mAP_parent": 0.28133829428706203,
+      "E_mAP_parent": 0.28189510268427903,
+      "gap": -0.0005568083972170013,
+      "bootstrap": {
+        "mean": -0.0005568083972170409,
+        "ci_low": -0.005750647898022724,
+        "ci_high": 0.004688015293560148,
+        "p_value": 0.8442,
+        "n": 980
+      }
+    },
+    "noise0.2_d32_c1.0": {
+      "frac": 0.2,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.3058879936857742,
+      "E_mAP_parent": 0.2737819336385574,
+      "gap": 0.03210606004721678,
+      "bootstrap": {
+        "mean": 0.03210606004721679,
+        "ci_low": 0.027435526664320593,
+        "ci_high": 0.037008822678200964,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.3_d16_c1.0": {
+      "frac": 0.3,
+      "dim": 16,
+      "c": 1.0,
+      "H_mAP_parent": 0.22841784274245708,
+      "E_mAP_parent": 0.2155381641818716,
+      "gap": 0.012879678560585472,
+      "bootstrap": {
+        "mean": 0.012879678560585474,
+        "ci_low": 0.009208086713206037,
+        "ci_high": 0.016798613094339877,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.3_d32_c1.0": {
+      "frac": 0.3,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.2399181933144149,
+      "E_mAP_parent": 0.22305982821476178,
+      "gap": 0.016858365099653133,
+      "bootstrap": {
+        "mean": 0.016858365099653095,
+        "ci_low": 0.012863185080241497,
+        "ci_high": 0.020932591971396873,
+        "p_value": 0.0,
+        "n": 980
+      }
+    },
+    "noise0.4_d16_c1.0": {
+      "frac": 0.4,
+      "dim": 16,
+      "c": 1.0,
+      "H_mAP_parent": 0.19697426319394187,
+      "E_mAP_parent": 0.19381248848937044,
+      "gap": 0.003161774704571435,
+      "bootstrap": {
+        "mean": 0.003161774704571469,
+        "ci_low": 1.381446365004693e-05,
+        "ci_high": 0.006409738514918346,
+        "p_value": 0.0488,
+        "n": 980
+      }
+    },
+    "noise0.4_d32_c1.0": {
+      "frac": 0.4,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.20688739467095374,
+      "E_mAP_parent": 0.19455838880219156,
+      "gap": 0.012329005868762177,
+      "bootstrap": {
+        "mean": 0.012329005868762136,
+        "ci_low": 0.008541845997733229,
+        "ci_high": 0.016162337390386212,
+        "p_value": 0.0,
+        "n": 980
+      }
+    }
+  }
+}

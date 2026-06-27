@@ -1,0 +1,155 @@
+{
+  "config": {
+    "harmful_npz": "results/harm_taxonomy_deep_llm_reps.npz",
+    "dims": [
+      32
+    ],
+    "curvatures": [
+      1.0
+    ],
+    "seeds": 5,
+    "epochs": 300,
+    "beta": 0.0,
+    "novel_leaf": false,
+    "baselines": "",
+    "stats": true,
+    "output": "results/hyp_retr_droponly",
+    "selftest": false,
+    "build_benign_topic": null,
+    "label_noise": null,
+    "drop_leaves": "regulatory_evasion/illegal_operation",
+    "merge_leaves": "",
+    "_drop_leaves": [
+      "regulatory_evasion/illegal_operation"
+    ],
+    "_merge_groups": []
+  },
+  "leaves": [
+    "controlled_substances/synthesis",
+    "cyber/intrusion",
+    "cyber/malware",
+    "fraud_theft/coercion",
+    "fraud_theft/financial_fraud",
+    "fraud_theft/theft",
+    "hate_harassment/discrimination",
+    "hate_harassment/harassment",
+    "misinformation/fake_content",
+    "privacy/surveillance",
+    "self_harm/self_harm",
+    "violence/physical_harm",
+    "violence/weapons"
+  ],
+  "cats": [
+    "controlled_substances",
+    "cyber",
+    "fraud_theft",
+    "hate_harassment",
+    "misinformation",
+    "privacy",
+    "self_harm",
+    "violence"
+  ],
+  "by_dim": {
+    "d32_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.5964218959511005,
+          0.017735728258102438
+        ],
+        "mAP_parent": [
+          0.6542090190575474,
+          0.022525094611490104
+        ],
+        "nn_leaf_acc": [
+          0.7268817204301076,
+          0.02291104919641129
+        ],
+        "nn_parent_acc": [
+          0.8075268817204302,
+          0.033558035557692996
+        ],
+        "recall@1": [
+          0.7268817204301076,
+          0.02291104919641129
+        ],
+        "recall@5": [
+          0.8688172043010752,
+          0.019114396596377592
+        ],
+        "recall@10": [
+          0.9129032258064516,
+          0.016093150050640593
+        ],
+        "typed_acc": [
+          0.7397849462365592,
+          0.031089961924303113
+        ],
+        "tree_distortion": [
+          0.7311973948209742,
+          0.00152304048770931
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.5243448504221156,
+          0.0156752414664746
+        ],
+        "mAP_parent": [
+          0.5363525993383877,
+          0.013280102504413064
+        ],
+        "nn_leaf_acc": [
+          0.713978494623656,
+          0.025308822141806072
+        ],
+        "nn_parent_acc": [
+          0.7935483870967742,
+          0.029368817814511117
+        ],
+        "recall@1": [
+          0.713978494623656,
+          0.025308822141806072
+        ],
+        "recall@5": [
+          0.8602150537634408,
+          0.021772534119695236
+        ],
+        "recall@10": [
+          0.9204301075268816,
+          0.013343735103215962
+        ],
+        "typed_acc": [
+          0.7548387096774192,
+          0.013430103222362134
+        ],
+        "tree_distortion": [
+          0.7287991358051056,
+          0.0035555292729252284
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0721,
+        "mAP_parent": 0.1179,
+        "nn_parent_acc": 0.014,
+        "typed_acc": -0.0151,
+        "tree_distortion": 0.0024
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.1178564197191595,
+          "ci_low": 0.10971424653762202,
+          "ci_high": 0.12620131687776034,
+          "p_value": 0.0,
+          "n": 930
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.07207704552898496,
+          "ci_low": 0.06396733687744885,
+          "ci_high": 0.08037383801407429,
+          "p_value": 0.0,
+          "n": 930
+        }
+      }
+    }
+  }
+}

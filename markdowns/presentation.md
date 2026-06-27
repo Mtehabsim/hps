@@ -27,7 +27,7 @@
 
 ## Main result — hyperbolic does NOT help  *(Setting A: harm monitor under adaptive jailbreak/obfuscation)*
 
-![Clean + adaptive: rpf=C4, all bypassed under attack](../results/mentor_jailbreak_summary.png)
+![Clean + adaptive: rpf=C4, all bypassed under attack](../src/results/mentor_jailbreak_summary.png)
 
 - **Clean (left):** curved **rpf ties linear C4 at ~1.0** → curvature adds nothing.
 - Not just saturation: on the harder cache **rpf = rpfnox0 = 0.998 exactly** (gap 0.000).
@@ -49,7 +49,7 @@
 
 ## What "rpf" is (the probes)
 
-![HPS vs rpf](../results/hps_vs_rpf.png)
+![HPS vs rpf](../src/results/hps_vs_rpf.png)
 
 - Same hyperbolic pipeline; only the boxes in color differ.
 - **HPS** compresses 4096→64 then uses 12 hand-crafted features → the bottleneck (weak).
@@ -60,7 +60,7 @@
 
 ## Why clean works but adaptive fails  *(Setting A — harm monitor, Bailey obfuscation game)*
 
-![PCA: harmful behaviors vs benign + obfuscated (jailbroken) activations](../results/obfuscation_pca.png)
+![PCA: harmful behaviors vs benign + obfuscated (jailbroken) activations](../src/results/obfuscation_pca.png)
 
 - Clean **harmful** (red) vs **benign** (blue) → **separate clusters**, a straight line splits them.
 - Orange = harmful **after the attack** → dragged **into the benign cluster**.
@@ -71,7 +71,7 @@
 
 ## A different task — RETRIEVAL  *(where hyperbolic finally helps; NOT jailbreak detection)*
 
-![Discrimination vs ranking](../results/mentor_summary.png)
+![Discrimination vs ranking](../src/results/mentor_summary.png)
 
 - Same hidden states, different job: not "is it a jailbreak?" but **"rank the most similar harmful prompts"** (retrieval).
 - **Left:** curvature *hurts* the decision (classification). **Right:** curvature *helps* retrieval (**+0.13**, and **+0.16** with a deeper taxonomy).
@@ -194,7 +194,7 @@ flowchart LR
 
 ## …and it's general, not a harm quirk
 
-![MMLU depth-generic](../results/mmlu_depth_generic.png)
+![MMLU depth-generic](../src/results/mmlu_depth_generic.png)
 
 - The dissociation **replicates on MMLU subjects** — ground-truth labels, not harm.
 - Curved beats flat at d=32: **+0.16 (category-level) / +0.07 (subject-level)** → **not harm-specific, not label-noise.**

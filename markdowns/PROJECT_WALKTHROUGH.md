@@ -389,6 +389,20 @@ retrieval ties C4; JBC/random-search flagged as length artifacts — report per-
 from 2→3 level at d=32, p<0.0001; flat baselines weak and collapsing with depth — the depth effect is
 general, not a harm-data quirk).
 
+**Two mentor-requested checks (both negative for the features, but informative):**
+- **"Is the decision secretly flat?"** (the tangent-space critique). We classified harm-vs-benign two
+  ways on the *same* trained embedding: (a) geodesic distance on the manifold vs (b) log-mapped back to
+  flat space + a linear probe. The hyperbolic distance genuinely re-ranks points (**Spearman 0.876 vs
+  Euclidean, not 1.0**; collapses to 1.0 only as c→0) → the curvature is **not** flattened away. On this
+  easy linearly-separable task both still score ~0.998, so curvature is *real but doesn't change the
+  decision* — consistent with the dissociation.
+- **Feature anomaly score** (radial / curvature / displacement → unsupervised "distance from benign",
+  all 7 subset combinations). **Compressed (4096→64): near chance (~0.52–0.59).** Removing the
+  compression lifts the *supervised* read to ~0.78–0.91 (so the HPS 4096→64 squeeze, not the features,
+  was the bottleneck) — **but the unsupervised anomaly score stays weak (~0.5–0.7)**, and even the
+  best features never beat the full probe (~0.998). So the explicit geometric features carry real but
+  modest signal; they don't make a better detector. (`archive/.../latest_experiments.py`)
+
 ---
 
 ## Part E — Novelty & related work (is this new?)
@@ -448,10 +462,20 @@ claims are genuinely unanticipated.** Per-claim:
 
 ## Document map (where the details live)
 
-- `hps_preprint.md` — the formal negative-result paper.
-- `hps_project_reference.md` — detailed reference (every probe, attack, metric, result table).
-- `reconciliation_memo.md` — which older findings are valid/superseded, and our own list of doubts.
-- `positive_experiment_prereg.md` — the pre-registered design for the retrieval (positive) experiment.
-- `hyperbolic_retrieval.py` — the code for the new experiment (the fair probe + retrieval metrics +
-  the concentration-immune baselines).
-- `research_journey.md` — the long-form chronological lab notebook (the raw version of Part B).
+Docs (in `markdowns/`):
+- `hps_preprint.md` — the formal paper: negative result for detection + the controlled positive (dissociation) + methodology.
+- `presentation.md` — the slide deck (mentor/team talk).
+- `PROJECT_WALKTHROUGH.md` — this document (the narrative + current findings).
+
+Code (in `src/`):
+- `hps_core.py`, `statistical_tests.py` — HPS/Lorentz definition + HPS‑vs‑C4 training & stats.
+- `rpf_on_cache.py` — the raw‑projection‑full (rpf) probe.
+- `hyperbolic_retrieval.py` — the retrieval/dissociation core (fair ProtoNet + retrieval metrics, dimension sweep, per‑query bootstrap, label‑noise robustness, concentration‑immune baselines).
+- `hierarchical_detector.py` — the prototype detector + shared helpers.
+- `mmlu_generality_check.py` — MMLU subject hierarchy for the not‑harm‑specific / depth‑generic check.
+- `openset_harm_topics.py`, `openset_attack_families.py` — open‑set detection across held‑out harm topics / attack families.
+- `plot_obfuscation.py` — the PCA "attack drags harm into benign" figure.
+- `dataset.py`, `utils.py`, `config.py` — data loaders, extraction, constants.
+- `obfuscated-activations/` — the obf_reps adaptive‑attack framework + probe configs.
+
+(Superseded analyses and the raw lab notebook now live under `archive/`.)

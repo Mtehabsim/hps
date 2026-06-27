@@ -1,0 +1,219 @@
+{
+  "vicuna-13b-v1.5": {
+    "output_file": "results/jbshield_vicuna13b_attacks.json",
+    "total_prompts": 5670,
+    "per_attack": {
+      "autodan": {
+        "n_test": 820,
+        "n_calibration": 30,
+        "n_unique": 850,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "base64": {
+        "n_test": 820,
+        "n_calibration": 30,
+        "n_unique": 850,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "drattack": {
+        "n_test": 490,
+        "n_calibration": 30,
+        "n_unique": 520,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "gcg": {
+        "n_test": 820,
+        "n_calibration": 30,
+        "n_unique": 850,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "ijp": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "pair": {
+        "n_test": 820,
+        "n_calibration": 30,
+        "n_unique": 850,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "puzzler": {
+        "n_test": 20,
+        "n_calibration": 30,
+        "n_unique": 50,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "saa": {
+        "n_test": 820,
+        "n_calibration": 30,
+        "n_unique": 850,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      },
+      "zulu": {
+        "n_test": 820,
+        "n_calibration": 30,
+        "n_unique": 850,
+        "files_found": [
+          "test",
+          "calibration"
+        ]
+      }
+    },
+    "per_attack_lengths": {
+      "autodan": {
+        "n": 850,
+        "mean_chars": 108.66,
+        "median_chars": 83.0,
+        "min_chars": 32,
+        "max_chars": 407
+      },
+      "base64": {
+        "n": 850,
+        "mean_chars": 108.66,
+        "median_chars": 83.0,
+        "min_chars": 32,
+        "max_chars": 407
+      },
+      "drattack": {
+        "n": 520,
+        "mean_chars": 73.00769230769231,
+        "median_chars": 72.0,
+        "min_chars": 32,
+        "max_chars": 156
+      },
+      "gcg": {
+        "n": 850,
+        "mean_chars": 108.66,
+        "median_chars": 83.0,
+        "min_chars": 32,
+        "max_chars": 407
+      },
+      "ijp": {},
+      "pair": {
+        "n": 850,
+        "mean_chars": 108.66,
+        "median_chars": 83.0,
+        "min_chars": 32,
+        "max_chars": 407
+      },
+      "puzzler": {
+        "n": 50,
+        "mean_chars": 73.74,
+        "median_chars": 72.0,
+        "min_chars": 32,
+        "max_chars": 115
+      },
+      "saa": {
+        "n": 850,
+        "mean_chars": 108.66,
+        "median_chars": 83.0,
+        "min_chars": 32,
+        "max_chars": 407
+      },
+      "zulu": {
+        "n": 850,
+        "mean_chars": 108.66,
+        "median_chars": 83.0,
+        "min_chars": 32,
+        "max_chars": 407
+      }
+    }
+  },
+  "Meta-Llama-3-8B-Instruct": {
+    "output_file": "results/jbshield_llama3_attacks.json",
+    "total_prompts": 0,
+    "per_attack": {
+      "autodan": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "base64": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "drattack": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "gcg": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "ijp": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "pair": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "puzzler": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "saa": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      },
+      "zulu": {
+        "n_test": 0,
+        "n_calibration": 0,
+        "n_unique": 0,
+        "files_found": []
+      }
+    },
+    "per_attack_lengths": {
+      "autodan": {},
+      "base64": {},
+      "drattack": {},
+      "gcg": {},
+      "ijp": {},
+      "pair": {},
+      "puzzler": {},
+      "saa": {},
+      "zulu": {}
+    }
+  }
+}

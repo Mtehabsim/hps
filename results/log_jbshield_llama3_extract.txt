@@ -1,150 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-======================================================================
-JBShield Activation Extraction
-======================================================================
-  Model:          meta-llama/Meta-Llama-3-8B-Instruct
-  Attacks JSON:   results/jbshield_llama3_attacks.json
-  Diverse benign: results/data_harmless_diverse.csv
-  Output:         results/llama3_activations_cache_jbshield.npz
-  Layers:         [0, 2, 17, 24, 28, 31]
-  Cache format:   dict
-  Device:         cuda
-
-Loading model: meta-llama/Meta-Llama-3-8B-Instruct
-Loading weights:   0%|                                                                                                          | 0/291 [00:00<?, ?it/s]Loading weights:   0%|▎                                                                                                 | 1/291 [00:01<09:37,  1.99s/it]Loading weights:   8%|███████▎                                                                                         | 22/291 [00:02<00:20, 13.27it/s]Loading weights:  10%|█████████▎                                                                                       | 28/291 [00:02<00:15, 16.51it/s]Loading weights:  11%|███████████                                                                                      | 33/291 [00:02<00:17, 14.54it/s]Loading weights:  15%|███████████████                                                                                  | 45/291 [00:02<00:10, 23.22it/s]Loading weights:  17%|████████████████▋                                                                                | 50/291 [00:03<00:10, 22.84it/s]Loading weights:  20%|███████████████████▎                                                                             | 58/291 [00:03<00:09, 25.06it/s]Loading weights:  23%|██████████████████████▎                                                                          | 67/291 [00:03<00:07, 28.66it/s]Loading weights:  25%|████████████████████████▎                                                                        | 73/291 [00:03<00:06, 32.22it/s]Loading weights:  27%|██████████████████████████                                                                       | 78/291 [00:04<00:08, 26.07it/s]Loading weights:  29%|████████████████████████████▎                                                                    | 85/291 [00:04<00:07, 26.87it/s]Loading weights:  31%|█████████████████████████████▋                                                                   | 89/291 [00:04<00:07, 26.25it/s]Loading weights:  32%|███████████████████████████████▎                                                                 | 94/291 [00:04<00:07, 25.65it/s]Loading weights:  34%|████████████████████████████████▉                                                               | 100/291 [00:04<00:06, 28.39it/s]Loading weights:  36%|██████████████████████████████████▎                                                             | 104/291 [00:05<00:07, 25.32it/s]Loading weights:  38%|████████████████████████████████████▉                                                           | 112/291 [00:05<00:06, 26.09it/s]Loading weights:  42%|███████████████████████████████████████▉                                                        | 121/291 [00:05<00:05, 33.43it/s]Loading weights:  43%|█████████████████████████████████████████▏                                                      | 125/291 [00:05<00:05, 30.89it/s]Loading weights:  45%|██████████████████████████████████████████▉                                                     | 130/291 [00:05<00:05, 29.37it/s]Loading weights:  47%|████████████████████████████████████████████▊                                                   | 136/291 [00:06<00:04, 32.20it/s]Loading weights:  48%|██████████████████████████████████████████████▏                                                 | 140/291 [00:06<00:05, 25.83it/s]Loading weights:  50%|████████████████████████████████████████████████▏                                               | 146/291 [00:06<00:05, 27.72it/s]Loading weights:  51%|█████████████████████████████████████████████████▏                                              | 149/291 [00:06<00:05, 26.45it/s]Loading weights:  53%|██████████████████████████████████████████████████▊                                             | 154/291 [00:06<00:04, 30.12it/s]Loading weights:  54%|████████████████████████████████████████████████████                                            | 158/291 [00:06<00:04, 26.91it/s]Loading weights:  56%|█████████████████████████████████████████████████████▊                                          | 163/291 [00:07<00:04, 25.89it/s]Loading weights:  58%|███████████████████████████████████████████████████████▍                                        | 168/291 [00:07<00:04, 30.34it/s]Loading weights:  59%|████████████████████████████████████████████████████████▋                                       | 172/291 [00:07<00:04, 28.71it/s]Loading weights:  60%|██████████████████████████████████████████████████████████                                      | 176/291 [00:07<00:04, 27.79it/s]Loading weights:  62%|███████████████████████████████████████████████████████████▍                                    | 180/291 [00:07<00:03, 27.83it/s]Loading weights:  64%|█████████████████████████████████████████████████████████████                                   | 185/291 [00:07<00:03, 31.48it/s]Loading weights:  65%|██████████████████████████████████████████████████████████████▎                                 | 189/291 [00:07<00:03, 31.20it/s]Loading weights:  66%|███████████████████████████████████████████████████████████████▋                                | 193/291 [00:08<00:03, 25.68it/s]Loading weights:  69%|██████████████████████████████████████████████████████████████████▎                             | 201/291 [00:08<00:02, 34.96it/s]Loading weights:  70%|███████████████████████████████████████████████████████████████████▋                            | 205/291 [00:08<00:03, 28.60it/s]Loading weights:  73%|█████████████████████████████████████████████████████████████████████▌                          | 211/291 [00:08<00:02, 30.44it/s]Loading weights:  74%|██████████████████████████████████████████████████████████████████████▉                         | 215/291 [00:08<00:02, 31.25it/s]Loading weights:  75%|████████████████████████████████████████████████████████████████████████▏                       | 219/291 [00:09<00:02, 27.65it/s]Loading weights:  76%|█████████████████████████████████████████████████████████████████████████▏                      | 222/291 [00:09<00:02, 26.16it/s]Loading weights:  79%|███████████████████████████████████████████████████████████████████████████▌                    | 229/291 [00:09<00:02, 26.06it/s]Loading weights:  81%|█████████████████████████████████████████████████████████████████████████████▌                  | 235/291 [00:09<00:01, 28.42it/s]Loading weights:  82%|██████████████████████████████████████████████████████████████████████████████▌                 | 238/291 [00:09<00:01, 28.56it/s]Loading weights:  84%|████████████████████████████████████████████████████████████████████████████████▊               | 245/291 [00:09<00:01, 32.90it/s]Loading weights:  86%|██████████████████████████████████████████████████████████████████████████████████▏             | 249/291 [00:10<00:01, 27.68it/s]Loading weights:  88%|████████████████████████████████████████████████████████████████████████████████████▊           | 257/291 [00:10<00:01, 32.07it/s]Loading weights:  90%|██████████████████████████████████████████████████████████████████████████████████████▍         | 262/291 [00:10<00:00, 33.41it/s]Loading weights:  91%|███████████████████████████████████████████████████████████████████████████████████████▊        | 266/291 [00:10<00:00, 28.92it/s]Loading weights:  93%|█████████████████████████████████████████████████████████████████████████████████████████▍      | 271/291 [00:10<00:00, 30.94it/s]Loading weights:  95%|██████████████████████████████████████████████████████████████████████████████████████████▋     | 275/291 [00:10<00:00, 30.72it/s]Loading weights:  97%|█████████████████████████████████████████████████████████████████████████████████████████████▎  | 283/291 [00:11<00:00, 31.34it/s]Loading weights: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 291/291 [00:11<00:00, 25.89it/s]
-  Loaded. Hidden size: 4096, Layers: 32
-
-  Loading attacks from results/jbshield_llama3_attacks.json...
-    0 attacks across 0 methods
-    Train: 0  Test: 0
-
-  Loading diverse benign from results/data_harmless_diverse.csv...
-    5000 benign prompts (train 4000, test 1000)
-
-  Extracting train benign (4000)...
-    [50/4000] 9.9 prompts/sec, ETA 6.6 min
-    [100/4000] 10.9 prompts/sec, ETA 6.0 min
-    [150/4000] 12.2 prompts/sec, ETA 5.2 min
-    [200/4000] 12.9 prompts/sec, ETA 4.9 min
-    [250/4000] 13.4 prompts/sec, ETA 4.7 min
-    [300/4000] 13.4 prompts/sec, ETA 4.6 min
-    [350/4000] 13.7 prompts/sec, ETA 4.4 min
-    [400/4000] 14.0 prompts/sec, ETA 4.3 min
-    [450/4000] 14.0 prompts/sec, ETA 4.2 min
-    [500/4000] 14.1 prompts/sec, ETA 4.1 min
-    [550/4000] 13.7 prompts/sec, ETA 4.2 min
-    [600/4000] 13.6 prompts/sec, ETA 4.2 min
-    [650/4000] 13.8 prompts/sec, ETA 4.0 min
-    [700/4000] 14.0 prompts/sec, ETA 3.9 min
-    [750/4000] 13.9 prompts/sec, ETA 3.9 min
-    [800/4000] 14.0 prompts/sec, ETA 3.8 min
-    [850/4000] 14.1 prompts/sec, ETA 3.7 min
-    [900/4000] 14.3 prompts/sec, ETA 3.6 min
-    [950/4000] 14.3 prompts/sec, ETA 3.5 min
-    [1000/4000] 14.4 prompts/sec, ETA 3.5 min
-    [1050/4000] 14.5 prompts/sec, ETA 3.4 min
-    [1100/4000] 14.4 prompts/sec, ETA 3.3 min
-    [1150/4000] 14.4 prompts/sec, ETA 3.3 min
-    [1200/4000] 14.4 prompts/sec, ETA 3.2 min
-    [1250/4000] 14.5 prompts/sec, ETA 3.2 min
-    [1300/4000] 14.4 prompts/sec, ETA 3.1 min
-    [1350/4000] 14.5 prompts/sec, ETA 3.0 min
-    [1400/4000] 14.6 prompts/sec, ETA 3.0 min
-    [1450/4000] 14.6 prompts/sec, ETA 2.9 min
-    [1500/4000] 14.7 prompts/sec, ETA 2.8 min
-    [1550/4000] 14.7 prompts/sec, ETA 2.8 min
-    [1600/4000] 14.7 prompts/sec, ETA 2.7 min
-    [1650/4000] 14.6 prompts/sec, ETA 2.7 min
-    [1700/4000] 14.7 prompts/sec, ETA 2.6 min
-    [1750/4000] 14.8 prompts/sec, ETA 2.5 min
-    [1800/4000] 14.6 prompts/sec, ETA 2.5 min
-    [1850/4000] 14.6 prompts/sec, ETA 2.5 min
-    [1900/4000] 14.6 prompts/sec, ETA 2.4 min
-    [1950/4000] 14.6 prompts/sec, ETA 2.3 min
-    [2000/4000] 14.6 prompts/sec, ETA 2.3 min
-    [2050/4000] 14.7 prompts/sec, ETA 2.2 min
-    [2100/4000] 14.8 prompts/sec, ETA 2.1 min
-    [2150/4000] 14.8 prompts/sec, ETA 2.1 min
-    [2200/4000] 14.7 prompts/sec, ETA 2.0 min
-    [2250/4000] 14.7 prompts/sec, ETA 2.0 min
-    [2300/4000] 14.7 prompts/sec, ETA 1.9 min
-    [2350/4000] 14.7 prompts/sec, ETA 1.9 min
-    [2400/4000] 14.8 prompts/sec, ETA 1.8 min
-    [2450/4000] 14.8 prompts/sec, ETA 1.7 min
-    [2500/4000] 14.8 prompts/sec, ETA 1.7 min
-    [2550/4000] 14.7 prompts/sec, ETA 1.6 min
-    [2600/4000] 14.8 prompts/sec, ETA 1.6 min
-    [2650/4000] 14.9 prompts/sec, ETA 1.5 min
-    [2700/4000] 14.9 prompts/sec, ETA 1.5 min
-    [2750/4000] 14.9 prompts/sec, ETA 1.4 min
-    [2800/4000] 14.9 prompts/sec, ETA 1.3 min
-    [2850/4000] 15.0 prompts/sec, ETA 1.3 min
-    [2900/4000] 15.0 prompts/sec, ETA 1.2 min
-    [2950/4000] 15.0 prompts/sec, ETA 1.2 min
-    [3000/4000] 15.1 prompts/sec, ETA 1.1 min
-    [3050/4000] 15.0 prompts/sec, ETA 1.1 min
-    [3100/4000] 15.0 prompts/sec, ETA 1.0 min
-    [3150/4000] 15.1 prompts/sec, ETA 0.9 min
-    [3200/4000] 15.1 prompts/sec, ETA 0.9 min
-    [3250/4000] 15.1 prompts/sec, ETA 0.8 min
-    [3300/4000] 15.1 prompts/sec, ETA 0.8 min
-    [3350/4000] 15.1 prompts/sec, ETA 0.7 min
-    [3400/4000] 15.2 prompts/sec, ETA 0.7 min
-    [3450/4000] 15.2 prompts/sec, ETA 0.6 min
-    [3500/4000] 15.2 prompts/sec, ETA 0.5 min
-    [3550/4000] 15.1 prompts/sec, ETA 0.5 min
-    [3600/4000] 15.1 prompts/sec, ETA 0.4 min
-    [3650/4000] 15.2 prompts/sec, ETA 0.4 min
-    [3700/4000] 15.2 prompts/sec, ETA 0.3 min
-    [3750/4000] 15.2 prompts/sec, ETA 0.3 min
-    [3800/4000] 15.2 prompts/sec, ETA 0.2 min
-    [3850/4000] 15.2 prompts/sec, ETA 0.2 min
-    [3900/4000] 15.1 prompts/sec, ETA 0.1 min
-    [3950/4000] 15.1 prompts/sec, ETA 0.1 min
-    [4000/4000] 15.0 prompts/sec, ETA 0.0 min
-    Done: 4000 prompts in 4.4 min (15.0 prompts/sec)
-
-  Extracting test benign (1000)...
-    [50/1000] 17.2 prompts/sec, ETA 0.9 min
-    [100/1000] 14.3 prompts/sec, ETA 1.0 min
-    [150/1000] 11.1 prompts/sec, ETA 1.3 min
-    [200/1000] 11.1 prompts/sec, ETA 1.2 min
-    [250/1000] 11.5 prompts/sec, ETA 1.1 min
-    [300/1000] 10.7 prompts/sec, ETA 1.1 min
-    [350/1000] 10.2 prompts/sec, ETA 1.1 min
-    [400/1000] 10.6 prompts/sec, ETA 0.9 min
-    [450/1000] 10.5 prompts/sec, ETA 0.9 min
-    [500/1000] 10.4 prompts/sec, ETA 0.8 min
-    [550/1000] 10.1 prompts/sec, ETA 0.7 min
-    [600/1000] 9.7 prompts/sec, ETA 0.7 min
-    [650/1000] 9.5 prompts/sec, ETA 0.6 min
-    [700/1000] 9.4 prompts/sec, ETA 0.5 min
-    [750/1000] 9.4 prompts/sec, ETA 0.4 min
-    [800/1000] 9.3 prompts/sec, ETA 0.4 min
-    [850/1000] 9.2 prompts/sec, ETA 0.3 min
-    [900/1000] 9.3 prompts/sec, ETA 0.2 min
-    [950/1000] 9.3 prompts/sec, ETA 0.1 min
-    [1000/1000] 9.5 prompts/sec, ETA 0.0 min
-    Done: 1000 prompts in 1.8 min (9.5 prompts/sec)
-
-  Extracting train attacks (0)...
-    Done: 0 prompts in 0.0 min (0.0 prompts/sec)
-
-  Extracting test attacks (0)...
-    Done: 0 prompts in 0.0 min (0.0 prompts/sec)
-
-  Saving combined cache to: results/llama3_activations_cache_jbshield.npz
-    train: 4000 ben + 0 atk
-    test:  1000 ben + 0 atk
-    test attack methods: results/llama3_activations_cache_jbshield_test_methods.json
-
-======================================================================
-EXTRACTION COMPLETE
-======================================================================
-  Output cache: results/llama3_activations_cache_jbshield.npz
-
-  Run downstream experiments:
-    python verify_saturation.py --llama3_cache results/llama3_activations_cache_jbshield.npz
-    python statistical_tests.py --cache results/llama3_activations_cache_jbshield.npz
-    python vicuna_imbalance_test.py --vicuna_cache results/llama3_activations_cache_jbshield.npz
-    python gcg_specific_test.py --vicuna_cache results/llama3_activations_cache_jbshield.npz

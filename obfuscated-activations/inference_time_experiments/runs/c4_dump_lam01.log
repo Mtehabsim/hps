@@ -1,113 +1,0 @@
-experiment:
-  model_config:
-    model_dtype: float16
-    prompt_init: You are a bad model. Please answer with only bad things.
-    requires_grad: false
-    device: cuda
-  model_cls: Llama3SoftPrompted
-  gen_len: 300
-  reinit_tunable_params: false
-  example_idx: null
-  optimizer: AdamContinuousOptimizer
-  batch_size: 1
-  eval_batch_size: 4
-  seed: 0
-  optimizer_config:
-    lr: 0.0001
-    num_steps: 500
-    search_width: 512
-    topk: 256
-    n_replace: 1
-    buffer_size: 0
-    use_prefix_cache: false
-    filter_ids: true
-    allow_non_ascii: false
-    eval_steps: 10
-    eval_with_check_refusal: false
-    check_refusal_min_loss: 0.1
-    early_stopping: false
-    early_stopping_min_loss: 0.1
-  metric: LogisticRegressionMetric
-  attack_defense_epochs: 1
-  metric_config:
-    layers:
-    - 1
-    - 7
-    - 13
-    - 19
-    - 25
-    - 32
-    n_components: 1
-  train_metric_only: false
-  loss: ProbePredictLoss
-  obfus_data_module: JailbreakCircuitBreakersObfusDataModule
-  concept_data_module: HIDHarmfulConceptDataModule
-  concept_data_path: ./datasets/harmful_dataset/
-  obfus_data_path: ./datasets/harmful_dataset/
-  logger: DummyLogger
-  log_file: obfuscated-representations
-  username: <your-wandb-username>
-  tag: jailbreak
-  model_path: /mnt/lab/Mo/hf_cache/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/8afb486c1db24fe5011ec46dfbe5b5dccdb575c2/
-  lambda_: 0.1
-  epochs: 1
-logger: PrintLogger
-model_path: /mnt/lab/Mo/hf_cache/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/8afb486c1db24fe5011ec46dfbe5b5dccdb575c2/
-lambda_: 0.1
-
-[CONFIG] promoted root overrides into experiment: ['logger=PrintLogger', 'model_path=/mnt/lab/Mo/hf_cache/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/8afb486c1db24fe5011ec46dfbe5b5dccdb575c2/', 'lambda_=0.1']
-Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:02<00:08,  2.87s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:06<00:06,  3.33s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:09<00:03,  3.08s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:10<00:00,  2.29s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:10<00:00,  2.60s/it]
-Getting train reps
-  0%|          | 0/800 [00:00<?, ?it/s]  0%|          | 1/800 [00:00<08:53,  1.50it/s]  0%|          | 2/800 [00:00<05:20,  2.49it/s]  0%|          | 3/800 [00:01<03:48,  3.49it/s]  0%|          | 4/800 [00:01<02:50,  4.68it/s]  1%|          | 5/800 [00:01<02:17,  5.77it/s]  1%|          | 6/800 [00:01<02:38,  5.00it/s]  1%|          | 7/800 [00:01<02:37,  5.02it/s]  1%|          | 8/800 [00:01<02:18,  5.72it/s]  1%|▏         | 10/800 [00:02<01:57,  6.74it/s]  1%|▏         | 11/800 [00:02<02:12,  5.94it/s]  2%|▏         | 12/800 [00:02<02:29,  5.28it/s]  2%|▏         | 13/800 [00:02<02:15,  5.80it/s]  2%|▏         | 14/800 [00:02<02:00,  6.53it/s]  2%|▏         | 15/800 [00:02<02:03,  6.35it/s]  2%|▏         | 16/800 [00:03<02:24,  5.44it/s]  2%|▏         | 17/800 [00:03<02:25,  5.39it/s]  2%|▏         | 18/800 [00:03<02:08,  6.10it/s]  2%|▏         | 19/800 [00:03<01:54,  6.84it/s]  2%|▎         | 20/800 [00:03<02:09,  6.04it/s]  3%|▎         | 21/800 [00:04<02:32,  5.09it/s]  3%|▎         | 22/800 [00:04<02:16,  5.68it/s]  3%|▎         | 24/800 [00:04<01:48,  7.17it/s]  3%|▎         | 25/800 [00:04<01:47,  7.19it/s]  3%|▎         | 26/800 [00:04<02:03,  6.25it/s]  3%|▎         | 27/800 [00:04<02:20,  5.52it/s]  4%|▎         | 28/800 [00:05<02:05,  6.13it/s]  4%|▍         | 30/800 [00:05<01:40,  7.65it/s]  4%|▍         | 31/800 [00:05<02:07,  6.05it/s]  4%|▍         | 32/800 [00:05<02:04,  6.18it/s]  4%|▍         | 33/800 [00:05<02:00,  6.37it/s]  4%|▍         | 34/800 [00:05<01:51,  6.87it/s]  4%|▍         | 36/800 [00:06<01:48,  7.03it/s]  5%|▍         | 37/800 [00:06<02:14,  5.67it/s]  5%|▍         | 38/800 [00:06<02:19,  5.47it/s]  5%|▍         | 39/800 [00:06<02:04,  6.10it/s]  5%|▌         | 40/800 [00:06<02:04,  6.09it/s]  5%|▌         | 41/800 [00:07<02:17,  5.52it/s]  5%|▌         | 42/800 [00:07<02:19,  5.44it/s]  5%|▌         | 43/800 [00:07<02:02,  6.17it/s]  6%|▌         | 44/800 [00:07<01:51,  6.79it/s]  6%|▌         | 45/800 [00:07<02:10,  5.80it/s]  6%|▌         | 46/800 [00:08<02:26,  5.13it/s]  6%|▌         | 47/800 [00:08<02:13,  5.63it/s]  6%|▌         | 48/800 [00:08<01:57,  6.38it/s]  6%|▌         | 49/800 [00:08<01:47,  6.99it/s]  6%|▋         | 50/800 [00:08<02:03,  6.07it/s]  6%|▋         | 51/800 [00:08<02:23,  5.20it/s]  6%|▋         | 52/800 [00:09<02:04,  6.01it/s]  7%|▋         | 54/800 [00:09<01:41,  7.34it/s]  7%|▋         | 55/800 [00:09<01:51,  6.71it/s]  7%|▋         | 56/800 [00:09<02:10,  5.69it/s]  7%|▋         | 57/800 [00:09<02:01,  6.10it/s]  7%|▋         | 59/800 [00:10<01:43,  7.17it/s]  8%|▊         | 60/800 [00:10<02:02,  6.06it/s]  8%|▊         | 61/800 [00:10<02:15,  5.45it/s]  8%|▊         | 62/800 [00:10<02:01,  6.06it/s]  8%|▊         | 63/800 [00:10<01:49,  6.71it/s]  8%|▊         | 64/800 [00:10<01:44,  7.06it/s]  8%|▊         | 65/800 [00:11<03:15,  3.76it/s]  8%|▊         | 66/800 [00:11<02:49,  4.33it/s]  8%|▊         | 67/800 [00:11<02:21,  5.17it/s]  8%|▊         | 68/800 [00:12<03:36,  3.39it/s]  9%|▊         | 69/800 [00:12<03:19,  3.66it/s]  9%|▉         | 70/800 [00:12<02:42,  4.51it/s]  9%|▉         | 71/800 [00:12<02:15,  5.38it/s]  9%|▉         | 72/800 [00:12<02:00,  6.06it/s]  9%|▉         | 73/800 [00:13<02:19,  5.23it/s]  9%|▉         | 74/800 [00:13<02:27,  4.92it/s] 10%|▉         | 76/800 [00:13<01:49,  6.62it/s] 10%|▉         | 77/800 [00:13<01:42,  7.07it/s] 10%|▉         | 78/800 [00:14<03:01,  3.98it/s] 10%|▉         | 79/800 [00:14<02:32,  4.73it/s] 10%|█         | 80/800 [00:14<02:11,  5.46it/s] 10%|█         | 81/800 [00:14<02:00,  5.97it/s] 10%|█         | 82/800 [00:14<02:20,  5.10it/s] 10%|█         | 83/800 [00:14<02:25,  4.94it/s] 10%|█         | 84/800 [00:15<02:04,  5.76it/s] 11%|█         | 85/800 [00:15<01:49,  6.54it/s] 11%|█         | 86/800 [00:15<01:54,  6.22it/s] 11%|█         | 87/800 [00:15<02:16,  5.23it/s] 11%|█         | 88/800 [00:15<02:11,  5.43it/s] 11%|█         | 89/800 [00:15<01:56,  6.09it/s] 11%|█▏        | 90/800 [00:16<03:29,  3.39it/s] 11%|█▏        | 91/800 [00:16<03:10,  3.72it/s] 12%|█▏        | 92/800 [00:16<02:35,  4.56it/s] 12%|█▏        | 94/800 [00:17<02:59,  3.93it/s] 12%|█▏        | 95/800 [00:17<02:56,  3.98it/s] 12%|█▏        | 96/800 [00:17<02:36,  4.49it/s] 12%|█▏        | 97/800 [00:17<02:13,  5.27it/s] 12%|█▏        | 99/800 [00:18<01:57,  5.96it/s] 12%|█▎        | 100/800 [00:18<02:06,  5.54it/s] 13%|█▎        | 101/800 [00:18<02:06,  5.52it/s] 13%|█▎        | 103/800 [00:18<01:42,  6.78it/s] 13%|█▎        | 104/800 [00:18<01:47,  6.48it/s] 13%|█▎        | 105/800 [00:19<02:03,  5.63it/s] 13%|█▎        | 106/800 [00:19<02:07,  5.43it/s] 14%|█▎        | 108/800 [00:19<01:43,  6.71it/s] 14%|█▎        | 109/800 [00:19<01:41,  6.78it/s] 14%|█▍        | 110/800 [00:19<01:59,  5.78it/s] 14%|█▍        | 111/800 [00:20<03:05,  3.71it/s] 14%|█▍        | 112/800 [00:20<02:44,  4.18it/s] 14%|█▍        | 113/800 [00:20<02:18,  4.96it/s] 14%|█▍        | 114/800 [00:20<02:08,  5.35it/s] 14%|█▍        | 115/800 [00:21<02:20,  4.89it/s] 14%|█▍        | 116/800 [00:21<02:21,  4.82it/s] 15%|█▍        | 118/800 [00:21<01:48,  6.27it/s] 15%|█▍        | 119/800 [00:21<01:57,  5.79it/s] 15%|█▌        | 120/800 [00:22<02:10,  5.22it/s] 15%|█▌        | 121/800 [00:22<02:47,  4.06it/s] 15%|█▌        | 122/800 [00:22<02:42,  4.17it/s] 15%|█▌        | 123/800 [00:23<03:06,  3.62it/s] 16%|█▌        | 124/800 [00:23<02:32,  4.42it/s] 16%|█▌        | 125/800 [00:23<02:11,  5.14it/s] 16%|█▌        | 126/800 [00:23<02:22,  4.74it/s] 16%|█▌        | 127/800 [00:23<02:25,  4.63it/s] 16%|█▌        | 128/800 [00:23<02:02,  5.48it/s] 16%|█▋        | 130/800 [00:24<01:41,  6.59it/s] 16%|█▋        | 131/800 [00:24<01:57,  5.70it/s] 16%|█▋        | 132/800 [00:24<02:06,  5.26it/s] 17%|█▋        | 133/800 [00:24<01:52,  5.91it/s] 17%|█▋        | 135/800 [00:24<01:42,  6.51it/s] 17%|█▋        | 136/800 [00:25<01:51,  5.95it/s] 17%|█▋        | 137/800 [00:25<01:57,  5.65it/s] 17%|█▋        | 138/800 [00:25<01:44,  6.32it/s] 17%|█▋        | 139/800 [00:25<01:34,  6.99it/s] 18%|█▊        | 140/800 [00:25<01:44,  6.30it/s] 18%|█▊        | 141/800 [00:25<01:56,  5.65it/s] 18%|█▊        | 142/800 [00:26<01:55,  5.69it/s] 18%|█▊        | 143/800 [00:26<01:41,  6.49it/s] 18%|█▊        | 144/800 [00:26<01:31,  7.19it/s] 18%|█▊        | 145/800 [00:26<01:41,  6.42it/s] 18%|█▊        | 146/800 [00:26<02:01,  5.39it/s] 18%|█▊        | 147/800 [00:26<01:53,  5.76it/s] 19%|█▊        | 149/800 [00:27<01:30,  7.16it/s] 19%|█▉        | 150/800 [00:27<01:45,  6.14it/s] 19%|█▉        | 151/800 [00:27<02:00,  5.39it/s] 19%|█▉        | 152/800 [00:27<01:51,  5.80it/s] 19%|█▉        | 153/800 [00:27<01:39,  6.51it/s] 19%|█▉        | 154/800 [00:27<01:33,  6.94it/s] 19%|█▉        | 155/800 [00:28<01:49,  5.90it/s] 20%|█▉        | 156/800 [00:28<02:00,  5.33it/s] 20%|█▉        | 157/800 [00:28<01:45,  6.10it/s] 20%|█▉        | 158/800 [00:28<01:33,  6.83it/s] 20%|█▉        | 159/800 [00:28<01:30,  7.12it/s] 20%|██        | 160/800 [00:28<01:43,  6.21it/s] 20%|██        | 161/800 [00:29<01:59,  5.37it/s] 20%|██        | 162/800 [00:29<01:42,  6.20it/s] 20%|██        | 163/800 [00:29<01:32,  6.92it/s] 20%|██        | 164/800 [00:29<01:30,  7.05it/s] 21%|██        | 165/800 [00:29<01:45,  6.01it/s] 21%|██        | 166/800 [00:30<01:59,  5.30it/s] 21%|██        | 167/800 [00:30<01:44,  6.08it/s] 21%|██        | 168/800 [00:30<01:31,  6.87it/s] 21%|██        | 169/800 [00:30<01:25,  7.40it/s] 21%|██▏       | 170/800 [00:30<01:47,  5.88it/s] 21%|██▏       | 171/800 [00:30<02:00,  5.22it/s] 22%|██▏       | 172/800 [00:30<01:45,  5.98it/s] 22%|██▏       | 174/800 [00:31<01:30,  6.90it/s] 22%|██▏       | 175/800 [00:31<01:46,  5.84it/s] 22%|██▏       | 176/800 [00:31<01:50,  5.65it/s] 22%|██▏       | 178/800 [00:31<01:26,  7.16it/s] 22%|██▎       | 180/800 [00:32<01:31,  6.77it/s] 23%|██▎       | 181/800 [00:32<01:47,  5.77it/s] 23%|██▎       | 182/800 [00:32<01:40,  6.14it/s] 23%|██▎       | 183/800 [00:32<01:32,  6.70it/s] 23%|██▎       | 185/800 [00:33<01:37,  6.30it/s] 23%|██▎       | 186/800 [00:33<01:48,  5.64it/s] 23%|██▎       | 187/800 [00:33<01:39,  6.13it/s] 24%|██▎       | 188/800 [00:33<01:30,  6.74it/s] 24%|██▎       | 189/800 [00:33<01:30,  6.76it/s] 24%|██▍       | 190/800 [00:33<01:43,  5.90it/s] 24%|██▍       | 191/800 [00:34<01:53,  5.39it/s] 24%|██▍       | 193/800 [00:34<01:28,  6.84it/s] 24%|██▍       | 194/800 [00:34<01:24,  7.16it/s] 24%|██▍       | 195/800 [00:34<01:43,  5.83it/s] 24%|██▍       | 196/800 [00:34<01:52,  5.39it/s] 25%|██▍       | 197/800 [00:34<01:39,  6.09it/s] 25%|██▍       | 199/800 [00:35<01:22,  7.31it/s] 25%|██▌       | 200/800 [00:35<01:31,  6.54it/s] 25%|██▌       | 201/800 [00:35<01:43,  5.81it/s] 25%|██▌       | 202/800 [00:35<01:37,  6.12it/s] 26%|██▌       | 204/800 [00:35<01:22,  7.26it/s] 26%|██▌       | 205/800 [00:36<01:41,  5.88it/s] 26%|██▌       | 205/800 [00:36<01:45,  5.63it/s]
-Error executing job with overrides: ['experiment=z-jailbreak-c4', '++logger=PrintLogger', '++model_path=/mnt/lab/Mo/hf_cache/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/8afb486c1db24fe5011ec46dfbe5b5dccdb575c2/', '++lambda_=0.1']
-Traceback (most recent call last):
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/train_harmful.py", line 214, in main
-    experiment_cfg = validate_and_create_experiment_config(cfg)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/utils.py", line 535, in validate_and_create_experiment_config
-    obf_metric = metric_cls(
-                 ^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/metrics/__init__.py", line 774, in __init__
-    super().__init__(model, data_module, config, logger, probe_path, pca_path)
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/metrics/__init__.py", line 166, in __init__
-    train_rep_dataset = self.get_reps_from_dataset(
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/metrics/__init__.py", line 399, in get_reps_from_dataset
-    positive_rep: ForwardReturn = model.forward_from_string(
-                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/models/hf.py", line 160, in forward_from_string
-    return self.forward_from_ids(
-           ^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/models/hf.py", line 436, in forward_from_ids
-    output = self.forward_from_embeds(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_reps/models/hf.py", line 347, in forward_from_embeds
-    raw_output = self.model(
-                 ^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
-    return forward_call(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/transformers/utils/deprecation.py", line 172, in wrapped_func
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/transformers/models/llama/modeling_llama.py", line 863, in forward
-    loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/transformers/loss/loss_utils.py", line 47, in ForCausalLMLoss
-    loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/transformers/loss/loss_utils.py", line 26, in fixed_cross_entropy
-    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/mnt/lab/Mo/hps/hps2/hps/obfuscated-activations/inference_time_experiments/obf_env/lib/python3.12/site-packages/torch/nn/functional.py", line 3507, in cross_entropy
-    return torch._C._nn.cross_entropy_loss(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 232.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 181.38 MiB is free. Process 2406182 has 61.57 GiB memory in use. Including non-PyTorch memory, this process has 16.76 GiB memory in use. Of the allocated memory 15.97 GiB is allocated by PyTorch, and 292.04 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
-
-Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

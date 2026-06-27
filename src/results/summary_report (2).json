@@ -1,0 +1,21 @@
+{
+  "config": {
+    "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "device": "cuda"
+  },
+  "test_results": {
+    "3": {
+      "status": "PASS",
+      "elapsed_s": 29.8
+    },
+    "4": {
+      "status": "PASS",
+      "elapsed_s": 15.7
+    },
+    "5": {
+      "status": "PASS",
+      "elapsed_s": 272.1
+    }
+  },
+  "total_elapsed_s": 326.6
+}

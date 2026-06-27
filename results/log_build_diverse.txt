@@ -1,67 +1,0 @@
-  Total target: 6664 samples
-  Per-source budgets: {'alpaca_control': 500, 'wildchat': 1500, 'or_bench_hard': 1000, 'mmlu': 1000, 'gsm8k': 500, 'humaneval': 164, 'mbpp': 500, 'wikitext_short': 400, 'wikitext_long': 600, 'multilingual': 500}
-
-
-======================================================================
-BUILDING DIVERSE BENIGN SET
-======================================================================
-  [alpaca_control] loading from data_harmless_6500.csv...
-    kept 500 prompts
-  [wildchat] loading...
-    kept 1500 from 4500 candidates
-  [or_bench_hard] loading...
-Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 1319 examples [00:00, 69848.58 examples/s]
-    kept 1000
-  [mmlu] loading...
-Generating test split:   0%|                                                              | 0/14042 [00:00<?, ? examples/s]Generating test split: 100%|██████████████████████████████████████████████| 14042/14042 [00:00<00:00, 232646.87 examples/s]
-Generating validation split:   0%|                                                         | 0/1531 [00:00<?, ? examples/s]Generating validation split: 100%|██████████████████████████████████████████| 1531/1531 [00:00<00:00, 138298.57 examples/s]
-Generating dev split:   0%|                                                                 | 0/285 [00:00<?, ? examples/s]Generating dev split: 100%|████████████████████████████████████████████████████| 285/285 [00:00<00:00, 68027.35 examples/s]
-Generating auxiliary_train split:   0%|                                                   | 0/99842 [00:00<?, ? examples/s]Generating auxiliary_train split:   8%|██▉                                  | 8000/99842 [00:00<00:01, 59842.86 examples/s]Generating auxiliary_train split:  22%|███████▉                            | 22000/99842 [00:00<00:00, 98259.86 examples/s]Generating auxiliary_train split:  39%|█████████████▋                     | 39000/99842 [00:00<00:00, 125882.40 examples/s]Generating auxiliary_train split:  57%|███████████████████▉               | 57000/99842 [00:00<00:00, 141073.40 examples/s]Generating auxiliary_train split:  74%|█████████████████████████▉         | 74000/99842 [00:00<00:00, 144977.78 examples/s]Generating auxiliary_train split: 100%|███████████████████████████████████| 99842/99842 [00:00<00:00, 132181.35 examples/s]
-    kept 1000
-  [gsm8k] loading...
-    kept 500
-  [humaneval] loading...
-    kept 164
-  [mbpp] loading...
-Generating train split:   0%|                                                               | 0/374 [00:00<?, ? examples/s]Generating train split: 100%|██████████████████████████████████████████████████| 374/374 [00:00<00:00, 49223.98 examples/s]
-Generating test split:   0%|                                                                | 0/500 [00:00<?, ? examples/s]Generating test split: 100%|███████████████████████████████████████████████████| 500/500 [00:00<00:00, 84375.46 examples/s]
-Generating validation split:   0%|                                                           | 0/90 [00:00<?, ? examples/s]Generating validation split: 100%|███████████████████████████████████████████████| 90/90 [00:00<00:00, 28170.70 examples/s]
-Generating prompt split:   0%|                                                               | 0/10 [00:00<?, ? examples/s]Generating prompt split: 100%|████████████████████████████████████████████████████| 10/10 [00:00<00:00, 2631.80 examples/s]
-    kept 374
-  [wikitext_short] loading...
-Generating test split:   0%|                                                               | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|████████████████████████████████████████████████| 4358/4358 [00:00<00:00, 273094.74 examples/s]
-Generating train split:   0%|                                                           | 0/1801350 [00:00<?, ? examples/s]Generating train split:   2%|▋                                          | 30000/1801350 [00:00<00:05, 295557.38 examples/s]Generating train split:   5%|██                                         | 86000/1801350 [00:00<00:03, 444855.63 examples/s]Generating train split:   8%|███▍                                      | 147000/1801350 [00:00<00:03, 513344.22 examples/s]Generating train split:  12%|█████▏                                    | 224000/1801350 [00:00<00:03, 432609.50 examples/s]Generating train split:  16%|██████▌                                   | 284000/1801350 [00:00<00:03, 473842.90 examples/s]Generating train split:  19%|███████▉                                  | 341000/1801350 [00:00<00:02, 499842.48 examples/s]Generating train split:  23%|█████████▋                                | 415000/1801350 [00:00<00:03, 442283.91 examples/s]Generating train split:  26%|███████████                               | 475000/1801350 [00:01<00:02, 476500.37 examples/s]Generating train split:  30%|████████████▍                             | 532000/1801350 [00:01<00:02, 498259.15 examples/s]Generating train split:  34%|██████████████▏                           | 607000/1801350 [00:01<00:02, 444891.53 examples/s]Generating train split:  37%|███████████████▍                          | 661000/1801350 [00:01<00:02, 465616.39 examples/s]Generating train split:  40%|████████████████▊                         | 721000/1801350 [00:01<00:02, 492121.92 examples/s]Generating train split:  44%|██████████████████▋                       | 801000/1801350 [00:01<00:02, 453567.30 examples/s]Generating train split:  48%|████████████████████                      | 859000/1801350 [00:01<00:01, 477546.69 examples/s]Generating train split:  52%|█████████████████████▋                    | 930675/1801350 [00:02<00:02, 422069.80 examples/s]Generating train split:  55%|███████████████████████                   | 991675/1801350 [00:02<00:01, 458948.15 examples/s]Generating train split:  58%|███████████████████████▉                 | 1050675/1801350 [00:02<00:01, 486558.72 examples/s]Generating train split:  62%|█████████████████████████▌               | 1122675/1801350 [00:02<00:01, 442049.84 examples/s]Generating train split:  66%|██████████████████████████▉              | 1182675/1801350 [00:02<00:01, 474301.15 examples/s]Generating train split:  69%|████████████████████████████▎            | 1245675/1801350 [00:02<00:01, 508092.00 examples/s]Generating train split:  73%|█████████████████████████████▉           | 1314675/1801350 [00:02<00:01, 458682.70 examples/s]Generating train split:  76%|███████████████████████████████▏         | 1371675/1801350 [00:02<00:00, 482371.99 examples/s]Generating train split:  79%|████████████████████████████████▌        | 1429675/1801350 [00:03<00:00, 505822.09 examples/s]Generating train split:  84%|██████████████████████████████████▎      | 1505675/1801350 [00:03<00:00, 453518.63 examples/s]Generating train split:  87%|███████████████████████████████████▋     | 1566675/1801350 [00:03<00:00, 486454.74 examples/s]Generating train split:  90%|█████████████████████████████████████    | 1625675/1801350 [00:03<00:00, 509532.53 examples/s]Generating train split:  93%|██████████████████████████████████████▎  | 1683675/1801350 [00:03<00:00, 266940.83 examples/s]Generating train split:  97%|███████████████████████████████████████▋ | 1742675/1801350 [00:04<00:00, 316846.14 examples/s]Generating train split: 100%|█████████████████████████████████████████| 1801350/1801350 [00:04<00:00, 348574.99 examples/s]Generating train split: 100%|█████████████████████████████████████████| 1801350/1801350 [00:04<00:00, 429643.51 examples/s]
-Generating validation split:   0%|                                                         | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████████████████████████████████████| 3760/3760 [00:00<00:00, 244535.49 examples/s]
-Token indices sequence length is longer than the specified maximum sequence length for this model (2240 > 1024). Running this sequence through the model will result in indexing errors
-    kept 400 (target length 200-1500)
-  [wikitext_long] building long-text benign to match attack lengths...
-    kept 600: char lengths min=1509, median=4106, mean=6145, max=16188
-
-  Total before dedup: 6038
-  Total after dedup:  5905
-  Loaded tokenizer: gpt2
-
-======================================================================
-DIVERSE BENIGN STATS
-======================================================================
-
-  Source                      N   char_mean  char_median   char_max  token_mean
-  --------------------------------------------------------------------------------
-  alpaca_control            500        61.2           58        178        12.5
-  gsm8k                     500       231.8          218        588        54.7
-  humaneval                 164       450.6          396       1360       170.3
-  mbpp                      374        78.4           78        249        16.5
-  mmlu                      993       482.2          301       4633       108.3
-  or_bench_hard            1000       116.7          114        269        20.8
-  wikitext_long             600      6145.9         4106      16188      1346.8
-  wikitext_short            400       720.2          693       1478       154.9
-  wildchat                 1374      1114.1          176      18205       340.1
-  --------------------------------------------------------------------------------
-  TOTAL                    5905
-
-  Saved CSV → results/data_harmless_diverse.csv
-  Saved stats → results/diverse_benign_stats.json
-
-  Length comparison (chars):
-    Original (data_harmless_6500.csv): mean=60.5, median=57, max=459
-    Diverse (results/data_harmless_diverse.csv): mean=1075.6, median=179, max=18205

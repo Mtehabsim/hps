@@ -1,0 +1,24 @@
+defaults:
+    - z-jailbreak
+
+# Adaptive (soft-prompt) attack against the hierarchical-hyperbolic detector.
+# Hierarchy is PRINCIPLED: harm/benign is a LEAF ATTRIBUTE (not the top split). All
+# training reps are clustered JOINTLY by content into hhd_leaves leaves; each leaf
+# carries a harm-fraction; harm is read off leaf membership.
+# Layers: candidates below; fit() AUTO-SELECTS the best hhd_n_layers (by harm-separability)
+# and concatenates them (not a single layer, not all 32).
+#
+# MASKING-SAFE: obf_signal=softplus (non-saturating) + soft tanh-clamp exp-map.
+# VERIFY obf_loss DESCENDS in the log; if pinned, suspect masking (invalid test).
+# Masking-demo contrast: ++experiment.metric_config.obf_signal=sigmoid
+metric: "HierarchicalHyperbolicMetric"
+
+metric_config:
+    # candidate layer pool (embedding at index 0); fit() keeps the best hhd_n_layers
+    layers: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]
+    hhd_n_layers: 6         # auto-select the best 6 layers from the candidates above
+    hhd_curvature: 1.0      # standard hyperbolic; sweep via ++metric_config.hhd_curvature
+    hhd_embed_dim: 16
+    hhd_leaves: 30          # joint content leaves (harm/benign = per-leaf attribute)
+    hhd_epochs: 300
+    obf_signal: softplus
