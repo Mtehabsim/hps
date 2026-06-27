@@ -1,0 +1,14 @@
+defaults:
+    - z-jailbreak
+
+metric: "HPSMetric"
+
+# HPS using ONLY the mean-radial feature (1 of 12). Tests whether the 12-feature
+# trajectory machinery matters for adversarial robustness (ablation already showed
+# mean_r alone matches all 12 on clean detection).
+metric_config:
+    layers: [1, 7, 13, 19, 25, 32]
+    kappa: 0.1
+    proj_dim: 64
+    hps_epochs: 50
+    feature_set: "mean_r"

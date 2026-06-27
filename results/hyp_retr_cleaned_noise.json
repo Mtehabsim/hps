@@ -1,0 +1,113 @@
+{
+  "config": {
+    "harmful_npz": "results/harm_taxonomy_deep_llm_reps.npz",
+    "dims": [
+      32
+    ],
+    "curvatures": [
+      1.0
+    ],
+    "seeds": 5,
+    "epochs": 300,
+    "beta": 0.0,
+    "novel_leaf": false,
+    "baselines": "",
+    "stats": false,
+    "output": "results/hyp_retr_cleaned_noise",
+    "selftest": false,
+    "build_benign_topic": null,
+    "label_noise": [
+      0.0,
+      0.1,
+      0.2,
+      0.3
+    ],
+    "drop_leaves": "regulatory_evasion/illegal_operation",
+    "merge_leaves": "cyber/intrusion,cyber/malware",
+    "_drop_leaves": [
+      "regulatory_evasion/illegal_operation"
+    ],
+    "_merge_groups": [
+      [
+        "cyber/intrusion",
+        "cyber/malware"
+      ]
+    ]
+  },
+  "leaves": [
+    "controlled_substances/synthesis",
+    "cyber/intrusion__malware",
+    "fraud_theft/coercion",
+    "fraud_theft/financial_fraud",
+    "fraud_theft/theft",
+    "hate_harassment/discrimination",
+    "hate_harassment/harassment",
+    "misinformation/fake_content",
+    "privacy/surveillance",
+    "self_harm/self_harm",
+    "violence/physical_harm",
+    "violence/weapons"
+  ],
+  "by_level": {
+    "noise0.0_d32_c1.0": {
+      "frac": 0.0,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.655086986180355,
+      "E_mAP_parent": 0.5795431904253333,
+      "gap": 0.07554379575502168,
+      "bootstrap": {
+        "mean": 0.07554379575502165,
+        "ci_low": 0.06746000184669074,
+        "ci_high": 0.08382319386599921,
+        "p_value": 0.0,
+        "n": 930
+      }
+    },
+    "noise0.1_d32_c1.0": {
+      "frac": 0.1,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.46421322661437037,
+      "E_mAP_parent": 0.415413757567889,
+      "gap": 0.04879946904648136,
+      "bootstrap": {
+        "mean": 0.04879946904648138,
+        "ci_low": 0.0420948252429903,
+        "ci_high": 0.05557325915226616,
+        "p_value": 0.0,
+        "n": 930
+      }
+    },
+    "noise0.2_d32_c1.0": {
+      "frac": 0.2,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.3248274788746013,
+      "E_mAP_parent": 0.297555301417703,
+      "gap": 0.027272177456898306,
+      "bootstrap": {
+        "mean": 0.027272177456898257,
+        "ci_low": 0.02217554153701866,
+        "ci_high": 0.03256927583956303,
+        "p_value": 0.0,
+        "n": 930
+      }
+    },
+    "noise0.3_d32_c1.0": {
+      "frac": 0.3,
+      "dim": 32,
+      "c": 1.0,
+      "H_mAP_parent": 0.2560513027894326,
+      "E_mAP_parent": 0.24427818257790146,
+      "gap": 0.011773120211531152,
+      "bootstrap": {
+        "mean": 0.011773120211531164,
+        "ci_low": 0.008222681579391291,
+        "ci_high": 0.015438389906053519,
+        "p_value": 0.0,
+        "n": 930
+      }
+    }
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "config": {
+    "device": "cuda",
+    "epochs": 50,
+    "seed": 42,
+    "vicuna_layers": [
+      0,
+      2,
+      22,
+      31,
+      35,
+      39
+    ],
+    "vicuna_layers_deep": [
+      22,
+      31,
+      35,
+      39
+    ],
+    "llama_layers": [
+      0,
+      2,
+      17,
+      24,
+      28,
+      31
+    ]
+  },
+  "composition": {
+    "vicuna_train_attack_counts": {
+      "unknown": 4536
+    },
+    "vicuna_test_attack_counts": {
+      "unknown": 1134
+    },
+    "vicuna_n_unique_attack_methods": 1
+  },
+  "results": {
+    "REF_vicuna_baseline": {
+      "name": "REF. Vicuna BASELINE 416+253",
+      "n_train_ben": 4536,
+      "n_train_atk": 4536,
+      "ratio": 1.0,
+      "n_layers": 6,
+      "d_hidden": 5120,
+      "final_loss": 0.7466862201690674,
+      "hps_train_auroc": 0.9999949453947102,
+      "hps_test_auroc": 0.9996189605243103,
+      "hps_test_tpr5": 1.0,
+      "hps_train_test_gap": 0.0003759848703999147,
+      "c4_test_auroc": 0.9999580078945158,
+      "c4_test_tpr5": 1.0,
+      "hps_minus_c4_tpr5": 0.0
+    },
+    "T1_vicuna_balanced": {
+      "name": "T1. Vicuna BALANCED 253+253",
+      "n_train_ben": 253,
+      "n_train_atk": 253,
+      "ratio": 1.0,
+      "n_layers": 6,
+      "d_hidden": 5120,
+      "final_loss": 0.626069188117981,
+      "hps_train_auroc": 1.0,
+      "hps_test_auroc": 0.9833928999125942,
+      "hps_test_tpr5": 0.9391534391534392,
+      "hps_train_test_gap": 0.016607100087405846,
+      "c4_test_auroc": 0.9964011210336902,
+      "c4_test_tpr5": 0.9797178130511464,
+      "hps_minus_c4_tpr5": -0.04056437389770717
+    },
+    "T2_vicuna_balanced_deep": {
+      "name": "T2. Vicuna BALANCED 253+253, deep layers only",
+      "n_train_ben": 253,
+      "n_train_atk": 253,
+      "ratio": 1.0,
+      "n_layers": 4,
+      "d_hidden": 5120,
+      "final_loss": 0.07557821273803711,
+      "hps_train_auroc": 1.0,
+      "hps_test_auroc": 0.952681895803589,
+      "hps_test_tpr5": 0.7954144620811288,
+      "hps_train_test_gap": 0.047318104196411026,
+      "c4_test_auroc": 0.9964197841916831,
+      "c4_test_tpr5": 0.982363315696649,
+      "hps_minus_c4_tpr5": -0.18694885361552027
+    },
+    "T3_llama_imbalanced_vicuna_style": {
+      "name": "T3. Llama-3 416+253 (Vicuna-style imbalance)",
+      "n_train_ben": 416,
+      "n_train_atk": 253,
+      "ratio": 1.6442687747035574,
+      "n_layers": 6,
+      "d_hidden": 4096,
+      "final_loss": 0.6927875280380249,
+      "hps_train_auroc": 1.0,
+      "hps_test_auroc": 0.999818310523832,
+      "hps_test_tpr5": 0.9992331288343558,
+      "hps_train_test_gap": 0.00018168947616803433,
+      "c4_test_auroc": 0.9998767107126003,
+      "c4_test_tpr5": 1.0,
+      "hps_minus_c4_tpr5": -0.0007668711656442229
+    },
+    "T4_llama_extreme_imbalance": {
+      "name": "T4. Llama-3 500+100 (extreme imbalance, ~5:1)",
+      "n_train_ben": 500,
+      "n_train_atk": 100,
+      "ratio": 5.0,
+      "n_layers": 6,
+      "d_hidden": 4096,
+      "final_loss": 0.6706976890563965,
+      "hps_train_auroc": 1.0,
+      "hps_test_auroc": 0.9997781972628599,
+      "hps_test_tpr5": 0.9992331288343558,
+      "hps_train_test_gap": 0.0002218027371401199,
+      "c4_test_auroc": 0.9999516281264748,
+      "c4_test_tpr5": 1.0,
+      "hps_minus_c4_tpr5": -0.0007668711656442229
+    }
+  },
+  "per_attack_breakdown": {
+    "unknown": {
+      "n_total": 1134,
+      "hps_detection_rate": 1.0,
+      "c4_detection_rate": 1.0,
+      "hps_mean_score": 0.9957889170990096,
+      "c4_mean_score": 0.9995173937027596
+    }
+  },
+  "diagnoses": [
+    "BALANCE_HURTS: Balancing Vicuna actually decreases HPS TPR5 (1.000 \u2192 0.939). The extra benign samples were helping HPS.",
+    "LLAMA_ROBUST_TO_IMBALANCE: Llama-3 with Vicuna-style imbalance (416+253) achieves HPS TPR5 = 0.999. Imbalance alone does NOT break HPS \u2014 it's something Vicuna-specific.",
+    "GAP_PERSISTS: Even with balancing and best layers, HPS only reaches 0.939, vs C4's 1.000. Some Vicuna-specific property continues to disadvantage HPS \u2014 investigation should focus on per-attack failures or mechanism beyond what we've tested."
+  ]
+}

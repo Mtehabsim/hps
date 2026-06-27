@@ -1,0 +1,52 @@
+{
+  "config": {
+    "eps_train": 0.5,
+    "pgd_steps_inner": 7,
+    "epochs": 200,
+    "clean_w": 0.5,
+    "adv_w": 1.0
+  },
+  "baseline_clean": {
+    "auroc": 0.98681640625,
+    "tpr_at_fpr01": 0.8125,
+    "threshold": 0.8812045009573259
+  },
+  "self_attack": {
+    "eps_0.001": {
+      "evasion": 0.265625,
+      "adv_fpr": 0.020833333333333332
+    },
+    "eps_0.01": {
+      "evasion": 0.53125,
+      "adv_fpr": 0.052083333333333336
+    },
+    "eps_0.05": {
+      "evasion": 0.96875,
+      "adv_fpr": 0.14583333333333334
+    },
+    "eps_0.1": {
+      "evasion": 1.0,
+      "adv_fpr": 0.625
+    },
+    "eps_0.5": {
+      "evasion": 1.0,
+      "adv_fpr": 1.0
+    },
+    "eps_1.0": {
+      "evasion": 1.0,
+      "adv_fpr": 1.0
+    },
+    "eps_5.0": {
+      "evasion": 1.0,
+      "adv_fpr": 1.0
+    },
+    "eps_20.0": {
+      "evasion": 1.0,
+      "adv_fpr": 0.625
+    },
+    "eps_100.0": {
+      "evasion": 1.0,
+      "adv_fpr": 0.0
+    }
+  }
+}

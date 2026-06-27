@@ -1,0 +1,83 @@
+{
+  "or_bench_hard": {
+    "count": 1000,
+    "char_len_mean": 116.655,
+    "char_len_median": 113.5,
+    "char_len_min": 48,
+    "char_len_max": 269,
+    "token_len_mean": 20.804,
+    "token_len_median": 20.0
+  },
+  "wikitext_long": {
+    "count": 600,
+    "char_len_mean": 6145.93,
+    "char_len_median": 4106.5,
+    "char_len_min": 1509,
+    "char_len_max": 16188,
+    "token_len_mean": 1346.825,
+    "token_len_median": 879.5
+  },
+  "gsm8k": {
+    "count": 500,
+    "char_len_mean": 231.844,
+    "char_len_median": 218.0,
+    "char_len_min": 73,
+    "char_len_max": 588,
+    "token_len_mean": 54.694,
+    "token_len_median": 51.0
+  },
+  "wildchat": {
+    "count": 1374,
+    "char_len_mean": 1114.128093158661,
+    "char_len_median": 176.5,
+    "char_len_min": 15,
+    "char_len_max": 18205,
+    "token_len_mean": 340.0604075691412,
+    "token_len_median": 40.0
+  },
+  "mbpp": {
+    "count": 374,
+    "char_len_mean": 78.43048128342247,
+    "char_len_median": 77.5,
+    "char_len_min": 38,
+    "char_len_max": 249,
+    "token_len_mean": 16.505347593582886,
+    "token_len_median": 16.0
+  },
+  "wikitext_short": {
+    "count": 400,
+    "char_len_mean": 720.205,
+    "char_len_median": 693.0,
+    "char_len_min": 207,
+    "char_len_max": 1478,
+    "token_len_mean": 154.92,
+    "token_len_median": 150.5
+  },
+  "humaneval": {
+    "count": 164,
+    "char_len_mean": 450.5975609756098,
+    "char_len_median": 396.0,
+    "char_len_min": 115,
+    "char_len_max": 1360,
+    "token_len_mean": 170.34756097560975,
+    "token_len_median": 145.5
+  },
+  "mmlu": {
+    "count": 993,
+    "char_len_mean": 482.19033232628396,
+    "char_len_median": 301.0,
+    "char_len_min": 52,
+    "char_len_max": 4633,
+    "token_len_mean": 108.29204431017119,
+    "token_len_median": 71.0
+  },
+  "alpaca_control": {
+    "count": 500,
+    "char_len_mean": 61.19,
+    "char_len_median": 58.0,
+    "char_len_min": 23,
+    "char_len_max": 178,
+    "token_len_mean": 12.53,
+    "token_len_median": 12.0
+  }
+}

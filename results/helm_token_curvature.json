@@ -1,0 +1,20 @@
+{
+  "token embeddings (HELM object)": {
+    "median": 0.8,
+    "mean": 0.8272200000000001,
+    "frac_negative": 0.0,
+    "n_edges": 20000
+  },
+  "last-token harm reps (HPS object)": {
+    "median": 0.09999999999999998,
+    "mean": 0.04172,
+    "frac_negative": 0.3738,
+    "n_edges": 20000
+  },
+  "random Gaussian (baseline)": {
+    "median": -0.5,
+    "mean": -0.50163,
+    "frac_negative": 0.9968,
+    "n_edges": 20000
+  }
+}

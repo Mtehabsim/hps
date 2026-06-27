@@ -1,0 +1,261 @@
+{
+  "config": {
+    "harmful_npz": "results/harm_taxonomy_deep_llm_reps.npz",
+    "dims": [
+      16,
+      32
+    ],
+    "curvatures": [
+      1.0
+    ],
+    "seeds": 5,
+    "epochs": 300,
+    "beta": 0.0,
+    "novel_leaf": false,
+    "baselines": "",
+    "stats": true,
+    "output": "results/hyp_retr_cleaned_stats",
+    "selftest": false,
+    "build_benign_topic": null,
+    "label_noise": null,
+    "drop_leaves": "regulatory_evasion/illegal_operation",
+    "merge_leaves": "cyber/intrusion,cyber/malware",
+    "_drop_leaves": [
+      "regulatory_evasion/illegal_operation"
+    ],
+    "_merge_groups": [
+      [
+        "cyber/intrusion",
+        "cyber/malware"
+      ]
+    ]
+  },
+  "leaves": [
+    "controlled_substances/synthesis",
+    "cyber/intrusion__malware",
+    "fraud_theft/coercion",
+    "fraud_theft/financial_fraud",
+    "fraud_theft/theft",
+    "hate_harassment/discrimination",
+    "hate_harassment/harassment",
+    "misinformation/fake_content",
+    "privacy/surveillance",
+    "self_harm/self_harm",
+    "violence/physical_harm",
+    "violence/weapons"
+  ],
+  "cats": [
+    "controlled_substances",
+    "cyber",
+    "fraud_theft",
+    "hate_harassment",
+    "misinformation",
+    "privacy",
+    "self_harm",
+    "violence"
+  ],
+  "by_dim": {
+    "d16_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.6157418408464908,
+          0.018388315881153267
+        ],
+        "mAP_parent": [
+          0.6504828912523603,
+          0.02171646659224456
+        ],
+        "nn_leaf_acc": [
+          0.7247311827956988,
+          0.02413972507596089
+        ],
+        "nn_parent_acc": [
+          0.7827956989247312,
+          0.01686493241006248
+        ],
+        "recall@1": [
+          0.7247311827956988,
+          0.02413972507596089
+        ],
+        "recall@5": [
+          0.867741935483871,
+          0.013853869598629154
+        ],
+        "recall@10": [
+          0.9182795698924731,
+          0.0129032258064516
+        ],
+        "typed_acc": [
+          0.756989247311828,
+          0.025536219542017003
+        ],
+        "tree_distortion": [
+          0.7314883352701085,
+          0.0015037342489599853
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.5412700965494445,
+          0.05079735696533869
+        ],
+        "mAP_parent": [
+          0.5533289627366942,
+          0.055059153625016545
+        ],
+        "nn_leaf_acc": [
+          0.732258064516129,
+          0.04642372719338258
+        ],
+        "nn_parent_acc": [
+          0.7806451612903226,
+          0.04265985897823091
+        ],
+        "recall@1": [
+          0.732258064516129,
+          0.04642372719338258
+        ],
+        "recall@5": [
+          0.8741935483870968,
+          0.03307216451447244
+        ],
+        "recall@10": [
+          0.9161290322580646,
+          0.020288131466788407
+        ],
+        "typed_acc": [
+          0.7559139784946236,
+          0.023947373603569966
+        ],
+        "tree_distortion": [
+          0.7290044829470622,
+          0.004588916502583023
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0745,
+        "mAP_parent": 0.0972,
+        "nn_parent_acc": 0.0022,
+        "typed_acc": 0.0011,
+        "tree_distortion": 0.0025
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.09715392851566626,
+          "ci_low": 0.08857747494589804,
+          "ci_high": 0.1059466955721712,
+          "p_value": 0.0,
+          "n": 930
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.07447174429704631,
+          "ci_low": 0.06559493575739819,
+          "ci_high": 0.08351938411491713,
+          "p_value": 0.0,
+          "n": 930
+        }
+      }
+    },
+    "d32_c1.0": {
+      "hyperbolic": {
+        "mAP_leaf": [
+          0.6300524459999438,
+          0.015926727000719672
+        ],
+        "mAP_parent": [
+          0.655086986180355,
+          0.020694468595225446
+        ],
+        "nn_leaf_acc": [
+          0.7365591397849462,
+          0.007603298722435988
+        ],
+        "nn_parent_acc": [
+          0.7870967741935484,
+          0.012069862537980446
+        ],
+        "recall@1": [
+          0.7365591397849462,
+          0.007603298722435988
+        ],
+        "recall@5": [
+          0.8827956989247312,
+          0.026206575498825657
+        ],
+        "recall@10": [
+          0.9150537634408602,
+          0.01935483870967744
+        ],
+        "typed_acc": [
+          0.7612903225806452,
+          0.02558145645886088
+        ],
+        "tree_distortion": [
+          0.7311495696336763,
+          0.0017280758713008344
+        ]
+      },
+      "euclidean": {
+        "mAP_leaf": [
+          0.5649944415172724,
+          0.02148758930392976
+        ],
+        "mAP_parent": [
+          0.5795431904253333,
+          0.02154039698825831
+        ],
+        "nn_leaf_acc": [
+          0.7344086021505376,
+          0.024187573933767702
+        ],
+        "nn_parent_acc": [
+          0.789247311827957,
+          0.022141140088144096
+        ],
+        "recall@1": [
+          0.7344086021505376,
+          0.024187573933767702
+        ],
+        "recall@5": [
+          0.886021505376344,
+          0.02134347660352601
+        ],
+        "recall@10": [
+          0.9365591397849462,
+          0.004023287512660196
+        ],
+        "typed_acc": [
+          0.7731182795698924,
+          0.01965125471236242
+        ],
+        "tree_distortion": [
+          0.724566503958562,
+          0.005871875211235772
+        ]
+      },
+      "delta_H_minus_E": {
+        "mAP_leaf": 0.0651,
+        "mAP_parent": 0.0755,
+        "nn_parent_acc": -0.0022,
+        "typed_acc": -0.0118,
+        "tree_distortion": 0.0066
+      },
+      "paired_bootstrap_H_minus_trainedE": {
+        "mAP_parent_gap": {
+          "mean": 0.07554379575502165,
+          "ci_low": 0.06746000184669074,
+          "ci_high": 0.08382319386599921,
+          "p_value": 0.0,
+          "n": 930
+        },
+        "mAP_leaf_gap": {
+          "mean": 0.0650580044826714,
+          "ci_low": 0.056730695321897194,
+          "ci_high": 0.07384689556463529,
+          "p_value": 0.0,
+          "n": 930
+        }
+      }
+    }
+  }
+}

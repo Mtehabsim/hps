@@ -1,0 +1,49 @@
+
+======================================================================
+ HYPERBOLIC vs EUCLIDEAN — Diverse Cache Re-test
+======================================================================
+  Cache: results/llama3_activations_cache_diverse_clean.npz
+  Train: 5216 ben + 5185 atk
+  Test:  689 ben + 1289 atk
+
+----------------------------------------------------------------------
+ PART A: Same-distribution, full data, 5 seeds
+----------------------------------------------------------------------
+
+  Method                 |  AUROC mean |  TPR mean |  AUROC std
+  -----------------------+-------------+-----------+-----------
+  HPS (Lorentz)          |      1.0000 |    1.0000 |     0.0000
+  HPS-Euclidean (matched) |      1.0000 |    1.0000 |     0.0000
+  C4 (linear probe)      |      1.0000 |    1.0000 |     0.0000
+
+----------------------------------------------------------------------
+ PART B: Cold-start sweep (single seed)
+----------------------------------------------------------------------
+
+  Cold-start sweep (N attacks/method, single seed):
+  N     |        HPS |  Euclidean |         C4 |    HPS-Euc
+  ------+------------+------------+------------+-----------
+  45    |     1.0000 |     1.0000 |     1.0000 |    +0.0000
+  90    |     1.0000 |     1.0000 |     1.0000 |    +0.0000
+  225   |     1.0000 |     1.0000 |     1.0000 |    +0.0000
+  450   |     1.0000 |     1.0000 |     1.0000 |    +0.0000
+  900   |     1.0000 |     1.0000 |     1.0000 |    +0.0000
+  2250  |     1.0000 |     1.0000 |     1.0000 |    +0.0000
+
+======================================================================
+ SUMMARY
+======================================================================
+
+  HPS vs HPS-Euclidean (matched parameters):
+    Δ AUROC: -0.0000
+    Δ TPR:   +0.0000
+
+  HPS vs C4 (linear probe baseline):
+    Δ AUROC: -0.0000
+    Δ TPR:   +0.0000
+
+  -> Geometry doesn't help: HPS = HPS-Euc = C4 within 1% TPR
+     Saturated benchmark; method comparison uninformative at this scale.
+     Cold-start regime (--cold_start) is more informative.
+
+  Saved -> results/hyperbolic_vs_euclidean_diverse.json

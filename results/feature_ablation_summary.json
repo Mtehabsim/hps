@@ -1,0 +1,32 @@
+{
+  "decision": "drop_to_radial_disp_8",
+  "single_feature_finding": "mean_r alone matches/beats all_12 across all regimes",
+  "same_dist": {
+    "all_12": 1.0,
+    "radial_disp_8": 1.0,
+    "top1_byimp": 1.0
+  },
+  "cold_start_n5": {
+    "all_12": 0.988,
+    "radial_disp_8": 0.994,
+    "top1_byimp": 0.996
+  },
+  "cold_start_n25": {
+    "all_12": 0.996,
+    "radial_disp_8": 0.996,
+    "top1_byimp": 0.998
+  },
+  "cold_start_n100": {
+    "all_12": 0.997,
+    "radial_disp_8": 0.997,
+    "top1_byimp": 0.998
+  },
+  "vicuna_like": {
+    "all_12": 0.99,
+    "radial_disp_8": 0.99,
+    "top1_byimp": 1.0
+  },
+  "curvature_collapse": {
+    "vicuna_like": 0.85
+  }
+}

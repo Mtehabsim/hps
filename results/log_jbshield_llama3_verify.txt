@@ -1,0 +1,64 @@
+======================================================================
+SATURATION VERIFICATION — is TPR=1.000 real or a confound?
+======================================================================
+
+======================================================================
+CHECK 1 — Train/test prompt contamination
+======================================================================
+  Attack prompts: 6520 total
+  Train: 5216 unique hashes: 5185
+  Test:  1304 unique hashes: 1304
+  Overlap (test prompts in train): 15
+  ✗ CONTAMINATION DETECTED: 15 test prompts also in train
+
+======================================================================
+CHECK 2 — Prompt length confound
+======================================================================
+  Attack length stats:  mean=218.0, median=90, std=303.4
+  Benign length stats:  mean=12.8, median=12, std=4.1
+  Diff (atk-ben means): 205.2
+
+  Per-attack length statistics (train):
+                           autodan: n= 702, mean=  77.4, median=   72, std= 50.0
+                            base64: n= 690, mean= 124.5, median=  101, std= 61.3
+                          drattack: n= 409, mean= 436.5, median=  437, std= 84.8
+                               gcg: n= 678, mean=  35.3, median=   33, std= 14.0
+                               ijp: n= 672, mean= 460.2, median=  348, std=395.1
+                              pair: n= 686, mean=  71.7, median=   68, std= 32.4
+                           puzzler: n=  39, mean=2193.0, median= 2270, std=953.8
+                               saa: n= 669, mean= 473.3, median=  468, std= 12.0
+                              zulu: n= 671, mean=  50.2, median=   39, std= 30.0
+
+  LENGTH-ONLY CLASSIFIER:
+    AUROC:   0.9922
+    TPR@5%:  0.9686
+    TPR@1%:  0.8750
+  ✗ STRONG length confound: length alone gives AUROC = 0.9922
+     This explains a substantial fraction of TPR=1.000
+
+  PER-ATTACK length-only detection:
+                           autodan: n= 148, length-only AUROC = 0.9993
+                            base64: n= 160, length-only AUROC = 1.0000
+                          drattack: n= 111, length-only AUROC = 1.0000
+                               gcg: n= 172, length-only AUROC = 0.9708
+                               ijp: n= 178, length-only AUROC = 0.9986
+                              pair: n= 164, length-only AUROC = 0.9966
+                           puzzler: n=  11, length-only AUROC = 1.0000
+                               saa: n= 181, length-only AUROC = 1.0000
+                              zulu: n= 179, length-only AUROC = 0.9761
+
+Loading Llama-3 cache: results/llama3_activations_cache_jbshield.npz
+  Train: 4000 ben + 0 atk
+  Test:  1000 ben + 0 atk
+
+Training HPS + C4 (epochs=50, seed=42)...
+Traceback (most recent call last):
+  File "/mnt/lab/Mo/hps/hps2/hps/verify_saturation.py", line 697, in <module>
+    main()
+  File "/mnt/lab/Mo/hps/hps2/hps/verify_saturation.py", line 621, in main
+    scores_dict = train_methods_and_score(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/lab/Mo/hps/hps2/hps/verify_saturation.py", line 303, in train_methods_and_score
+    X_tr = np.concatenate([X_tr_ben, X_tr_atk], axis=0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: all the input array dimensions except for the concatenation axis must match exactly, but along dimension 2, the array at index 0 has size 4096 and the array at index 1 has size 0
